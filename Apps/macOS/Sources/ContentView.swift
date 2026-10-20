@@ -200,6 +200,11 @@ private struct StatsOverlay: View {
                         .foregroundStyle(mismatch ? .orange : .white)
                 }
                 Text("in \(viewer.stats.inputFPS, specifier: "%.1f") fps · out \(viewer.stats.renderFPS, specifier: "%.1f") fps · dropped \(viewer.stats.dropped)")
+                if let capture = viewer.stats.captureLatency {
+                    let display = viewer.stats.displayLatency
+                    Text(String(format: "latency: capture %.0f ms · on screen ≈ %@", capture.averageMs,
+                                display.map { String(format: "%.0f ms (p95 %.0f)", $0.averageMs, $0.p95Ms) } ?? "—"))
+                }
                 Text("audio: \(info.audioDeviceName ?? "none")\(viewer.preset.muted ? " (muted)" : "") · delay \(viewer.preset.audioDelayMs) ms")
             }
             .font(.system(size: 11, design: .monospaced))

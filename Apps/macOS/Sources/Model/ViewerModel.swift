@@ -31,6 +31,8 @@ final class ViewerModel {
         var renderFPS = 0.0
         var dropped: UInt64 = 0
         var frameSize: CGSize?
+        var captureLatency: LatencyTracker.Summary?
+        var displayLatency: LatencyTracker.Summary?
     }
 
     let source: Source
@@ -294,7 +296,9 @@ final class ViewerModel {
             inputFPS: Double(current.framesReceived &- last.stats.framesReceived) / dt,
             renderFPS: Double(presented &- last.presented) / dt,
             dropped: current.framesDropped,
-            frameSize: renderer?.lastFrameSize
+            frameSize: renderer?.lastFrameSize,
+            captureLatency: renderer?.latency().capture,
+            displayLatency: renderer?.latency().display
         )
     }
 }

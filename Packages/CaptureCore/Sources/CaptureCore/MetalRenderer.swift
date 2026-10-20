@@ -2,6 +2,7 @@ import CoreGraphics
 import CoreMedia
 import CoreVideo
 import Metal
+import os
 import QuartzCore
 import simd
 
@@ -150,6 +151,11 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
     private var options = RenderOptions()
     private var isVisible = true
     private var presented: UInt64 = 0
+    /// Capture timestamp → arrival here (USB, decode, AVFoundation).
+    private var captureLatency = LatencyTracker()
+    /// Capture timestamp → drawable on screen (glass-to-glass minus the source's own lag).
+    private var displayLatency = LatencyTracker()
+    private let signposter = OSSignposter(subsystem: "hdmicaptain", category: "render")
     private let redrawQueue = DispatchQueue(label: "hdmicaptain.redraw", qos: .userInteractive)
 
     public init?() {
@@ -217,6 +223,12 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
         stateLock.withLock { presented }
     }
 
+    /// Latency over the last 2 s: capture→arrival and capture→on screen.
+    public func latency() -> (capture: LatencyTracker.Summary?, display: LatencyTracker.Summary?) {
+        let now = CACurrentMediaTime()
+        return stateLock.withLock { (captureLatency.summary(now: now), displayLatency.summary(now: now)) }
+    }
+
     /// Pixel size of the newest frame actually delivered (can differ from the requested format).
     public var lastFrameSize: CGSize? {
         stateLock.withLock { latest.map { CGSize(width: CVPixelBufferGetWidth($0), height: CVPixelBufferGetHeight($0)) } }
@@ -248,18 +260,24 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
 
     public func consume(_ sampleBuffer: CMSampleBuffer) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        // Capture timestamps are on the host clock, the same clock as CACurrentMediaTime.
+        let captured = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+        let now = CACurrentMediaTime()
         let visible = stateLock.withLock {
             latest = pixelBuffer
+            if captured.isFinite { captureLatency.add(now - captured, at: now) }
             return isVisible && still == nil
         }
-        if visible { draw(pixelBuffer) }
+        if visible { draw(pixelBuffer, capturedAt: captured.isFinite ? captured : nil) }
     }
 
     // MARK: Drawing
 
-    private func draw(_ pixelBuffer: CVPixelBuffer) {
+    private func draw(_ pixelBuffer: CVPixelBuffer, capturedAt: Double? = nil) {
         drawLock.lock()
         defer { drawLock.unlock() }
+        let interval = signposter.beginInterval("draw")
+        defer { signposter.endInterval("draw", interval) }
         let (layer, options) = stateLock.withLock { (self.layer, self.options) }
         guard let layer, layer.drawableSize.width > 0, layer.drawableSize.height > 0,
               let drawable = layer.nextDrawable(),
@@ -267,6 +285,15 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
         else { return }
 
         let textures = encode(pixelBuffer, into: drawable.texture, options: options, commandBuffer: commandBuffer)
+        if let capturedAt {
+            drawable.addPresentedHandler { [weak self] drawable in
+                // presentedTime is 0 for some layer setups on macOS; the handler itself runs right
+                // after presentation, so its time is a close (slightly late) stand-in.
+                let shownAt = drawable.presentedTime > 0 ? drawable.presentedTime : CACurrentMediaTime()
+                guard let self else { return }
+                self.stateLock.withLock { self.displayLatency.add(shownAt - capturedAt, at: shownAt) }
+            }
+        }
         commandBuffer.present(drawable)
         commandBuffer.addCompletedHandler { [weak self] _ in
             _ = textures // keep CVMetalTextures alive until the GPU is done
