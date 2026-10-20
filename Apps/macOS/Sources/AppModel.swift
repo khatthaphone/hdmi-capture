@@ -33,6 +33,10 @@ final class AppModel {
         }
     }
 
+    /// Built-in and user profiles (refreshed after every change).
+    private(set) var profiles: [Profile] = []
+    @ObservationIgnored let profileStore = ProfileStore()
+
     @ObservationIgnored private(set) var mainViewer: ViewerModel?
     @ObservationIgnored private var viewers: [WeakViewer] = []
     @ObservationIgnored private let store = PresetStore()
@@ -54,6 +58,7 @@ final class AppModel {
         self.prefs = prefs
         catalog = DeviceCatalog(provider: AVDeviceProvider(), includeNonExternalCameras: prefs.includeNonExternalCameras)
         catalog.onChange = { [weak self] in self?.reconcile() }
+        profiles = profileStore.all
         observeSystemEvents()
         Task { await requestPermissions() }
     }
@@ -89,6 +94,38 @@ final class AppModel {
     /// Name for a card even while it's unplugged.
     func knownName(for deviceID: String) -> String {
         catalog.video(deviceID)?.name ?? names[deviceID] ?? "Capture card"
+    }
+
+    // MARK: Profiles
+
+    /// Saves the card's current settings as a new user profile.
+    @discardableResult
+    func saveProfile(from session: DeviceSession, name: String? = nil) -> Profile {
+        let count = profileStore.userProfiles.count + 1
+        let profile = profileStore.add(name: name ?? "\(session.deviceName) \(count)", settings: ProfileSettings(preset: session.preset))
+        session.preset.profileID = profile.id
+        profiles = profileStore.all
+        return profile
+    }
+
+    func updateProfile(_ profile: Profile) {
+        profileStore.update(profile)
+        profiles = profileStore.all
+    }
+
+    func deleteProfile(_ id: UUID) {
+        profileStore.delete(id)
+        profiles = profileStore.all
+    }
+
+    func exportProfiles(to url: URL) throws {
+        try ProfileStore.export(profileStore.userProfiles).write(to: url)
+    }
+
+    func importProfiles(from url: URL) throws -> Int {
+        let imported = try profileStore.importProfiles(from: Data(contentsOf: url))
+        profiles = profileStore.all
+        return imported.count
     }
 
     // MARK: Actions

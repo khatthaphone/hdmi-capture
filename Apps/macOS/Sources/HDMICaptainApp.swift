@@ -67,6 +67,8 @@ struct HDMICaptainApp: App {
             TabView {
                 SettingsView()
                     .tabItem { Label("General", systemImage: "gearshape") }
+                ProfilesSettingsView()
+                    .tabItem { Label("Profiles", systemImage: "person.crop.rectangle.stack") }
                 ProSettingsView()
                     .tabItem { Label("Pro", systemImage: "sparkles") }
             }
@@ -163,8 +165,34 @@ private struct VideoMenuItems: View {
     @Bindable var app: AppModel
     @Bindable var viewer: ViewerModel
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
+        Menu("Profiles") {
+            ForEach(Array(app.profiles.enumerated()), id: \.element.id) { index, profile in
+                let toggle = Toggle(isOn: Binding(
+                    get: { viewer.preset.profileID == profile.id },
+                    set: { _ in viewer.session?.applyProfile(profile) }
+                )) {
+                    Label(profile.name, systemImage: profile.symbol)
+                }
+                if index < 9 {
+                    toggle.keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [.command, .option])
+                } else {
+                    toggle
+                }
+            }
+            Divider()
+            Button("Save Current as Profile") {
+                if let session = viewer.session {
+                    let profile = app.saveProfile(from: session)
+                    viewer.showToast("Saved profile \(profile.name)")
+                }
+            }
+            .disabled(viewer.session == nil)
+            Button("Manage Profiles…") { openSettings() }
+        }
+        .disabled(viewer.session == nil)
         Button("Toggle Full Screen") { viewer.toggleFullScreen() }
             .keyboardShortcut("f")
         Button("Save Screenshot") { viewer.saveScreenshot() }

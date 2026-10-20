@@ -191,6 +191,16 @@ final class DeviceSession {
         }
     }
 
+    // MARK: Profiles
+
+    func applyProfile(_ profile: Profile) {
+        var updated = preset
+        profile.settings.apply(to: &updated)
+        updated.profileID = profile.id
+        preset = updated
+        onMessage?("Profile: \(profile.name)")
+    }
+
     // MARK: LUT
 
     /// Stores a user-chosen .cube file for this card (sandbox: security-scoped bookmark).

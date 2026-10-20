@@ -24,6 +24,8 @@ public struct DevicePreset: Codable, Equatable, Sendable {
     public var lutBookmark: Data?
     public var lutName: String?
     public var lutIntensity: Double = 1
+    /// The profile last applied to this card (shown in menus; settings live in the fields above).
+    public var profileID: UUID?
 
     public init() {}
 
@@ -45,6 +47,7 @@ public struct DevicePreset: Codable, Equatable, Sendable {
         lutBookmark = try c.decodeIfPresent(Data.self, forKey: .lutBookmark)
         lutName = try c.decodeIfPresent(String.self, forKey: .lutName)
         lutIntensity = try c.decodeIfPresent(Double.self, forKey: .lutIntensity) ?? defaults.lutIntensity
+        profileID = try c.decodeIfPresent(UUID.self, forKey: .profileID)
     }
 }
 
