@@ -327,7 +327,9 @@ struct ProCommands: Commands {
             }
             SaveRecentMenu(app: app, store: store)
             Divider()
-            item(.streaming, app.streamer.state.isActive ? "Stop Streaming" : "Go Live…", key: "l", modifiers: [.command, .shift])
+            if ProFeature.shown.contains(.streaming) {
+                item(.streaming, app.streamer.state.isActive ? "Stop Streaming" : "Go Live…", key: "l", modifiers: [.command, .shift])
+            }
             item(.virtualCamera, "Virtual Camera", key: nil, modifiers: [])
             Divider()
             Button(store.isPro ? "HDMI Captain Pro ✓" : "Upgrade to Pro…") {

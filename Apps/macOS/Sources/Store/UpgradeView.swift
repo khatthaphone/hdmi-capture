@@ -23,6 +23,13 @@ extension ProFeature {
 
     /// Pro features that are built so far; the rest show "coming soon" once unlocked.
     static let available: Set<ProFeature> = [.recording, .replayBuffer, .streaming]
+
+    /// Hidden from every menu, button and the upgrade sheet for now: the app stays a capture-card
+    /// display. The streaming code (Streaming/) is kept; remove `.streaming` here to bring it back.
+    static let hidden: Set<ProFeature> = [.streaming]
+
+    /// Pro features shown in the UI, in order.
+    static var shown: [ProFeature] { allCases.filter { !hidden.contains($0) } }
 }
 
 /// One-time upgrade sheet. Never shown unless the user picks a Pro feature or opens it.
@@ -41,7 +48,7 @@ struct UpgradeView: View {
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 12) {
-                ForEach(ProFeature.allCases, id: \.self) { feature in
+                ForEach(ProFeature.shown, id: \.self) { feature in
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: feature.symbol)
                             .font(.title3)
@@ -122,7 +129,7 @@ struct ProSettingsView: View {
                 Button("Restore Purchases") { Task { await store.restore() } }
             }
             Section("Included in Pro") {
-                ForEach(ProFeature.allCases, id: \.self) { feature in
+                ForEach(ProFeature.shown, id: \.self) { feature in
                     Label(feature.title, systemImage: feature.symbol)
                 }
             }

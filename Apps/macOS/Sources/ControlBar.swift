@@ -32,8 +32,10 @@ struct ControlBar: View {
             RecordButton(layout: layout)
             if layout != .minimal {
                 SaveRecentButton(layout: layout)
-                BarDivider()
-                GoLiveButton(layout: layout)
+                if ProFeature.shown.contains(.streaming) {
+                    BarDivider()
+                    GoLiveButton(layout: layout)
+                }
             }
             BarDivider()
             OptionsMenu(layout: layout)
