@@ -51,6 +51,9 @@ final class DeviceSession {
     @ObservationIgnored private var runningConfig: CaptureEngine.Config?
     @ObservationIgnored private var recordingSize: (width: Int, height: Int)?
     @ObservationIgnored private var renderers: [WeakRenderer] = []
+    @ObservationIgnored private var lut: CubeLUT?
+    /// Why the saved LUT couldn't be loaded, if it couldn't.
+    private(set) var lutError: String?
 
     init(device: CaptureDeviceInfo, store: PresetStore) {
         deviceID = device.id
@@ -58,6 +61,7 @@ final class DeviceSession {
         self.store = store
         preset = store.preset(for: device.id)
         formats = CaptureEngine.formats(forDeviceID: device.id)
+        loadLUT()
         engine.addSink(signalMonitor)
         engine.addSink(recorder)
         engine.addAudioSink(recorder)
@@ -79,6 +83,7 @@ final class DeviceSession {
         renderers.removeAll { $0.renderer == nil || $0.renderer === renderer }
         renderers.append(WeakRenderer(renderer))
         renderer.setOptions(renderOptions)
+        renderer.setLUT(lut)
         engine.addSink(renderer)
     }
 
@@ -88,7 +93,8 @@ final class DeviceSession {
     }
 
     var renderOptions: RenderOptions {
-        RenderOptions(scale: preset.scale, filter: preset.filter, colorRange: preset.colorRange, adjustments: preset.adjustments)
+        RenderOptions(scale: preset.scale, filter: preset.filter, colorRange: preset.colorRange,
+                      adjustments: preset.adjustments, lutIntensity: lut == nil ? 0 : preset.lutIntensity)
     }
 
     // MARK: Lifecycle
@@ -185,8 +191,46 @@ final class DeviceSession {
         }
     }
 
+    // MARK: LUT
+
+    /// Stores a user-chosen .cube file for this card (sandbox: security-scoped bookmark).
+    func setLUT(url: URL?) {
+        guard let url else {
+            preset.lutBookmark = nil
+            preset.lutName = nil
+            return
+        }
+        do {
+            _ = try CubeLUT(contentsOf: url) // validate before saving
+            preset.lutBookmark = try url.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess])
+            preset.lutName = url.deletingPathExtension().lastPathComponent
+        } catch {
+            lutError = error.localizedDescription
+            onMessage?("Can't use this LUT: \(error.localizedDescription)")
+        }
+    }
+
+    private func loadLUT() {
+        lut = nil
+        lutError = nil
+        guard let bookmark = preset.lutBookmark else { return }
+        do {
+            var stale = false
+            let url = try URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, bookmarkDataIsStale: &stale)
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+            lut = try CubeLUT(contentsOf: url)
+        } catch {
+            lutError = error.localizedDescription
+        }
+    }
+
     private func presetChanged(from old: DevicePreset) {
         store.save(preset, for: deviceID)
+        if preset.lutBookmark != old.lutBookmark {
+            loadLUT()
+            renderers.compactMap(\.renderer).forEach { $0.setLUT(lut) }
+        }
         if preset.format != old.format || preset.audio != old.audio {
             onNeedsReconcile?()
         }

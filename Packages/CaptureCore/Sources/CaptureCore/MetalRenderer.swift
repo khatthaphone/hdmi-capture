@@ -23,12 +23,16 @@ public struct RenderOptions: Equatable, Sendable {
     public var filter: FilterMode = .linear
     public var colorRange: ColorRange = .auto
     public var adjustments = ImageAdjustments()
+    /// 0 = LUT off, 1 = full LUT (see `MetalRenderer.setLUT`).
+    public var lutIntensity: Double = 0
 
-    public init(scale: ScaleMode = .fit, filter: FilterMode = .linear, colorRange: ColorRange = .auto, adjustments: ImageAdjustments = ImageAdjustments()) {
+    public init(scale: ScaleMode = .fit, filter: FilterMode = .linear, colorRange: ColorRange = .auto,
+                adjustments: ImageAdjustments = ImageAdjustments(), lutIntensity: Double = 0) {
         self.scale = scale
         self.filter = filter
         self.colorRange = colorRange
         self.adjustments = adjustments
+        self.lutIntensity = lutIntensity
     }
 }
 
@@ -149,6 +153,9 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
     /// A still (e.g. test pattern) shown instead of live frames while set.
     private var still: CVPixelBuffer?
     private var options = RenderOptions()
+    private var lut: (texture: MTLTexture, size: Int, min: SIMD3<Float>, max: SIMD3<Float>)?
+    /// Bound when no LUT is set, so the shader never reads an unbound texture.
+    private let identityLUT: MTLTexture
     private var isVisible = true
     private var presented: UInt64 = 0
     /// Capture timestamp → arrival here (USB, decode, AVFoundation).
@@ -183,8 +190,10 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
             return device.makeSamplerState(descriptor: d)
         }
         guard let yuv = pipeline("fragmentYCbCr"), let rgb = pipeline("fragmentRGB"),
-              let linear = sampler(.linear), let nearest = sampler(.nearest)
+              let linear = sampler(.linear), let nearest = sampler(.nearest),
+              let identity = Self.makeLUTTexture(device: device, lut: .identity(size: 2))
         else { return nil }
+        identityLUT = identity
 
         self.device = device
         commandQueue = queue
@@ -239,6 +248,32 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
         redrawQueue.async { [self] in
             if let frame = stateLock.withLock({ still ?? latest }) { draw(frame) }
         }
+    }
+
+    /// Sets (or clears) the colour LUT; how much of it applies is `RenderOptions.lutIntensity`.
+    public func setLUT(_ lut: CubeLUT?) {
+        let uploaded = lut.flatMap { lut in Self.makeLUTTexture(device: device, lut: lut).map { ($0, lut.size, lut.domainMin, lut.domainMax) } }
+        stateLock.withLock { self.lut = uploaded }
+        redraw()
+    }
+
+    static func makeLUTTexture(device: MTLDevice, lut: CubeLUT) -> MTLTexture? {
+        let descriptor = MTLTextureDescriptor()
+        descriptor.textureType = .type3D
+        descriptor.pixelFormat = .rgba32Float
+        descriptor.width = lut.size
+        descriptor.height = lut.size
+        descriptor.depth = lut.size
+        descriptor.usage = .shaderRead
+        guard let texture = device.makeTexture(descriptor: descriptor) else { return nil }
+        var rgba = [Float]()
+        rgba.reserveCapacity(lut.entries.count * 4)
+        for entry in lut.entries { rgba += [entry.x, entry.y, entry.z, 1] }
+        rgba.withUnsafeBytes { bytes in
+            texture.replace(region: MTLRegionMake3D(0, 0, 0, lut.size, lut.size, lut.size), mipmapLevel: 0, slice: 0,
+                            withBytes: bytes.baseAddress!, bytesPerRow: lut.size * 16, bytesPerImage: lut.size * lut.size * 16)
+        }
+        return texture
     }
 
     /// What is on screen right now (test pattern or newest live frame).
@@ -331,6 +366,10 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
         )
         encoder.setVertexBytes(&uvRect, length: MemoryLayout<SIMD4<Float>>.size, index: 0)
         encoder.setFragmentSamplerState(samplers[options.filter], index: 0)
+        let lut = stateLock.withLock { self.lut }
+        let lutTexture = lut?.texture ?? identityLUT
+        let lutParams = (intensity: lut == nil ? 0 : Float(options.lutIntensity), size: Float(lut?.size ?? 2),
+                         min: lut?.min ?? .zero, max: lut?.max ?? .one)
 
         let pixelFormat = CVPixelBufferGetPixelFormatType(pixelBuffer)
         switch pixelFormat {
@@ -344,6 +383,8 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
                 adjustments: options.adjustments,
                 texel: SIMD2(1 / Float(width), 1 / Float(height))
             )
+            params.setLUT(lutParams)
+            encoder.setFragmentTexture(lutTexture, index: 2)
             encoder.setRenderPipelineState(yuvPipeline)
             encoder.setFragmentTexture(CVMetalTextureGetTexture(luma), index: 0)
             encoder.setFragmentTexture(CVMetalTextureGetTexture(chroma), index: 1)
@@ -353,6 +394,8 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
         case kCVPixelFormatType_32BGRA:
             guard let rgb = texture(pixelBuffer, plane: 0, format: .bgra8Unorm) else { return [] }
             var params = YCbCrParams.make(fullRange: true, bt709: true, adjustments: options.adjustments, texel: .zero)
+            params.setLUT(lutParams)
+            encoder.setFragmentTexture(lutTexture, index: 2)
             encoder.setRenderPipelineState(rgbPipeline)
             encoder.setFragmentTexture(CVMetalTextureGetTexture(rgb), index: 0)
             encoder.setFragmentBytes(&params, length: MemoryLayout<YCbCrParams>.stride, index: 0)
@@ -402,7 +445,19 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
         float3 scale;
         float4 adjust;   // brightness, contrast, saturation, 1/gamma
         float4 sharpen;  // amount, texel x, texel y, unused
+        float4 lut;      // intensity, size, unused, unused
+        float4 lutMin;   // domain min (xyz)
+        float4 lutMax;   // domain max (xyz)
     };
+
+    static float3 applyLUT(float3 rgb, texture3d<float> table, constant YCbCrParams &p) {
+        if (p.lut.x <= 0) { return rgb; }
+        constexpr sampler linear(filter::linear, address::clamp_to_edge);
+        float n = p.lut.y;
+        float3 c = saturate((rgb - p.lutMin.xyz) / (p.lutMax.xyz - p.lutMin.xyz));
+        float3 graded = table.sample(linear, c * ((n - 1) / n) + 0.5 / n).rgb;
+        return mix(rgb, saturate(graded), p.lut.x);
+    }
 
     // Identity when adjust == (0, 1, 1, 1).
     static float3 adjustColor(float3 rgb, float4 a) {
@@ -425,6 +480,7 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
     fragment float4 fragmentYCbCr(VertexOut in [[stage_in]],
                                   texture2d<float> luma [[texture(0)]],
                                   texture2d<float> chroma [[texture(1)]],
+                                  texture3d<float> table [[texture(2)]],
                                   sampler s [[sampler(0)]],
                                   constant YCbCrParams &p [[buffer(0)]]) {
         float y = luma.sample(s, in.uv).r;
@@ -436,14 +492,15 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
         }
         float3 ycc = float3(y, chroma.sample(s, in.uv).rg);
         float3 rgb = saturate(p.matrix * ((ycc - p.offset) * p.scale));
-        return float4(adjustColor(rgb, p.adjust), 1);
+        return float4(applyLUT(adjustColor(rgb, p.adjust), table, p), 1);
     }
 
     fragment float4 fragmentRGB(VertexOut in [[stage_in]],
                                 texture2d<float> image [[texture(0)]],
+                                texture3d<float> table [[texture(2)]],
                                 sampler s [[sampler(0)]],
                                 constant YCbCrParams &p [[buffer(0)]]) {
-        return float4(adjustColor(image.sample(s, in.uv).rgb, p.adjust), 1);
+        return float4(applyLUT(adjustColor(image.sample(s, in.uv).rgb, p.adjust), table, p), 1);
     }
     """
 }
@@ -455,6 +512,15 @@ struct YCbCrParams {
     var scale: SIMD3<Float>
     var adjust = SIMD4<Float>(0, 1, 1, 1)
     var sharpen = SIMD4<Float>.zero
+    var lut = SIMD4<Float>.zero
+    var lutMin = SIMD4<Float>.zero
+    var lutMax = SIMD4<Float>(1, 1, 1, 0)
+
+    mutating func setLUT(_ value: (intensity: Float, size: Float, min: SIMD3<Float>, max: SIMD3<Float>)) {
+        lut = SIMD4(value.intensity, value.size, 0, 0)
+        lutMin = SIMD4(value.min, 0)
+        lutMax = SIMD4(value.max, 0)
+    }
 
     static func make(fullRange: Bool, bt709: Bool, adjustments: ImageAdjustments, texel: SIMD2<Float>) -> YCbCrParams {
         var params = make(fullRange: fullRange, bt709: bt709)

@@ -1,5 +1,6 @@
 import CaptureCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Settings act on the card in the key window (or the main window).
 struct SettingsView: View {
@@ -79,6 +80,20 @@ private struct CardSettingsView: View {
                 Slider(value: $viewer.preset.adjustments.sharpness, in: 0...1) { Text("Sharpness") }
                 Button("Reset Picture") { viewer.preset.adjustments = ImageAdjustments() }
                     .disabled(viewer.preset.adjustments == ImageAdjustments())
+                LabeledContent("LUT") {
+                    HStack {
+                        Text(viewer.preset.lutName ?? "None")
+                            .foregroundStyle(viewer.session?.lutError == nil ? .primary : Color.red)
+                            .help(viewer.session?.lutError ?? "")
+                        Button("Choose…") { chooseLUT() }
+                        if viewer.preset.lutName != nil {
+                            Button("Remove") { viewer.session?.setLUT(url: nil) }
+                        }
+                    }
+                }
+                if viewer.preset.lutName != nil {
+                    Slider(value: $viewer.preset.lutIntensity, in: 0...1) { Text("LUT intensity") }
+                }
             }
             .disabled(viewer.session == nil)
 
@@ -131,6 +146,16 @@ private struct CardSettingsView: View {
         .onAppear { outputDevices = app.outputDevices() }
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func chooseLUT() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "cube") ?? .data]
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a .cube LUT (for example a Sony S-Log3 to Rec.709 conversion)."
+        if panel.runModal() == .OK, let url = panel.url {
+            viewer.session?.setLUT(url: url)
+        }
     }
 
     private func label(for preference: FormatPreference) -> String {

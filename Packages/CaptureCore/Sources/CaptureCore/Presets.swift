@@ -20,6 +20,10 @@ public struct DevicePreset: Codable, Equatable, Sendable {
     /// Core Audio output device UID; nil = system default.
     public var outputDeviceUID: String?
     public var adjustments = ImageAdjustments()
+    /// Security-scoped bookmark to a .cube file chosen by the user.
+    public var lutBookmark: Data?
+    public var lutName: String?
+    public var lutIntensity: Double = 1
 
     public init() {}
 
@@ -38,6 +42,9 @@ public struct DevicePreset: Codable, Equatable, Sendable {
         channelMode = try c.decodeIfPresent(ChannelMode.self, forKey: .channelMode) ?? defaults.channelMode
         outputDeviceUID = try c.decodeIfPresent(String.self, forKey: .outputDeviceUID)
         adjustments = try c.decodeIfPresent(ImageAdjustments.self, forKey: .adjustments) ?? defaults.adjustments
+        lutBookmark = try c.decodeIfPresent(Data.self, forKey: .lutBookmark)
+        lutName = try c.decodeIfPresent(String.self, forKey: .lutName)
+        lutIntensity = try c.decodeIfPresent(Double.self, forKey: .lutIntensity) ?? defaults.lutIntensity
     }
 }
 
