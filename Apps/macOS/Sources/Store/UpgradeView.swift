@@ -22,7 +22,7 @@ extension ProFeature {
     }
 
     /// Pro features that are built so far; the rest show "coming soon" once unlocked.
-    static let available: Set<ProFeature> = [.recording, .replayBuffer]
+    static let available: Set<ProFeature> = [.recording, .replayBuffer, .streaming]
 }
 
 /// One-time upgrade sheet. Never shown unless the user picks a Pro feature or opens it.

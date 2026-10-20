@@ -36,6 +36,11 @@ final class AppModel {
         }
     }
 
+    /// Live streaming (Pro); one stream at a time.
+    let streamer = Streamer()
+    /// Drives the Go Live sheet.
+    var isShowingStreamSetup = false
+
     /// Built-in and user profiles (refreshed after every change).
     private(set) var profiles: [Profile] = []
     @ObservationIgnored let profileStore = ProfileStore()
@@ -129,6 +134,33 @@ final class AppModel {
         let imported = try profileStore.importProfiles(from: Data(contentsOf: url))
         profiles = profileStore.all
         return imported.count
+    }
+
+    // MARK: Streaming (Pro — callers go through EntitlementStore.gate)
+
+    static let streamKeyAccount = "default"
+
+    /// Starts streaming the card in the active window with the saved settings and Keychain key.
+    func startStreaming(urlOverride: URL? = nil) {
+        guard let viewer = currentViewer, let session = viewer.session, let info = session.liveInfo, session.state == .live else {
+            currentViewer?.showToast("Nothing live to stream")
+            return
+        }
+        let key = StreamKeyStore.key(for: Self.streamKeyAccount) ?? ""
+        guard let url = urlOverride ?? prefs.stream.publishURL(key: key) else {
+            isShowingStreamSetup = true
+            return
+        }
+        let settings = prefs.stream
+        Task {
+            await streamer.start(device: session, url: url, settings: settings,
+                                 sourceSize: CGSize(width: info.format.width, height: info.format.height), frameRate: info.frameRate)
+            if case let .failed(message) = streamer.state { viewer.showToast("Couldn't go live: \(message)") }
+        }
+    }
+
+    func stopStreaming() {
+        Task { await streamer.stop() }
     }
 
     // MARK: Actions
@@ -307,6 +339,13 @@ final class AppModel {
                 viewer.toggleRecording()
                 try? await Task.sleep(for: .seconds(3))
                 viewer.toggleRecording()
+            case "stream10s":
+                // `-qaStreamURL rtmp://127.0.0.1:1935/live/test` (e.g. an `ffmpeg -listen 1` server).
+                guard let url = UserDefaults.standard.string(forKey: "qaStreamURL").flatMap(URL.init(string:)) else { break }
+                try? await Task.sleep(for: .seconds(2))
+                startStreaming(urlOverride: url)
+                try? await Task.sleep(for: .seconds(10))
+                stopStreaming()
             default: break
             }
         }

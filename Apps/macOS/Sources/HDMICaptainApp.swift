@@ -22,6 +22,9 @@ struct HDMICaptainApp: App {
                 .sheet(isPresented: $store.isShowingUpgrade) {
                     UpgradeView().environment(store)
                 }
+                .sheet(isPresented: $app.isShowingStreamSetup) {
+                    StreamSetupView().environment(app)
+                }
         }
         .defaultSize(width: 1280, height: 720)
         .windowStyle(.hiddenTitleBar)
@@ -290,7 +293,7 @@ struct ProCommands: Commands {
                       systemImage: store.isUnlocked(.replayBuffer) ? "gobackward" : "lock.fill")
             }
             item(.replayBuffer, "Save Instant Replay", key: "r", modifiers: [.command, .shift])
-            item(.streaming, "Go Live…", key: "l", modifiers: [.command, .shift])
+            item(.streaming, app.streamer.state.isActive ? "Stop Streaming" : "Go Live…", key: "l", modifiers: [.command, .shift])
             item(.virtualCamera, "Virtual Camera", key: nil, modifiers: [])
             Divider()
             Button(store.isPro ? "HDMI Captain Pro ✓" : "Upgrade to Pro…") {
@@ -308,6 +311,7 @@ struct ProCommands: Commands {
             switch feature {
             case .recording: app.currentViewer?.toggleRecording()
             case .replayBuffer: app.currentViewer?.session?.saveReplay()
+            case .streaming: app.streamer.state.isActive ? app.stopStreaming() : (app.isShowingStreamSetup = true)
             default: break
             }
         } label: {

@@ -29,12 +29,17 @@ struct ContentView: View {
                     .padding(.top, app.prefs.cleanMode ? 12 : 40)
                     .allowsHitTesting(false)
             }
-            if let since = viewer.session?.recordingSince, app.prefs.showRecordingIndicator {
-                RecordingIndicator(since: since)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(12)
-                    .allowsHitTesting(false)
+            VStack(alignment: .trailing, spacing: 6) {
+                if let since = viewer.session?.recordingSince, app.prefs.showRecordingIndicator {
+                    RecordingIndicator(since: since)
+                }
+                if app.streamer.deviceID != nil, app.streamer.deviceID == viewer.deviceID {
+                    StreamIndicator(state: app.streamer.state)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            .padding(12)
+            .allowsHitTesting(false)
             if let toast = viewer.toast {
                 Banner(text: toast, symbol: "checkmark.circle.fill")
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -277,6 +282,43 @@ private struct RecordingIndicator: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(.black.opacity(0.6), in: Capsule())
+        }
+    }
+}
+
+private struct StreamIndicator: View {
+    let state: Streamer.State
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            HStack(spacing: 6) {
+                Circle().fill(color).frame(width: 8, height: 8)
+                Text(label(now: context.date)).font(.system(size: 11, weight: .semibold, design: .monospaced))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.black.opacity(0.6), in: Capsule())
+        }
+    }
+
+    private var color: Color {
+        switch state {
+        case .live: .red
+        case .connecting, .reconnecting: .orange
+        default: .gray
+        }
+    }
+
+    private func label(now: Date) -> String {
+        switch state {
+        case let .live(since):
+            let s = Int(now.timeIntervalSince(since))
+            return String(format: "LIVE %d:%02d:%02d", s / 3600, s / 60 % 60, s % 60)
+        case .connecting: return "CONNECTING…"
+        case let .reconnecting(attempt): return "RECONNECTING (\(attempt))"
+        case let .failed(message): return message
+        case .idle: return ""
         }
     }
 }

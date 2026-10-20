@@ -15,6 +15,9 @@ settings:
 packages:
   CaptureCore:
     path: Packages/CaptureCore
+  HaishinKit:
+    url: https://github.com/HaishinKit/HaishinKit.swift
+    exactVersion: 2.2.5
 targets:
   HDMICaptain:
     type: application
@@ -22,6 +25,12 @@ targets:
     sources: [Apps/macOS/Sources]
     dependencies:
       - package: CaptureCore
+      - package: HaishinKit
+        product: HaishinKit
+      - package: HaishinKit
+        product: RTMPHaishinKit
+      - package: HaishinKit
+        product: SRTHaishinKit
     info:
       path: Apps/macOS/Info.plist
       properties:
@@ -42,6 +51,7 @@ targets:
         com.apple.security.assets.movies.read-write: true
         com.apple.security.files.user-selected.read-write: true
         com.apple.security.files.bookmarks.app-scope: true
+        com.apple.security.network.client: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.hdmicaptain

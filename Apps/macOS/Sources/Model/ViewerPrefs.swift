@@ -20,6 +20,7 @@ struct ViewerPrefs: Codable, Equatable {
     /// Pro: keep the last `replaySeconds` in memory for ⇧⌘R.
     var replayEnabled = false
     var replaySeconds: Double = 30
+    var stream = StreamSettings()
 
     init() {}
 
@@ -40,5 +41,6 @@ struct ViewerPrefs: Codable, Equatable {
         audioFollowsFocus = try c.decodeIfPresent(Bool.self, forKey: .audioFollowsFocus) ?? d.audioFollowsFocus
         replayEnabled = try c.decodeIfPresent(Bool.self, forKey: .replayEnabled) ?? d.replayEnabled
         replaySeconds = try c.decodeIfPresent(Double.self, forKey: .replaySeconds) ?? d.replaySeconds
+        stream = try c.decodeIfPresent(StreamSettings.self, forKey: .stream) ?? d.stream
     }
 }

@@ -121,6 +121,10 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
         lock.withLock { audioSinks.append(WeakAudioSink(sink)) }
     }
 
+    public func removeAudioSink(_ sink: AudioSampleSink) {
+        lock.withLock { audioSinks.removeAll { $0.sink == nil || $0.sink === sink } }
+    }
+
     /// Starts (or reconfigures) capture. No-op if already live with the same config.
     public func start(_ config: Config) {
         sessionQueue.async { [self] in
