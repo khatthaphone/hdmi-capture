@@ -369,7 +369,7 @@ final class AppModel {
     }
 
     private func applyOutputSettings() {
-        renderer?.setOptions(RenderOptions(scale: preset.scale, filter: preset.filter, colorRange: preset.colorRange))
+        renderer?.setOptions(RenderOptions(scale: preset.scale, filter: preset.filter, colorRange: preset.colorRange, adjustments: preset.adjustments))
         engine.audio.update(AudioPipeline.Settings(
             delayMs: preset.audioDelayMs,
             channelMode: preset.channelMode,

@@ -21,11 +21,71 @@ public struct RenderOptions: Equatable, Sendable {
     public var scale: ScaleMode = .fit
     public var filter: FilterMode = .linear
     public var colorRange: ColorRange = .auto
+    public var adjustments = ImageAdjustments()
 
-    public init(scale: ScaleMode = .fit, filter: FilterMode = .linear, colorRange: ColorRange = .auto) {
+    public init(scale: ScaleMode = .fit, filter: FilterMode = .linear, colorRange: ColorRange = .auto, adjustments: ImageAdjustments = ImageAdjustments()) {
         self.scale = scale
         self.filter = filter
         self.colorRange = colorRange
+        self.adjustments = adjustments
+    }
+}
+
+/// Picture controls applied after YCbCr→RGB. Defaults are an exact identity.
+public struct ImageAdjustments: Codable, Equatable, Sendable {
+    /// Added to RGB, −0.5…0.5.
+    public var brightness: Double = 0
+    /// Around mid-grey, 0.5…1.5.
+    public var contrast: Double = 1
+    /// 0 (grey) … 2.
+    public var saturation: Double = 1
+    /// Output = input^(1/gamma), 0.5…2 (>1 brightens mid-tones).
+    public var gamma: Double = 1
+    /// Luma unsharp-mask amount, 0…1.
+    public var sharpness: Double = 0
+
+    public init(brightness: Double = 0, contrast: Double = 1, saturation: Double = 1, gamma: Double = 1, sharpness: Double = 0) {
+        self.brightness = brightness
+        self.contrast = contrast
+        self.saturation = saturation
+        self.gamma = gamma
+        self.sharpness = sharpness
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        brightness = try c.decodeIfPresent(Double.self, forKey: .brightness) ?? 0
+        contrast = try c.decodeIfPresent(Double.self, forKey: .contrast) ?? 1
+        saturation = try c.decodeIfPresent(Double.self, forKey: .saturation) ?? 1
+        gamma = try c.decodeIfPresent(Double.self, forKey: .gamma) ?? 1
+        sharpness = try c.decodeIfPresent(Double.self, forKey: .sharpness) ?? 0
+    }
+
+    public enum Preset: String, CaseIterable, Sendable {
+        case standard, game, cinema, vivid
+
+        public var title: String {
+            switch self {
+            case .standard: "Standard"
+            case .game: "Game"
+            case .cinema: "Cinema"
+            case .vivid: "Vivid"
+            }
+        }
+
+        public var values: ImageAdjustments {
+            switch self {
+            case .standard: ImageAdjustments()
+            case .game: ImageAdjustments(contrast: 1.08, saturation: 1.15, sharpness: 0.35)
+            case .cinema: ImageAdjustments(brightness: -0.02, contrast: 1.05, saturation: 0.92, gamma: 0.95)
+            case .vivid: ImageAdjustments(contrast: 1.15, saturation: 1.35, sharpness: 0.2)
+            }
+        }
+    }
+
+    /// The preset these values match, if any.
+    public var preset: Preset? {
+        Preset.allCases.first { $0.values == self }
     }
 }
 
@@ -253,7 +313,9 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
             else { return [] }
             var params = YCbCrParams.make(
                 fullRange: Self.isFullRange(pixelFormat: pixelFormat, override: options.colorRange),
-                bt709: Self.isBT709(pixelBuffer, height: height)
+                bt709: Self.isBT709(pixelBuffer, height: height),
+                adjustments: options.adjustments,
+                texel: SIMD2(1 / Float(width), 1 / Float(height))
             )
             encoder.setRenderPipelineState(yuvPipeline)
             encoder.setFragmentTexture(CVMetalTextureGetTexture(luma), index: 0)
@@ -263,8 +325,10 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
             return [luma, chroma]
         case kCVPixelFormatType_32BGRA:
             guard let rgb = texture(pixelBuffer, plane: 0, format: .bgra8Unorm) else { return [] }
+            var params = YCbCrParams.make(fullRange: true, bt709: true, adjustments: options.adjustments, texel: .zero)
             encoder.setRenderPipelineState(rgbPipeline)
             encoder.setFragmentTexture(CVMetalTextureGetTexture(rgb), index: 0)
+            encoder.setFragmentBytes(&params, length: MemoryLayout<YCbCrParams>.stride, index: 0)
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
             return [rgb]
         default:
@@ -309,7 +373,18 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
         float3x3 matrix;
         float3 offset;
         float3 scale;
+        float4 adjust;   // brightness, contrast, saturation, 1/gamma
+        float4 sharpen;  // amount, texel x, texel y, unused
     };
+
+    // Identity when adjust == (0, 1, 1, 1).
+    static float3 adjustColor(float3 rgb, float4 a) {
+        rgb = (rgb - 0.5) * a.y + 0.5 + a.x;
+        float luma = dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        rgb = mix(float3(luma), rgb, a.z);
+        rgb = saturate(rgb);
+        return a.w == 1.0 ? rgb : pow(rgb, float3(a.w));
+    }
 
     vertex VertexOut vertexQuad(uint vid [[vertex_id]], constant float4 &uvRect [[buffer(0)]]) {
         const float2 corners[4] = { float2(0, 0), float2(1, 0), float2(0, 1), float2(1, 1) };
@@ -325,24 +400,42 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
                                   texture2d<float> chroma [[texture(1)]],
                                   sampler s [[sampler(0)]],
                                   constant YCbCrParams &p [[buffer(0)]]) {
-        float3 ycc = float3(luma.sample(s, in.uv).r, chroma.sample(s, in.uv).rg);
-        float3 rgb = p.matrix * ((ycc - p.offset) * p.scale);
-        return float4(saturate(rgb), 1);
+        float y = luma.sample(s, in.uv).r;
+        if (p.sharpen.x > 0) {
+            float2 t = p.sharpen.yz;
+            float neighbours = luma.sample(s, in.uv + float2(t.x, 0)).r + luma.sample(s, in.uv - float2(t.x, 0)).r
+                             + luma.sample(s, in.uv + float2(0, t.y)).r + luma.sample(s, in.uv - float2(0, t.y)).r;
+            y += (y - neighbours * 0.25) * p.sharpen.x * 2.0;
+        }
+        float3 ycc = float3(y, chroma.sample(s, in.uv).rg);
+        float3 rgb = saturate(p.matrix * ((ycc - p.offset) * p.scale));
+        return float4(adjustColor(rgb, p.adjust), 1);
     }
 
     fragment float4 fragmentRGB(VertexOut in [[stage_in]],
                                 texture2d<float> image [[texture(0)]],
-                                sampler s [[sampler(0)]]) {
-        return float4(image.sample(s, in.uv).rgb, 1);
+                                sampler s [[sampler(0)]],
+                                constant YCbCrParams &p [[buffer(0)]]) {
+        return float4(adjustColor(image.sample(s, in.uv).rgb, p.adjust), 1);
     }
     """
 }
 
-/// Mirrors `YCbCrParams` in the shader (float3x3 + 2 × float3, all 16-byte aligned).
+/// Mirrors `YCbCrParams` in the shader (float3x3, 2 × float3, 2 × float4; all 16-byte aligned).
 struct YCbCrParams {
     var matrix: simd_float3x3
     var offset: SIMD3<Float>
     var scale: SIMD3<Float>
+    var adjust = SIMD4<Float>(0, 1, 1, 1)
+    var sharpen = SIMD4<Float>.zero
+
+    static func make(fullRange: Bool, bt709: Bool, adjustments: ImageAdjustments, texel: SIMD2<Float>) -> YCbCrParams {
+        var params = make(fullRange: fullRange, bt709: bt709)
+        let a = adjustments
+        params.adjust = SIMD4(Float(a.brightness), Float(a.contrast), Float(a.saturation), Float(1 / max(0.1, a.gamma)))
+        params.sharpen = SIMD4(Float(a.sharpness), texel.x, texel.y, 0)
+        return params
+    }
 
     static func make(fullRange: Bool, bt709: Bool) -> YCbCrParams {
         // Columns are the Y, Cb, Cr contributions to (R, G, B).

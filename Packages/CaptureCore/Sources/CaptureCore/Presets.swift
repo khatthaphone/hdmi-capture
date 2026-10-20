@@ -19,6 +19,7 @@ public struct DevicePreset: Codable, Equatable, Sendable {
     public var channelMode: ChannelMode = .auto
     /// Core Audio output device UID; nil = system default.
     public var outputDeviceUID: String?
+    public var adjustments = ImageAdjustments()
 
     public init() {}
 
@@ -36,6 +37,7 @@ public struct DevicePreset: Codable, Equatable, Sendable {
         audioDelayMs = try c.decodeIfPresent(Int.self, forKey: .audioDelayMs) ?? defaults.audioDelayMs
         channelMode = try c.decodeIfPresent(ChannelMode.self, forKey: .channelMode) ?? defaults.channelMode
         outputDeviceUID = try c.decodeIfPresent(String.self, forKey: .outputDeviceUID)
+        adjustments = try c.decodeIfPresent(ImageAdjustments.self, forKey: .adjustments) ?? defaults.adjustments
     }
 }
 

@@ -44,6 +44,20 @@ struct SettingsView: View {
                     Text("Limited (16–235)").tag(ColorRange.limited)
                     Text("Full (0–255)").tag(ColorRange.full)
                 }
+                Picker("Look", selection: Binding(
+                    get: { model.preset.adjustments.preset },
+                    set: { if let preset = $0 { model.preset.adjustments = preset.values } }
+                )) {
+                    ForEach(ImageAdjustments.Preset.allCases, id: \.self) { Text($0.title).tag(Optional($0)) }
+                    if model.preset.adjustments.preset == nil { Text("Custom").tag(ImageAdjustments.Preset?.none) }
+                }
+                Slider(value: $model.preset.adjustments.brightness, in: -0.5...0.5) { Text("Brightness") }
+                Slider(value: $model.preset.adjustments.contrast, in: 0.5...1.5) { Text("Contrast") }
+                Slider(value: $model.preset.adjustments.saturation, in: 0...2) { Text("Saturation") }
+                Slider(value: $model.preset.adjustments.gamma, in: 0.5...2) { Text("Gamma") }
+                Slider(value: $model.preset.adjustments.sharpness, in: 0...1) { Text("Sharpness") }
+                Button("Reset Picture") { model.preset.adjustments = ImageAdjustments() }
+                    .disabled(model.preset.adjustments == ImageAdjustments())
             }
             .disabled(model.selectedVideoID == nil)
 

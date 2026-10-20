@@ -97,6 +97,14 @@ struct ViewerCommands: Commands {
                 ))
                 .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")))
             }
+            Menu("Picture Look") {
+                ForEach(ImageAdjustments.Preset.allCases, id: \.self) { preset in
+                    Toggle(preset.title, isOn: Binding(
+                        get: { model.preset.adjustments == preset.values },
+                        set: { _ in model.preset.adjustments = preset.values }
+                    ))
+                }
+            }
             Toggle("Sharp Pixels", isOn: Binding(
                 get: { model.preset.filter == .nearest },
                 set: { model.preset.filter = $0 ? .nearest : .linear }
