@@ -26,6 +26,8 @@ Native HDMI-capture viewer for macOS (iPadOS/Android/Windows later; mini-OBS lat
 - DEBUG builds: `--args -qaBuiltInCameras YES` / `-qaShowStats YES` override prefs in memory only. **Never edit the prefs plist for QA** (cfprefsd caches and can write stale values back).
 - DEBUG builds: `--args -qaAction screenshot|copy|actualPixels|size50|fullScreen|record3s|openCards|grid|scopes|stream10s|recent15` (recent15 keeps 25 s then saves the last 15 s; stream10s needs `-qaStreamURL rtmp://…`; record3s needs a live device; openCards opens a window per card; grid opens Multi-View) runs the action 1.5 s after launch.
 - DEBUG builds: `--args -qaPinControls YES` keeps the hover control bar visible (combine with any `-qaAction`).
+- DEBUG builds: `-qaSoakMinutes 30` logs fps/drops/memory/thermal/audio buffer once a minute to `Documents/qa-soak.csv` (+ `qa-formats.txt`); `-debugUnlockPro YES` unlocks Pro in memory.
+- iPad (device): `make run-ipad IPAD_ARGS="…"` builds, installs and launches over the network; `make ipad-snapshot` saves the window + raw frame (DEBUG Darwin-notification hook) to `.build/ipad-snapshot/`; `make ipad-soak` copies the soak CSV. iPad-only QA action: `-qaAction settings`. The iOS simulator's `simctl launch` hangs for our app in this Xcode (see task 051), so use the device.
 - Window screenshot: get the window id via `CGWindowListCopyWindowInfo` (owner "HDMI Captain", layer 0), then run `screencapture -o -x -l <id> out.png`.
 - `make test-app` runs hosted tests: StoreKit, against `Apps/macOS/HDMICaptain.storekit`.
 

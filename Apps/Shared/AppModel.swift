@@ -64,6 +64,9 @@ final class AppModel {
     @ObservationIgnored private var manualVideoID: String?
     @ObservationIgnored private var names: [String: String] = [:]
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    #if DEBUG
+    @ObservationIgnored private var soak: QASoak?
+    #endif
 
     /// Viewer that menus, Settings and the menu-bar panel act on.
     var currentViewer: ViewerModel? { activeViewer ?? mainViewer }
@@ -361,6 +364,12 @@ final class AppModel {
         #if DEBUG
         // `-qaPinControls YES` keeps the hover control bar on screen (combine with record3s etc.).
         if UserDefaults.standard.bool(forKey: "qaPinControls") { viewer.controlsPinned = true }
+        // `-qaSoakMinutes 30` logs fps, drops, memory and thermal state once a minute (QASoak).
+        let soakMinutes = UserDefaults.standard.integer(forKey: "qaSoakMinutes")
+        if soakMinutes > 0, soak == nil {
+            soak = QASoak(app: self, minutes: soakMinutes)
+            soak?.start()
+        }
         guard let action = UserDefaults.standard.string(forKey: "qaAction") else { return }
         Task {
             try? await Task.sleep(for: .seconds(1.5))

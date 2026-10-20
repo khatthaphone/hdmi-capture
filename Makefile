@@ -1,7 +1,7 @@
 DERIVED := .build/xcode
 APP := $(DERIVED)/Build/Products/Debug/HDMI Captain.app
 
-.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad ipad-snapshot inventory logs clean
+.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad ipad-snapshot ipad-soak inventory logs clean
 
 IOS_SIM ?= iPad Pro 11-inch (M5)
 IPAD_APP_SIM := $(DERIVED)/Build/Products/Debug-iphonesimulator/HDMI Captain.app
@@ -57,6 +57,12 @@ ipad-snapshot:
 	@sleep 2
 	for f in qa-ui.png qa-frame.png; do xcrun devicectl device copy from --device $(IPAD_ID) --domain-type appDataContainer --domain-identifier com.example.hdmicaptain --source Documents/$$f --destination $(SNAP_DIR)/$$f -q || true; done
 	@ls -la $(SNAP_DIR)
+
+# DEBUG builds launched with IPAD_ARGS="-qaSoakMinutes 30": copies the soak CSV and format list.
+ipad-soak:
+	@mkdir -p $(SNAP_DIR)
+	for f in qa-soak.csv qa-formats.txt; do xcrun devicectl device copy from --device $(IPAD_ID) --domain-type appDataContainer --domain-identifier com.example.hdmicaptain --source Documents/$$f --destination $(SNAP_DIR)/$$f -q || true; done
+	@cat $(SNAP_DIR)/qa-soak.csv
 
 inventory:
 	cd tools/device-inventory && swift run -q device-inventory
