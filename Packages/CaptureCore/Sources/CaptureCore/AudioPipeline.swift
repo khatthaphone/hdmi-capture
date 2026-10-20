@@ -61,6 +61,13 @@ public final class AudioPipeline: @unchecked Sendable {
     private var scratch: [Float] = []
     private var levels = AudioLevels()
     private var lastFillLog: CFTimeInterval = 0
+    /// Converts whatever the capture device delivers (iOS: its native format) to 48 kHz stereo float.
+    private var converter: AVAudioConverter?
+    private var converterSource: AVAudioFormat?
+    private let pipelineFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 2, interleaved: true)!
+    #if os(iOS)
+    private var interruptionObserver: NSObjectProtocol?
+    #endif
 
     // Shared with the render thread.
     private let delayFrames = ManagedAtomic<Int>(0)
@@ -72,7 +79,24 @@ public final class AudioPipeline: @unchecked Sendable {
     private let renderScratch = UnsafeMutablePointer<Float>.allocate(capacity: 8192 * 2)
     private let renderScratchFrames = 8192
 
-    public init() {}
+    public init() {
+        #if os(iOS)
+        // A phone call, FaceTime or Siri stops the engine; bring it back when they're done.
+        interruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification, object: nil, queue: nil
+        ) { [weak self] note in
+            let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            guard raw.flatMap(AVAudioSession.InterruptionType.init(rawValue:)) == .ended else { return }
+            self?.controlQueue.async {
+                guard let self, self.engine != nil else { return }
+                Self.log.info("Audio interruption ended; restarting output")
+                try? AVAudioSession.sharedInstance().setActive(true)
+                self.stopEngine()
+                self.startEngine()
+            }
+        }
+        #endif
+    }
 
     deinit {
         renderScratch.deallocate()
@@ -176,12 +200,62 @@ public final class AudioPipeline: @unchecked Sendable {
     // MARK: Producer (capture audio queue)
 
     public func enqueue(_ sampleBuffer: CMSampleBuffer) {
-        guard running.load(ordering: .acquiring),
-              let description = CMSampleBufferGetFormatDescription(sampleBuffer),
-              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(description)?.pointee,
-              asbd.mFormatFlags & kAudioFormatFlagIsFloat != 0, asbd.mChannelsPerFrame == 2
-        else { return }
+        guard running.load(ordering: .acquiring) else { return }
+        ingest(sampleBuffer)
+    }
 
+    /// Converts if needed, then maps channels, meters and buffers one capture chunk.
+    func ingest(_ sampleBuffer: CMSampleBuffer) {
+        guard let description = CMSampleBufferGetFormatDescription(sampleBuffer),
+              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(description)?.pointee
+        else { return }
+        let matches = asbd.mFormatID == kAudioFormatLinearPCM && asbd.mFormatFlags & kAudioFormatFlagIsFloat != 0
+            && asbd.mFormatFlags & kAudioFormatFlagIsNonInterleaved == 0
+            && asbd.mChannelsPerFrame == 2 && asbd.mBitsPerChannel == 32 && asbd.mSampleRate == Self.sampleRate
+        guard !matches else {
+            ingestNative(sampleBuffer)
+            return
+        }
+        // iOS can't ask AVCaptureAudioDataOutput for a format; it delivers the device's own (often 16-bit).
+        guard let converted = convert(sampleBuffer, description: description),
+              let samples = converted.floatChannelData?[0]
+        else { return }
+        write(samples, frames: Int(converted.frameLength))
+    }
+
+    private func convert(_ sampleBuffer: CMSampleBuffer, description: CMAudioFormatDescription) -> AVAudioPCMBuffer? {
+        let source = AVAudioFormat(cmAudioFormatDescription: description)
+        if converterSource != source {
+            converter = AVAudioConverter(from: source, to: pipelineFormat)
+            converterSource = source
+            Self.log.info("Converting capture audio from \(source.description, privacy: .public)")
+        }
+        let frames = AVAudioFrameCount(CMSampleBufferGetNumSamples(sampleBuffer))
+        guard let converter, frames > 0,
+              let input = AVAudioPCMBuffer(pcmFormat: source, frameCapacity: frames)
+        else { return nil }
+        input.frameLength = frames
+        guard CMSampleBufferCopyPCMDataIntoAudioBufferList(sampleBuffer, at: 0, frameCount: Int32(frames),
+                                                           into: input.mutableAudioBufferList) == noErr
+        else { return nil }
+        let capacity = AVAudioFrameCount((Double(frames) * Self.sampleRate / source.sampleRate).rounded(.up)) + 64
+        guard let output = AVAudioPCMBuffer(pcmFormat: pipelineFormat, frameCapacity: capacity) else { return nil }
+        var supplied = false
+        var error: NSError?
+        let status = converter.convert(to: output, error: &error) { _, inputStatus in
+            if supplied {
+                inputStatus.pointee = .noDataNow
+                return nil
+            }
+            supplied = true
+            inputStatus.pointee = .haveData
+            return input
+        }
+        guard status != .error, output.frameLength > 0 else { return nil }
+        return output
+    }
+
+    private func ingestNative(_ sampleBuffer: CMSampleBuffer) {
         var blockBuffer: CMBlockBuffer?
         var list = AudioBufferList()
         let status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
@@ -192,6 +266,11 @@ public final class AudioPipeline: @unchecked Sendable {
         guard status == noErr, let data = list.mBuffers.mData else { return }
         let frames = Int(list.mBuffers.mDataByteSize) / (MemoryLayout<Float>.size * 2)
         guard frames > 0 else { return }
+        write(data.assumingMemoryBound(to: Float.self), frames: frames)
+    }
+
+    /// Interleaved 48 kHz stereo float in → channel map, meter, ring buffer.
+    private func write(_ data: UnsafePointer<Float>, frames: Int) {
         chunkFrames.store(frames, ordering: .relaxed)
 
         producerLock.lock()
@@ -199,7 +278,7 @@ public final class AudioPipeline: @unchecked Sendable {
         if scratch.count < frames * 2 { scratch = [Float](repeating: 0, count: frames * 2) }
         scratch.withUnsafeMutableBufferPointer { buffer in
             let samples = buffer.baseAddress!
-            samples.update(from: data.assumingMemoryBound(to: Float.self), count: frames * 2)
+            samples.update(from: data, count: frames * 2)
             channelMode.apply(to: samples, frames: frames)
             meter(samples, frames: frames)
             ring.write(samples, frames: frames)

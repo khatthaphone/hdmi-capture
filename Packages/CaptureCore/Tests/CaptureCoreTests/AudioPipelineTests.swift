@@ -1,3 +1,4 @@
+import AVFoundation
 import Testing
 @testable import CaptureCore
 
@@ -137,5 +138,53 @@ struct DriftControllerTests {
     @Test func loweringDelayJumpsDown() {
         let (_, controller) = simulate(seconds: 60, skew: -0.001, delayFrames: 24_000, changeDelayAt: (20, 0))
         #expect(abs(controller.averageFill - Double(controller.targetFrames)) < 960)
+    }
+}
+
+/// iOS delivers capture audio in the device's own format; the pipeline converts it.
+struct AudioPipelineConversionTests {
+    /// A 1 kHz sine at `amplitude` as interleaved Int16 PCM.
+    private func int16Sine(sampleRate: Double, channels: Int, frames: Int, amplitude: Double = 0.5) throws -> CMSampleBuffer {
+        var asbd = AudioStreamBasicDescription(
+            mSampleRate: sampleRate, mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
+            mBytesPerPacket: UInt32(2 * channels), mFramesPerPacket: 1, mBytesPerFrame: UInt32(2 * channels),
+            mChannelsPerFrame: UInt32(channels), mBitsPerChannel: 16, mReserved: 0)
+        var format: CMAudioFormatDescription?
+        CMAudioFormatDescriptionCreate(allocator: nil, asbd: &asbd, layoutSize: 0, layout: nil,
+                                       magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &format)
+        var samples = [Int16](repeating: 0, count: frames * channels)
+        for i in 0..<frames {
+            let v = Int16(amplitude * 32767 * sin(2 * .pi * 1000 * Double(i) / sampleRate))
+            for c in 0..<channels { samples[i * channels + c] = v }
+        }
+        let bytes = samples.count * 2
+        var block: CMBlockBuffer?
+        CMBlockBufferCreateWithMemoryBlock(allocator: nil, memoryBlock: nil, blockLength: bytes, blockAllocator: nil,
+                                           customBlockSource: nil, offsetToData: 0, dataLength: bytes, flags: 0, blockBufferOut: &block)
+        samples.withUnsafeBytes { _ = CMBlockBufferReplaceDataBytes(with: $0.baseAddress!, blockBuffer: block!, offsetIntoDestination: 0, dataLength: bytes) }
+        var buffer: CMSampleBuffer?
+        CMAudioSampleBufferCreateReadyWithPacketDescriptions(allocator: nil, dataBuffer: block!, formatDescription: format!,
+                                                             sampleCount: frames, presentationTimeStamp: .zero,
+                                                             packetDescriptions: nil, sampleBufferOut: &buffer)
+        return try #require(buffer)
+    }
+
+    @Test func convertsInt16StereoAt48k() throws {
+        let pipeline = AudioPipeline()
+        for _ in 0..<4 { pipeline.ingest(try int16Sine(sampleRate: 48_000, channels: 2, frames: 480)) }
+        let levels = pipeline.currentLevels()
+        #expect(levels.peak.x > 0.45 && levels.peak.x < 0.55)
+        #expect(levels.peak.y > 0.45 && levels.peak.y < 0.55)
+        #expect(levels.bufferedMs > 30) // ~40 ms in
+    }
+
+    @Test func resamplesMono44_1k() throws {
+        let pipeline = AudioPipeline()
+        for _ in 0..<10 { pipeline.ingest(try int16Sine(sampleRate: 44_100, channels: 1, frames: 441)) }
+        let levels = pipeline.currentLevels()
+        // Mono lands on the left; ChannelMode.auto (leftToBoth for 1-channel sources) copies it across.
+        #expect(levels.peak.x > 0.4)
+        #expect(levels.bufferedMs > 60) // ~100 ms in, minus converter latency
     }
 }

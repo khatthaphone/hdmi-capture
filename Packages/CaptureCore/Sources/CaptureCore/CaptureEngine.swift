@@ -234,9 +234,9 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
 
         var audioName: String?
         #if os(iOS)
-        // iOS has one shared microphone input that may be the built-in mic; card audio needs
-        // AVAudioSession routing first (task 054). Until then the iPad captures video only.
-        let audioDeviceID: String? = nil
+        // iOS has one microphone device that follows the audio route; only use it when the
+        // route is the card's USB audio, never the iPad's own mic.
+        let audioDeviceID = CardAudioSession.activate() ? AVCaptureDevice.default(for: .audio)?.uniqueID : nil
         #else
         let audioDeviceID = config.audioDeviceID
         #endif
