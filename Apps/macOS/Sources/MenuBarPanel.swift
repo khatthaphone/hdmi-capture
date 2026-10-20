@@ -3,43 +3,46 @@ import SwiftUI
 
 /// Menu-bar extra: quick control while the window is hidden or the app runs menu-bar only.
 struct MenuBarPanel: View {
-    @Environment(AppModel.self) private var model
+    @Environment(AppModel.self) private var app
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        @Bindable var model = model
+        @Bindable var app = app
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Image(systemName: model.phase == .live ? "circle.fill" : "circle")
-                    .foregroundStyle(model.phase == .live ? .green : .secondary)
+                Image(systemName: session?.state == .live ? "circle.fill" : "circle")
+                    .foregroundStyle(session?.state == .live ? .green : .secondary)
                     .font(.caption)
                 Text(status).font(.headline).lineLimit(1)
             }
 
-            if !model.catalog.videoDevices.isEmpty {
+            if !app.catalog.videoDevices.isEmpty {
                 Picker("Input", selection: Binding(
-                    get: { model.selectedVideoID ?? "" },
-                    set: { if !$0.isEmpty { model.selectVideo($0) } }
+                    get: { app.mainDeviceID ?? "" },
+                    set: { if !$0.isEmpty { app.selectVideo($0) } }
                 )) {
-                    ForEach(model.catalog.videoDevices) { Text($0.name).tag($0.id) }
+                    ForEach(app.catalog.videoDevices) { Text($0.name).tag($0.id) }
                 }
                 .labelsHidden()
             }
 
-            HStack {
-                Button {
-                    model.preset.muted.toggle()
-                } label: {
-                    Image(systemName: model.preset.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                        .frame(width: 18)
+            if let session {
+                @Bindable var session = session
+                HStack {
+                    Button {
+                        session.preset.muted.toggle()
+                    } label: {
+                        Image(systemName: session.preset.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                            .frame(width: 18)
+                    }
+                    .buttonStyle(.borderless)
+                    Slider(value: $session.preset.volume, in: 0...1)
+                        .disabled(session.preset.muted)
                 }
-                .buttonStyle(.borderless)
-                Slider(value: $model.preset.volume, in: 0...1)
-                    .disabled(model.preset.muted)
             }
 
-            Toggle("Float on top", isOn: $model.prefs.floatOnTop)
-            Toggle("Menu bar only (hide Dock icon)", isOn: $model.prefs.menuBarOnly)
+            Toggle("Float on top", isOn: $app.prefs.floatOnTop)
+            Toggle("Menu bar only (hide Dock icon)", isOn: $app.prefs.menuBarOnly)
 
             Divider()
             HStack {
@@ -55,14 +58,19 @@ struct MenuBarPanel: View {
         .frame(width: 280)
     }
 
+    private var session: DeviceSession? {
+        app.mainDeviceID.flatMap { app.sessions[$0] }
+    }
+
     private var status: String {
-        switch model.phase {
-        case .live: model.liveInfo.map { "\($0.deviceName) · \($0.format.width)×\($0.format.height)" } ?? "Live"
-        case .scanning: "No capture device"
-        case let .connecting(name): "Connecting to \(name)"
-        case let .recovering(reason): reason
-        case .permissionNeeded, .permissionDenied: "Camera access needed"
-        case let .failed(message): message
+        guard app.permission == .granted else { return "Camera access needed" }
+        guard let session else { return "No capture device" }
+        switch session.state {
+        case .live: return session.liveInfo.map { "\(session.deviceName) · \($0.format.width)×\($0.format.height)" } ?? session.deviceName
+        case .idle, .connecting: return "Connecting to \(session.deviceName)"
+        case let .recovering(reason): return reason
+        case let .failed(message): return message
+        case .absent: return "\(session.deviceName) disconnected"
         }
     }
 }

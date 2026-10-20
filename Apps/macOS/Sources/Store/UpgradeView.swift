@@ -98,11 +98,11 @@ struct UpgradeView: View {
 /// Settings → Pro tab.
 struct ProSettingsView: View {
     @Environment(EntitlementStore.self) private var store
-    @Environment(AppModel.self) private var model
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         @Bindable var store = store
-        @Bindable var model = model
+        @Bindable var app = app
         Form {
             Section {
                 LabeledContent("Status", value: store.isPro ? "Pro unlocked" : "Free")
@@ -117,11 +117,11 @@ struct ProSettingsView: View {
                 }
             }
             Section("Recording") {
-                Picker("Codec", selection: $model.prefs.recordingCodec) {
+                Picker("Codec", selection: $app.prefs.recordingCodec) {
                     ForEach(Recorder.Codec.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
-                Toggle("Show recording indicator", isOn: $model.prefs.showRecordingIndicator)
-                Button("Show Recordings in Finder") { model.showRecordingsInFinder() }
+                Toggle("Show recording indicator", isOn: $app.prefs.showRecordingIndicator)
+                Button("Show Recordings in Finder") { app.showRecordingsInFinder() }
             }
             #if DEBUG
             Section("Developer") {

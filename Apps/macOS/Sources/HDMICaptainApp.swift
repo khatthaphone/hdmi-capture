@@ -5,19 +5,19 @@ import SwiftUI
 @main
 struct HDMICaptainApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var model = AppModel()
+    @State private var app = AppModel()
     @State private var store = EntitlementStore()
 
     init() {
-        let model = _model.wrappedValue
-        AppDelegate.keepsRunningWithoutWindow = { model.keepsRunningWithoutWindow }
-        DispatchQueue.main.async { model.applyActivationPolicy() }
+        let app = _app.wrappedValue
+        AppDelegate.keepsRunningWithoutWindow = { app.keepsRunningWithoutWindow }
+        DispatchQueue.main.async { app.applyActivationPolicy() }
     }
 
     var body: some Scene {
         Window("HDMI Captain", id: "main") {
-            ContentView()
-                .environment(model)
+            ViewerRoot(app: app, source: .automatic)
+                .environment(app)
                 .environment(store)
                 .sheet(isPresented: $store.isShowingUpgrade) {
                     UpgradeView().environment(store)
@@ -26,14 +26,26 @@ struct HDMICaptainApp: App {
         .defaultSize(width: 1280, height: 720)
         .windowStyle(.hiddenTitleBar)
         .commands {
-            ViewerCommands(model: model)
-            WindowSizeCommands(model: model)
-            ProCommands(model: model, store: store)
+            CardWindowCommands(app: app)
+            ViewerCommands(app: app)
+            WindowSizeCommands(app: app)
+            ProCommands(app: app, store: store)
         }
 
-        MenuBarExtra("HDMI Captain", systemImage: "rectangle.inset.filled.on.rectangle", isInserted: $model.prefs.showMenuBarItem) {
+        // One window per capture card (File → New Window for…). Reopening a card focuses its window.
+        WindowGroup("Capture Card", id: "card", for: String.self) { $deviceID in
+            if let deviceID {
+                ViewerRoot(app: app, source: .pinned(deviceID))
+                    .environment(app)
+                    .environment(store)
+            }
+        }
+        .defaultSize(width: 960, height: 540)
+        .windowStyle(.hiddenTitleBar)
+
+        MenuBarExtra("HDMI Captain", systemImage: "rectangle.inset.filled.on.rectangle", isInserted: $app.prefs.showMenuBarItem) {
             MenuBarPanel()
-                .environment(model)
+                .environment(app)
                 .environment(store)
         }
         .menuBarExtraStyle(.window)
@@ -45,9 +57,25 @@ struct HDMICaptainApp: App {
                 ProSettingsView()
                     .tabItem { Label("Pro", systemImage: "sparkles") }
             }
-            .environment(model)
+            .environment(app)
             .environment(store)
         }
+    }
+}
+
+/// Owns one window's (or tile's) `ViewerModel` and ties it to the view lifecycle.
+struct ViewerRoot: View {
+    @State private var viewer: ViewerModel
+
+    init(app: AppModel, source: ViewerModel.Source) {
+        _viewer = State(initialValue: ViewerModel(app: app, source: source))
+    }
+
+    var body: some View {
+        ContentView()
+            .environment(viewer)
+            .onAppear { viewer.activate() }
+            .onDisappear { viewer.deactivate() }
     }
 }
 
@@ -60,112 +88,154 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+// MARK: - Commands
+
+/// File → New Window for each connected card.
+struct CardWindowCommands: Commands {
+    let app: AppModel
+
+    var body: some Commands {
+        CommandGroup(after: .newItem) {
+            CardWindowMenu(app: app)
+        }
+    }
+}
+
+private struct CardWindowMenu: View {
+    let app: AppModel
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Menu("New Window for") {
+            ForEach(app.catalog.videoDevices) { device in
+                Button(device.name) { openWindow(id: "card", value: device.id) }
+            }
+        }
+        .disabled(app.catalog.videoDevices.isEmpty)
+    }
+}
+
 struct WindowSizeCommands: Commands {
-    let model: AppModel
+    let app: AppModel
 
     var body: some Commands {
         CommandGroup(after: .windowSize) {
             Divider()
-            Button("Actual Pixels (1:1)") { model.setWindowSize(scale: 1, actualPixels: true) }
+            Button("Actual Pixels (1:1)") { app.currentViewer?.setWindowSize(scale: 1, actualPixels: true) }
                 .keyboardShortcut("0")
             ForEach([0.5, 1, 1.5, 2], id: \.self) { scale in
-                Button("\(Int(scale * 100)) % Size") { model.setWindowSize(scale: scale) }
+                Button("\(Int(scale * 100)) % Size") { app.currentViewer?.setWindowSize(scale: scale) }
             }
             Divider()
         }
     }
 }
 
+/// Video menu; acts on the key window's viewer.
 struct ViewerCommands: Commands {
-    @Bindable var model: AppModel
+    let app: AppModel
 
     var body: some Commands {
         CommandMenu("Video") {
-            Button("Toggle Full Screen") { model.toggleFullScreen() }
-                .keyboardShortcut("f")
-            Button("Save Screenshot") { model.saveScreenshot() }
-                .keyboardShortcut("s", modifiers: [.command, .shift])
-            Button("Copy Frame") { model.copyFrame() }
-                .keyboardShortcut("c", modifiers: [.command, .option])
-            Toggle("Mute", isOn: $model.preset.muted)
-                .keyboardShortcut("m", modifiers: [.command, .shift])
-            Divider()
-            ForEach(Array(ScaleMode.allCases.enumerated()), id: \.element) { index, mode in
-                Toggle(mode.title, isOn: Binding(
-                    get: { model.preset.scale == mode },
-                    set: { _ in model.preset.scale = mode }
-                ))
-                .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")))
+            if let viewer = app.currentViewer {
+                VideoMenuItems(app: app, viewer: viewer)
             }
-            Menu("Picture Look") {
-                ForEach(ImageAdjustments.Preset.allCases, id: \.self) { preset in
-                    Toggle(preset.title, isOn: Binding(
-                        get: { model.preset.adjustments == preset.values },
-                        set: { _ in model.preset.adjustments = preset.values }
-                    ))
-                }
-            }
-            Toggle("Sharp Pixels", isOn: Binding(
-                get: { model.preset.filter == .nearest },
-                set: { model.preset.filter = $0 ? .nearest : .linear }
-            ))
-            Divider()
-            Toggle("Float on Top", isOn: $model.prefs.floatOnTop)
-                .keyboardShortcut("t")
-            Toggle("Show on All Spaces", isOn: $model.prefs.allSpaces)
-            Toggle("Clean Mode", isOn: $model.prefs.cleanMode)
-                .keyboardShortcut("b")
-            Toggle("Lock Aspect Ratio", isOn: $model.prefs.lockAspect)
-            Toggle("Show Stats", isOn: $model.prefs.showStats)
-                .keyboardShortcut("i")
-            Divider()
-            Menu("Test Pattern") {
-                Toggle("Off (live picture)", isOn: Binding(get: { model.testPattern == nil }, set: { _ in model.testPattern = nil }))
-                Divider()
-                ForEach(TestPattern.allCases, id: \.self) { pattern in
-                    Toggle(pattern.title, isOn: Binding(
-                        get: { model.testPattern == pattern },
-                        set: { model.testPattern = $0 ? pattern : nil }
-                    ))
-                }
-            }
-            Menu("Guides") {
-                Toggle("Rule of Thirds", isOn: $model.prefs.guides.thirds)
-                Toggle("Center Cross", isOn: $model.prefs.guides.center)
-                Toggle("Safe Areas (90 % / 80 %)", isOn: $model.prefs.guides.safeAreas)
-                Divider()
-                Toggle("No Aspect Mask", isOn: Binding(get: { model.prefs.guides.mask == nil }, set: { _ in model.prefs.guides.mask = nil }))
-                ForEach(GuideSettings.Mask.allCases, id: \.self) { mask in
-                    Toggle("Mask \(mask.rawValue)", isOn: Binding(
-                        get: { model.prefs.guides.mask == mask },
-                        set: { model.prefs.guides.mask = $0 ? mask : nil }
-                    ))
-                }
-            }
-            Divider()
-            Menu("Video Input") {
-                ForEach(model.catalog.videoDevices) { device in
-                    Toggle(device.name, isOn: Binding(
-                        get: { model.selectedVideoID == device.id },
-                        set: { _ in model.selectVideo(device.id) }
-                    ))
-                }
-            }
-            Button("Reconnect") { model.retry() }
-                .keyboardShortcut("r", modifiers: [.command, .option])
         }
+    }
+}
+
+private struct VideoMenuItems: View {
+    @Bindable var app: AppModel
+    @Bindable var viewer: ViewerModel
+
+    var body: some View {
+        Button("Toggle Full Screen") { viewer.toggleFullScreen() }
+            .keyboardShortcut("f")
+        Button("Save Screenshot") { viewer.saveScreenshot() }
+            .keyboardShortcut("s", modifiers: [.command, .shift])
+        Button("Copy Frame") { viewer.copyFrame() }
+            .keyboardShortcut("c", modifiers: [.command, .option])
+        Toggle("Mute", isOn: $viewer.preset.muted)
+            .keyboardShortcut("m", modifiers: [.command, .shift])
+        Divider()
+        ForEach(Array(ScaleMode.allCases.enumerated()), id: \.element) { index, mode in
+            Toggle(mode.title, isOn: Binding(
+                get: { viewer.preset.scale == mode },
+                set: { _ in viewer.preset.scale = mode }
+            ))
+            .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")))
+        }
+        Menu("Picture Look") {
+            ForEach(ImageAdjustments.Preset.allCases, id: \.self) { preset in
+                Toggle(preset.title, isOn: Binding(
+                    get: { viewer.preset.adjustments == preset.values },
+                    set: { _ in viewer.preset.adjustments = preset.values }
+                ))
+            }
+        }
+        Toggle("Sharp Pixels", isOn: Binding(
+            get: { viewer.preset.filter == .nearest },
+            set: { viewer.preset.filter = $0 ? .nearest : .linear }
+        ))
+        Divider()
+        Toggle("Float on Top", isOn: $app.prefs.floatOnTop)
+            .keyboardShortcut("t")
+        Toggle("Show on All Spaces", isOn: $app.prefs.allSpaces)
+        Toggle("Clean Mode", isOn: $app.prefs.cleanMode)
+            .keyboardShortcut("b")
+        Toggle("Lock Aspect Ratio", isOn: $app.prefs.lockAspect)
+        Toggle("Show Stats", isOn: $app.prefs.showStats)
+            .keyboardShortcut("i")
+        Divider()
+        Menu("Test Pattern") {
+            Toggle("Off (live picture)", isOn: Binding(get: { viewer.testPattern == nil }, set: { _ in viewer.testPattern = nil }))
+            Divider()
+            ForEach(TestPattern.allCases, id: \.self) { pattern in
+                Toggle(pattern.title, isOn: Binding(
+                    get: { viewer.testPattern == pattern },
+                    set: { viewer.testPattern = $0 ? pattern : nil }
+                ))
+            }
+        }
+        Menu("Guides") {
+            Toggle("Rule of Thirds", isOn: $app.prefs.guides.thirds)
+            Toggle("Center Cross", isOn: $app.prefs.guides.center)
+            Toggle("Safe Areas (90 % / 80 %)", isOn: $app.prefs.guides.safeAreas)
+            Divider()
+            Toggle("No Aspect Mask", isOn: Binding(get: { app.prefs.guides.mask == nil }, set: { _ in app.prefs.guides.mask = nil }))
+            ForEach(GuideSettings.Mask.allCases, id: \.self) { mask in
+                Toggle("Mask \(mask.rawValue)", isOn: Binding(
+                    get: { app.prefs.guides.mask == mask },
+                    set: { app.prefs.guides.mask = $0 ? mask : nil }
+                ))
+            }
+        }
+        Divider()
+        if viewer.source == .automatic {
+            Menu("Video Input") {
+                ForEach(app.catalog.videoDevices) { device in
+                    Toggle(device.name, isOn: Binding(
+                        get: { app.mainDeviceID == device.id },
+                        set: { _ in app.selectVideo(device.id) }
+                    ))
+                }
+            }
+        }
+        Button("Reconnect") { app.retry() }
+            .keyboardShortcut("r", modifiers: [.command, .option])
     }
 }
 
 /// Pro actions: locked items open the upgrade sheet; unlocked-but-unbuilt items are disabled.
 struct ProCommands: Commands {
-    let model: AppModel
+    let app: AppModel
     let store: EntitlementStore
 
     var body: some Commands {
         CommandMenu("Pro") {
-            item(.recording, model.isRecording ? "Stop Recording" : "Start Recording", key: "r", modifiers: .command)
-            Button("Show Recordings in Finder") { model.showRecordingsInFinder() }
+            let recording = app.currentViewer?.session?.isRecording ?? false
+            item(.recording, recording ? "Stop Recording" : "Start Recording", key: "r", modifiers: .command)
+            Button("Show Recordings in Finder") { app.showRecordingsInFinder() }
             item(.replayBuffer, "Save Instant Replay", key: "r", modifiers: [.command, .shift])
             item(.streaming, "Go Live…", key: "l", modifiers: [.command, .shift])
             item(.virtualCamera, "Virtual Camera", key: nil, modifiers: [])
@@ -183,7 +253,7 @@ struct ProCommands: Commands {
         let button = Button {
             guard store.gate(feature) else { return }
             switch feature {
-            case .recording: model.toggleRecording()
+            case .recording: app.currentViewer?.toggleRecording()
             default: break
             }
         } label: {

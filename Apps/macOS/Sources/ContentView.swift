@@ -2,16 +2,18 @@ import CaptureCore
 import SwiftUI
 
 struct ContentView: View {
-    @Environment(AppModel.self) private var model
+    @Environment(ViewerModel.self) private var viewer
+    @Environment(AppModel.self) private var app
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         ZStack {
             Color.black
-            if let renderer = model.renderer {
-                MetalPreview(renderer: renderer, autoHidesWindowButtons: !model.prefs.cleanMode) { model.toggleFullScreen() }
+            if let renderer = viewer.renderer {
+                MetalPreview(renderer: renderer, autoHidesWindowButtons: !app.prefs.cleanMode) { viewer.toggleFullScreen() }
             }
-            if !model.prefs.guides.isEmpty, let source = model.sourceSize, model.phase == .live || model.testPattern != nil {
-                GuidesOverlay(guides: model.prefs.guides, source: source, scale: model.preset.scale)
+            if !app.prefs.guides.isEmpty, let source = viewer.sourceSize, viewer.phase == .live || viewer.testPattern != nil {
+                GuidesOverlay(guides: app.prefs.guides, source: source, scale: viewer.preset.scale)
                     .allowsHitTesting(false)
             }
             switch overlay {
@@ -24,23 +26,23 @@ struct ContentView: View {
             case let .banner(text):
                 Banner(text: text)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .padding(.top, model.prefs.cleanMode ? 12 : 40)
+                    .padding(.top, app.prefs.cleanMode ? 12 : 40)
                     .allowsHitTesting(false)
             }
-            if let since = model.recordingSince, model.prefs.showRecordingIndicator {
+            if let since = viewer.session?.recordingSince, app.prefs.showRecordingIndicator {
                 RecordingIndicator(since: since)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                     .padding(12)
                     .allowsHitTesting(false)
             }
-            if let toast = model.toast {
+            if let toast = viewer.toast {
                 Banner(text: toast, symbol: "checkmark.circle.fill")
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .padding(.bottom, 20)
                     .allowsHitTesting(false)
                     .transition(.opacity)
             }
-            if model.prefs.showStats, model.phase == .live {
+            if app.prefs.showStats, viewer.phase == .live {
                 StatsOverlay()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     .padding(12)
@@ -49,7 +51,15 @@ struct ContentView: View {
         }
         .ignoresSafeArea()
         .frame(minWidth: 320, minHeight: 180)
-        .background(WindowConfigurator(prefs: model.prefs, aspect: model.aspect) { model.window = $0 })
+        .background(WindowConfigurator(prefs: app.prefs, aspect: viewer.aspect) { viewer.window = $0 })
+        #if DEBUG
+        .task {
+            // QA: `-qaAction openCards` opens a window per connected card.
+            guard viewer.source == .automatic, UserDefaults.standard.string(forKey: "qaAction") == "openCards" else { return }
+            try? await Task.sleep(for: .seconds(2))
+            app.catalog.videoDevices.forEach { openWindow(id: "card", value: $0.id) }
+        }
+        #endif
     }
 
     private enum Overlay: Equatable {
@@ -60,13 +70,13 @@ struct ContentView: View {
     /// Prefer keeping the last picture on screen with a small banner; cover it only when
     /// there is nothing meaningful to show.
     private var overlay: Overlay {
-        if model.testPattern != nil { return .none }
-        switch model.phase {
+        if viewer.testPattern != nil { return .none }
+        switch viewer.phase {
         case .live:
-            if model.signal.isNoSignal { return .noSignal }
-            if model.signalInterrupted { return .banner("Signal interrupted") }
+            if viewer.signal.isNoSignal { return .noSignal }
+            if viewer.signalInterrupted { return .banner("Signal interrupted") }
             return .none
-        case let .recovering(reason) where model.hasFrame:
+        case let .recovering(reason) where viewer.hasFrame:
             return .banner("\(reason) — reconnecting…")
         default:
             return .full
@@ -89,7 +99,8 @@ private struct Banner: View {
 }
 
 private struct NoSignalOverlay: View {
-    @Environment(AppModel.self) private var model
+    @Environment(ViewerModel.self) private var viewer
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         VStack(spacing: 10) {
@@ -108,7 +119,7 @@ private struct NoSignalOverlay: View {
     }
 
     private var hint: String {
-        switch model.signal {
+        switch viewer.signal {
         case .black:
             "The capture card sends a black picture. Check that the source is on and outputting video. Sources that use HDCP (PlayStation, Apple TV, streaming apps) can't be captured — turn HDCP off in the source's settings."
         default:
@@ -118,7 +129,8 @@ private struct NoSignalOverlay: View {
 }
 
 private struct StatusOverlay: View {
-    @Environment(AppModel.self) private var model
+    @Environment(ViewerModel.self) private var viewer
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         VStack(spacing: 12) {
@@ -132,7 +144,7 @@ private struct StatusOverlay: View {
     }
 
     @ViewBuilder private var content: some View {
-        switch model.phase {
+        switch viewer.phase {
         case .permissionNeeded:
             Label("Camera access needed", systemImage: "video.badge.ellipsis").font(.title2)
             Text("HDMI capture devices appear to macOS as cameras.").foregroundStyle(.secondary)
@@ -140,13 +152,17 @@ private struct StatusOverlay: View {
             Label("Camera access is off", systemImage: "video.slash").font(.title2)
             Text("Allow HDMI Captain under Privacy & Security → Camera, then try again.").foregroundStyle(.secondary)
             HStack {
-                Button("Open Privacy Settings") { model.openPrivacySettings() }
-                Button("Try Again") { model.retry() }
+                Button("Open Privacy Settings") { app.openPrivacySettings() }
+                Button("Try Again") { app.retry() }
             }
         case .scanning:
             ProgressView().controlSize(.large).tint(.white)
             Text("Scanning for hardware").font(.title2)
             Text("Connect an HDMI capture device.").foregroundStyle(.secondary)
+        case let .waiting(name):
+            Image(systemName: "cable.connector.slash").font(.system(size: 36))
+            Text("\(name) is not connected").font(.title2)
+            Text("The picture comes back as soon as it's plugged in.").foregroundStyle(.secondary)
         case let .connecting(name):
             ProgressView().controlSize(.large).tint(.white)
             Text("Connecting to \(name)").font(.title2)
@@ -157,7 +173,7 @@ private struct StatusOverlay: View {
         case let .failed(message):
             Label("Can't show video", systemImage: "exclamationmark.triangle").font(.title2)
             Text(message).foregroundStyle(.secondary)
-            Button("Try Again") { model.retry() }
+            Button("Try Again") { app.retry() }
         case .live:
             EmptyView()
         }
@@ -165,20 +181,21 @@ private struct StatusOverlay: View {
 }
 
 private struct StatsOverlay: View {
-    @Environment(AppModel.self) private var model
+    @Environment(ViewerModel.self) private var viewer
+    @Environment(AppModel.self) private var app
 
     var body: some View {
-        if let info = model.liveInfo {
+        if let info = viewer.liveInfo {
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(info.deviceName)")
                 Text("requested \(info.format.width)×\(info.format.height) \(info.format.fourCC) @ \(info.frameRate, specifier: "%.2f")")
-                if let size = model.stats.frameSize {
+                if let size = viewer.stats.frameSize {
                     let mismatch = Int(size.width) != info.format.width || Int(size.height) != info.format.height
                     Text("actual \(Int(size.width))×\(Int(size.height))\(mismatch ? "  ⚠︎ differs" : "")")
                         .foregroundStyle(mismatch ? .orange : .white)
                 }
-                Text("in \(model.stats.inputFPS, specifier: "%.1f") fps · out \(model.stats.renderFPS, specifier: "%.1f") fps · dropped \(model.stats.dropped)")
-                Text("audio: \(info.audioDeviceName ?? "none")\(model.preset.muted ? " (muted)" : "") · delay \(model.preset.audioDelayMs) ms")
+                Text("in \(viewer.stats.inputFPS, specifier: "%.1f") fps · out \(viewer.stats.renderFPS, specifier: "%.1f") fps · dropped \(viewer.stats.dropped)")
+                Text("audio: \(info.audioDeviceName ?? "none")\(viewer.preset.muted ? " (muted)" : "") · delay \(viewer.preset.audioDelayMs) ms")
             }
             .font(.system(size: 11, design: .monospaced))
             .foregroundStyle(.white)

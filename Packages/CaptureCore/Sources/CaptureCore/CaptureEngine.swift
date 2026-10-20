@@ -113,6 +113,10 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
         lock.withLock { sinks.append(WeakSink(sink)) }
     }
 
+    public func removeSink(_ sink: FrameSink) {
+        lock.withLock { sinks.removeAll { $0.sink == nil || $0.sink === sink } }
+    }
+
     public func addAudioSink(_ sink: AudioSampleSink) {
         lock.withLock { audioSinks.append(WeakAudioSink(sink)) }
     }

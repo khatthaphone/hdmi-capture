@@ -3,86 +3,25 @@ import AVFoundation
 import CaptureCore
 import Observation
 
-/// Window/app-level preferences (per-device settings live in `DevicePreset`).
-struct ViewerPrefs: Codable, Equatable {
-    var floatOnTop = false
-    var allSpaces = false
-    var cleanMode = false
-    var lockAspect = true
-    var showStats = false
-    var includeNonExternalCameras = false
-    var guides = GuideSettings()
-    var showMenuBarItem = true
-    var recordingCodec: Recorder.Codec = .hevc
-    var showRecordingIndicator = true
-    /// No Dock icon or app menu; control from the menu-bar item.
-    var menuBarOnly = false
-
-    init() {}
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        let d = ViewerPrefs()
-        floatOnTop = try c.decodeIfPresent(Bool.self, forKey: .floatOnTop) ?? d.floatOnTop
-        allSpaces = try c.decodeIfPresent(Bool.self, forKey: .allSpaces) ?? d.allSpaces
-        cleanMode = try c.decodeIfPresent(Bool.self, forKey: .cleanMode) ?? d.cleanMode
-        lockAspect = try c.decodeIfPresent(Bool.self, forKey: .lockAspect) ?? d.lockAspect
-        showStats = try c.decodeIfPresent(Bool.self, forKey: .showStats) ?? d.showStats
-        includeNonExternalCameras = try c.decodeIfPresent(Bool.self, forKey: .includeNonExternalCameras) ?? d.includeNonExternalCameras
-        guides = try c.decodeIfPresent(GuideSettings.self, forKey: .guides) ?? d.guides
-        showMenuBarItem = try c.decodeIfPresent(Bool.self, forKey: .showMenuBarItem) ?? d.showMenuBarItem
-        menuBarOnly = try c.decodeIfPresent(Bool.self, forKey: .menuBarOnly) ?? d.menuBarOnly
-        recordingCodec = try c.decodeIfPresent(Recorder.Codec.self, forKey: .recordingCodec) ?? d.recordingCodec
-        showRecordingIndicator = try c.decodeIfPresent(Bool.self, forKey: .showRecordingIndicator) ?? d.showRecordingIndicator
-    }
-}
-
-/// Coordinates device discovery, the capture engine, the renderer and persisted settings.
+/// App-wide state: device discovery, permissions, preferences, the per-card sessions, and which
+/// card the main window and the speakers follow. Views talk to a `ViewerModel`.
 @MainActor
 @Observable
 final class AppModel {
-    enum Phase: Equatable {
-        case permissionNeeded
-        case permissionDenied
-        case scanning
-        case connecting(String)
-        case live
-        case recovering(String)
-        case failed(String)
+    enum Permission: Equatable {
+        case unknown, needed, denied, granted
     }
 
-    struct Stats: Equatable {
-        var inputFPS = 0.0
-        var renderFPS = 0.0
-        var dropped: UInt64 = 0
-        var frameSize: CGSize?
-    }
-
-    private(set) var phase: Phase = .scanning
-    private(set) var liveInfo: LiveInfo?
-    private(set) var selectedVideoID: String?
-    private(set) var activeAudioID: String?
-    private(set) var formats: [FormatDescriptor] = []
-    private(set) var stats = Stats()
-    /// What the card is delivering (picture vs. no-signal/HDCP black/vendor screen).
-    private(set) var signal: SignalContent = .picture
-    /// Frames stopped arriving briefly while live; the last frame stays on screen.
-    private(set) var signalInterrupted = false
-    /// A frame has been shown since the current device was selected.
-    private(set) var hasFrame = false
-    /// When the current recording started; nil when not recording.
-    private(set) var recordingSince: Date?
-    @ObservationIgnored private var recordingSize: (width: Int, height: Int)?
-    @ObservationIgnored let recorder = Recorder()
-    @ObservationIgnored private(set) var lastRecordingURL: URL?
-
-    /// Short confirmation shown at the bottom of the window.
-    private(set) var toast: String?
-    @ObservationIgnored private var toastTask: Task<Void, Never>?
-
-    var preset = DevicePreset() {
-        didSet { presetChanged(from: oldValue) }
-    }
+    private(set) var permission: Permission = .unknown
+    let catalog: DeviceCatalog
+    /// One session per card that something is showing (main window, card windows, grid tiles).
+    private(set) var sessions: [String: DeviceSession] = [:]
+    /// The card the main window shows (automatic pick or the user's choice).
+    private(set) var mainDeviceID: String?
+    /// The card whose sound is playing.
+    private(set) var audioFocusID: String?
+    /// The viewer in the key window; menus and Settings act on it.
+    private(set) var activeViewer: ViewerModel?
 
     var prefs: ViewerPrefs {
         didSet {
@@ -94,111 +33,61 @@ final class AppModel {
         }
     }
 
-    let catalog: DeviceCatalog
-    @ObservationIgnored let renderer = MetalRenderer()
-    @ObservationIgnored weak var window: NSWindow?
-    @ObservationIgnored private let engine = CaptureEngine()
-    @ObservationIgnored private let signalMonitor = SignalMonitor()
-    @ObservationIgnored private var lastStatsSample: CFTimeInterval = 0
+    @ObservationIgnored private(set) var mainViewer: ViewerModel?
+    @ObservationIgnored private var viewers: [WeakViewer] = []
     @ObservationIgnored private let store = PresetStore()
-    @ObservationIgnored private var authorized = false
     @ObservationIgnored private var manualVideoID: String?
-    @ObservationIgnored private var runningConfig: CaptureEngine.Config?
-    @ObservationIgnored private var loadingPreset = false
-    @ObservationIgnored private var lastSample: (stats: CaptureStats, presented: UInt64, time: CFTimeInterval)?
-    @ObservationIgnored private var timers: [Timer] = []
+    @ObservationIgnored private var names: [String: String] = [:]
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
 
-    /// A generated test pattern shown instead of the live picture.
-    var testPattern: TestPattern? {
-        didSet {
-            guard testPattern != oldValue else { return }
-            renderer?.showStill(testPattern.flatMap(patternBuffer))
-        }
-    }
-    @ObservationIgnored private var patternCache: [TestPattern: CVPixelBuffer] = [:]
-
-    private func patternBuffer(_ pattern: TestPattern) -> CVPixelBuffer? {
-        if let cached = patternCache[pattern] { return cached }
-        let buffer = pattern.makePixelBuffer()
-        patternCache[pattern] = buffer
-        return buffer
-    }
-
-    /// Pixel size of what is on screen (test pattern or live source).
-    var sourceSize: CGSize? {
-        if testPattern != nil { return CGSize(width: 1920, height: 1080) }
-        return liveInfo.map { CGSize(width: $0.format.width, height: $0.format.height) }
-    }
-
-    var aspect: CGSize? { sourceSize }
-
-    var formatOptions: [FormatPreference] {
-        FormatSelector.options(from: formats)
-    }
-
-    /// Polled by meters; reading doesn't trigger SwiftUI observation.
-    func audioLevels() -> AudioLevels {
-        engine.audio.currentLevels()
-    }
-
-    func outputDevices() -> [AudioOutputDevice] {
-        AudioDevices.outputDevices()
-    }
+    /// Viewer that menus, Settings and the menu-bar panel act on.
+    var currentViewer: ViewerModel? { activeViewer ?? mainViewer }
 
     init() {
-        prefs = Self.loadPrefs()
-        catalog = DeviceCatalog(provider: AVDeviceProvider(), includeNonExternalCameras: Self.loadPrefs().includeNonExternalCameras)
-        if let renderer { engine.addSink(renderer) }
-        engine.addSink(signalMonitor)
-        engine.addSink(recorder)
-        engine.addAudioSink(recorder)
-        recorder.onStateChange = { [weak self] state in
-            MainActor.assumeIsolated { self?.recorderChanged(state) }
-        }
-        signalMonitor.onChange = { [weak self] content in
-            MainActor.assumeIsolated { self?.signal = content }
-        }
-        engine.stateHandler = { [weak self] state in
-            MainActor.assumeIsolated { self?.apply(state) }
-        }
+        let prefs = Self.loadPrefs()
+        self.prefs = prefs
+        catalog = DeviceCatalog(provider: AVDeviceProvider(), includeNonExternalCameras: prefs.includeNonExternalCameras)
         catalog.onChange = { [weak self] in self?.reconcile() }
         observeSystemEvents()
-        startStatsTimer()
-        if renderer == nil { phase = .failed("Metal is not available on this Mac.") }
         Task { await requestPermissions() }
-        // QA hook: `-testPattern grid` starts on a pattern (handy for screenshots without hardware).
-        if let name = UserDefaults.standard.string(forKey: "testPattern") {
-            testPattern = TestPattern(rawValue: name)
-        }
-        #if DEBUG
-        runQAAction()
-        #endif
     }
 
-    #if DEBUG
-    /// Unattended checks for development: `-qaAction screenshot|copy|actualPixels|size50|record3s` (see CLAUDE.md).
-    private func runQAAction() {
-        guard let action = UserDefaults.standard.string(forKey: "qaAction") else { return }
-        Task {
-            try? await Task.sleep(for: .seconds(1.5))
-            switch action {
-            case "screenshot": saveScreenshot()
-            case "copy": copyFrame()
-            case "actualPixels": setWindowSize(scale: 1, actualPixels: true)
-            case "record3s":
-                startRecording()
-                try? await Task.sleep(for: .seconds(3))
-                stopRecording()
-            case "size50": setWindowSize(scale: 0.5)
-            default: break
-            }
+    // MARK: Viewers
+
+    func register(_ viewer: ViewerModel) {
+        viewers.removeAll { $0.viewer == nil || $0.viewer === viewer }
+        viewers.append(WeakViewer(viewer))
+        if viewer.source == .automatic {
+            mainViewer = viewer
+            applyLaunchArguments(to: viewer)
         }
+        reconcile()
     }
-    #endif
+
+    func unregister(_ viewer: ViewerModel) {
+        viewers.removeAll { $0.viewer == nil || $0.viewer === viewer }
+        if activeViewer === viewer { activeViewer = nil }
+        reconcile()
+    }
+
+    func viewerBecameActive(_ viewer: ViewerModel) {
+        activeViewer = viewer
+        if prefs.audioFollowsFocus, let id = viewer.deviceID { setAudioFocus(id) }
+    }
+
+    func setAudioFocus(_ deviceID: String) {
+        audioFocusID = deviceID
+        applyAudioFocus()
+    }
+
+    /// Name for a card even while it's unplugged.
+    func knownName(for deviceID: String) -> String {
+        catalog.video(deviceID)?.name ?? names[deviceID] ?? "Capture card"
+    }
 
     // MARK: Actions
 
+    /// Main window: show this card (sticks until the user picks another).
     func selectVideo(_ id: String) {
         manualVideoID = id
         store.lastVideoDeviceID = id
@@ -206,32 +95,28 @@ final class AppModel {
     }
 
     func retry() {
-        runningConfig = nil
+        sessions.values.forEach { $0.forceRestart() }
         Task { await requestPermissions() }
     }
 
-    func toggleFullScreen() {
-        (window ?? NSApp.keyWindow)?.toggleFullScreen(nil)
+    func openPrivacySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
-    /// Sizes the window relative to the source: `scale` × source pixels in points, or 1:1 device
-    /// pixels when `actualPixels` is set. Clamped to the screen, keeping the window's center.
-    func setWindowSize(scale: Double, actualPixels: Bool = false) {
-        guard let window = window ?? NSApp.keyWindow, let source = sourceSize, !window.styleMask.contains(.fullScreen) else { return }
-        let pointsPerPixel = actualPixels ? 1 / window.backingScaleFactor : scale
-        var size = NSSize(width: (source.width * pointsPerPixel).rounded(), height: (source.height * pointsPerPixel).rounded())
-        if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
-            let fit = min(1, visible.width / size.width, visible.height / size.height)
-            size = NSSize(width: (size.width * fit).rounded(), height: (size.height * fit).rounded())
-            if fit < 1 { showToast("Limited to screen size") }
+    func outputDevices() -> [AudioOutputDevice] {
+        AudioDevices.outputDevices()
+    }
+
+    func showRecordingsInFinder() {
+        let folder = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("HDMI Captain", isDirectory: true)
+        if let url = sessions.values.compactMap(\.lastRecordingURL).max(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } else {
+            NSWorkspace.shared.open(folder)
         }
-        let frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
-        var origin = NSPoint(x: window.frame.midX - frame.width / 2, y: window.frame.midY - frame.height / 2)
-        if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
-            origin.x = min(max(origin.x, visible.minX), visible.maxX - frame.width)
-            origin.y = min(max(origin.y, visible.minY), visible.maxY - frame.height)
-        }
-        window.setFrame(NSRect(origin: origin, size: frame.size), display: true, animate: true)
     }
 
     /// Dock icon + menus normally; accessory app (menu-bar item only) when requested.
@@ -244,56 +129,6 @@ final class AppModel {
     /// With a menu-bar item the app keeps running (and capturing) after the window closes.
     var keepsRunningWithoutWindow: Bool { prefs.showMenuBarItem }
 
-    /// Saves the current source frame at full resolution to ~/Pictures/HDMI Captain.
-    func saveScreenshot() {
-        guard let frame = renderer?.currentFrame else {
-            showToast("Nothing to capture yet")
-            return
-        }
-        Task.detached(priority: .userInitiated) {
-            let folder = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("HDMI Captain", isDirectory: true)
-            let message: String
-            do {
-                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                guard let data = FrameSnapshot.pngData(from: frame) else { throw CocoaError(.fileWriteUnknown) }
-                let url = FrameSnapshot.fileURL(in: folder)
-                try data.write(to: url)
-                message = "Saved \(url.lastPathComponent)"
-            } catch {
-                message = "Couldn't save screenshot: \(error.localizedDescription)"
-            }
-            await MainActor.run { self.showToast(message) }
-        }
-    }
-
-    func copyFrame() {
-        guard let frame = renderer?.currentFrame, let image = FrameSnapshot.cgImage(from: frame) else {
-            showToast("Nothing to copy yet")
-            return
-        }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.writeObjects([NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))])
-        showToast("Frame copied")
-    }
-
-    func showToast(_ message: String) {
-        toast = message
-        toastTask?.cancel()
-        toastTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2.5))
-            guard !Task.isCancelled else { return }
-            self?.toast = nil
-        }
-    }
-
-    func openPrivacySettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
     // MARK: Permissions
 
     private func requestPermissions() async {
@@ -301,181 +136,86 @@ final class AppModel {
         case .authorized:
             break
         case .notDetermined:
-            phase = .permissionNeeded
+            permission = .needed
             guard await AVCaptureDevice.requestAccess(for: .video) else {
-                phase = .permissionDenied
+                permission = .denied
                 return
             }
         default:
-            phase = .permissionDenied
+            permission = .denied
             return
         }
         if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
             _ = await AVCaptureDevice.requestAccess(for: .audio)
         }
-        authorized = true
-        if phase == .permissionNeeded || phase == .permissionDenied { phase = .scanning }
+        permission = .granted
         catalog.refresh()
     }
 
     // MARK: Device policy
 
-    /// Brings the engine in line with the connected devices and current preset. Called on every hot-plug.
-    private func reconcile() {
-        guard authorized, renderer != nil else { return }
-        let pick: String?
+    /// Brings sessions in line with connected cards and open viewers. Called on every hot-plug,
+    /// viewer change and preset change that affects capture.
+    func reconcile() {
+        guard permission == .granted else { return }
+        catalog.videoDevices.forEach { names[$0.id] = $0.name }
+
         if let manualVideoID, catalog.video(manualVideoID) != nil {
-            pick = manualVideoID
+            mainDeviceID = manualVideoID
         } else {
-            pick = DeviceSelection.pickVideo(
+            mainDeviceID = DeviceSelection.pickVideo(
                 available: catalog.videoDevices,
                 connectionOrder: catalog.connectionOrder,
                 remembered: store.lastVideoDeviceID,
-                current: selectedVideoID
+                current: mainDeviceID
             )
         }
-        guard let pick, let device = catalog.video(pick) else {
-            selectedVideoID = nil
-            runningConfig = nil
-            liveInfo = nil
-            formats = []
-            engine.stop()
-            renderer?.clear()
-            signalMonitor.reset()
-            hasFrame = false
-            phase = .scanning
-            return
-        }
-        if pick != selectedVideoID {
-            selectedVideoID = pick
-            renderer?.clear()
-            signalMonitor.reset()
-            hasFrame = false
-            store.lastVideoDeviceID = pick
-            formats = CaptureEngine.formats(forDeviceID: pick)
-            loadingPreset = true
-            preset = store.preset(for: pick)
-            loadingPreset = false
-        }
-        activeAudioID = resolveAudio(for: device)
-        applyOutputSettings()
-        let config = CaptureEngine.Config(videoDeviceID: pick, audioDeviceID: activeAudioID, format: preset.format)
-        if config != runningConfig {
-            runningConfig = config
-            engine.start(config)
-        }
-    }
+        if let mainDeviceID { store.lastVideoDeviceID = mainDeviceID }
 
-    private func resolveAudio(for video: CaptureDeviceInfo) -> String? {
-        switch preset.audio {
-        case .none:
-            return nil
-        case let .device(id) where catalog.audio(id) != nil:
-            return id
-        case .device, .automatic:
-            return DeviceSelection.pairAudio(for: video, among: catalog.audioDevices)
+        // Cards that something shows: the main window's, plus every pinned window/tile.
+        var needed = Set<String>()
+        if let mainDeviceID { needed.insert(mainDeviceID) }
+        for viewer in viewers.compactMap(\.viewer) {
+            if case let .pinned(id) = viewer.source { needed.insert(id) }
         }
-    }
 
-    private func presetChanged(from old: DevicePreset) {
-        guard !loadingPreset, let selectedVideoID else { return }
-        store.save(preset, for: selectedVideoID)
-        if preset.format != old.format || preset.audio != old.audio {
-            reconcile()
-        } else {
-            applyOutputSettings()
-        }
-    }
-
-    private func applyOutputSettings() {
-        renderer?.setOptions(RenderOptions(scale: preset.scale, filter: preset.filter, colorRange: preset.colorRange, adjustments: preset.adjustments))
-        engine.audio.update(AudioPipeline.Settings(
-            delayMs: preset.audioDelayMs,
-            channelMode: preset.channelMode,
-            volume: preset.volume,
-            muted: preset.muted,
-            outputDeviceUID: preset.outputDeviceUID
-        ))
-    }
-
-    private func apply(_ state: CaptureState) {
-        switch state {
-        case .idle:
-            stopRecording()
-            if selectedVideoID == nil, authorized { phase = .scanning }
-        case let .connecting(name):
-            phase = .connecting(name)
-        case let .live(info):
-            // A new mode mid-recording would corrupt the track; close the file instead.
-            if let size = recordingSize, size != (info.format.width, info.format.height) {
-                stopRecording(reason: "Recording stopped: the video mode changed")
+        for id in needed {
+            let device = catalog.video(id)
+            if sessions[id] == nil {
+                guard let device else { continue }
+                sessions[id] = makeSession(for: device)
             }
-            liveInfo = info
-            phase = .live
-        case let .recovering(reason):
-            if reason == "Device disconnected" { stopRecording(reason: "Recording saved: the device was disconnected") }
-            phase = .recovering(reason)
-        case let .failed(message):
-            stopRecording()
-            phase = .failed(message)
+            sessions[id]?.update(device: device, catalog: catalog)
+        }
+        for (id, session) in sessions where !needed.contains(id) {
+            session.shutdown()
+            sessions[id] = nil
+        }
+
+        if audioFocusID.map({ !needed.contains($0) }) ?? true {
+            audioFocusID = activeViewer?.deviceID ?? mainDeviceID
+        }
+        applyAudioFocus()
+        viewers.compactMap(\.viewer).forEach { $0.sync() }
+    }
+
+    private func makeSession(for device: CaptureDeviceInfo) -> DeviceSession {
+        let session = DeviceSession(device: device, store: store)
+        session.onNeedsReconcile = { [weak self] in self?.reconcile() }
+        session.onMessage = { [weak self] message in self?.broadcast(message, about: device.id) }
+        session.recordingCodec = { [weak self] in self?.prefs.recordingCodec ?? .hevc }
+        return session
+    }
+
+    private func applyAudioFocus() {
+        for (id, session) in sessions {
+            session.audioFocused = id == audioFocusID
         }
     }
 
-    // MARK: Recording (Pro — callers go through EntitlementStore.gate)
-
-    var isRecording: Bool { recordingSince != nil }
-
-    func toggleRecording() {
-        isRecording ? stopRecording() : startRecording()
-    }
-
-    func startRecording() {
-        guard phase == .live, testPattern == nil, let info = liveInfo else {
-            showToast("Nothing live to record")
-            return
-        }
-        let folder = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("HDMI Captain", isDirectory: true)
-        recordingSize = (info.format.width, info.format.height)
-        recorder.start(
-            url: Recorder.fileURL(in: folder),
-            settings: Recorder.Settings(codec: prefs.recordingCodec),
-            frameRate: info.frameRate,
-            includeAudio: activeAudioID != nil
-        )
-    }
-
-    func stopRecording(reason: String? = nil) {
-        guard isRecording else { return }
-        recordingSize = nil
-        if let reason { showToast(reason) }
-        recorder.stop()
-    }
-
-    func showRecordingsInFinder() {
-        let folder = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("HDMI Captain", isDirectory: true)
-        if let lastRecordingURL {
-            NSWorkspace.shared.activateFileViewerSelecting([lastRecordingURL])
-        } else {
-            NSWorkspace.shared.open(folder)
-        }
-    }
-
-    private func recorderChanged(_ state: Recorder.State) {
-        switch state {
-        case let .recording(_, startedAt):
-            recordingSince = startedAt
-        case let .finished(url):
-            recordingSince = nil
-            lastRecordingURL = url
-            if toast == nil || !(toast ?? "").hasPrefix("Recording") { showToast("Saved \(url.lastPathComponent)") }
-        case .idle:
-            recordingSince = nil
-        case let .failed(message):
-            recordingSince = nil
-            showToast("Recording failed: \(message)")
-        }
+    private func broadcast(_ message: String, about deviceID: String) {
+        let targets = viewers.compactMap(\.viewer).filter { $0.deviceID == deviceID }
+        (targets.isEmpty ? [currentViewer].compactMap { $0 } : targets).forEach { $0.showToast(message) }
     }
 
     // MARK: System events
@@ -485,48 +225,45 @@ final class AppModel {
         for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
-                    self?.engine.revalidate()
-                    self?.renderer?.redraw()
+                    self?.sessions.values.forEach { $0.revalidate() }
                 }
             })
         }
     }
 
-    private func startStatsTimer() {
-        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.checkFrameFlow()
-                self?.sampleStats()
+    // MARK: Test patterns (shared cache)
+
+    private static var patternCache: [TestPattern: CVPixelBuffer] = [:]
+
+    static func patternBuffer(_ pattern: TestPattern) -> CVPixelBuffer? {
+        if let cached = patternCache[pattern] { return cached }
+        let buffer = pattern.makePixelBuffer()
+        patternCache[pattern] = buffer
+        return buffer
+    }
+
+    /// `-testPattern grid` starts on a pattern; DEBUG `-qaAction …` runs an unattended check (see CLAUDE.md).
+    private func applyLaunchArguments(to viewer: ViewerModel) {
+        if let name = UserDefaults.standard.string(forKey: "testPattern") {
+            viewer.testPattern = TestPattern(rawValue: name)
+        }
+        #if DEBUG
+        guard let action = UserDefaults.standard.string(forKey: "qaAction") else { return }
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            switch action {
+            case "screenshot": viewer.saveScreenshot()
+            case "copy": viewer.copyFrame()
+            case "actualPixels": viewer.setWindowSize(scale: 1, actualPixels: true)
+            case "size50": viewer.setWindowSize(scale: 0.5)
+            case "record3s":
+                viewer.toggleRecording()
+                try? await Task.sleep(for: .seconds(3))
+                viewer.toggleRecording()
+            default: break
             }
         }
-        RunLoop.main.add(timer, forMode: .common)
-        timers.append(timer)
-    }
-
-    /// Detects short dropouts (before the engine's 3 s stall restart) so the UI can show a banner.
-    private func checkFrameFlow() {
-        let gap = CACurrentMediaTime() - engine.currentStats().lastFrameTime
-        let interrupted = phase == .live && gap > 0.5
-        if interrupted != signalInterrupted { signalInterrupted = interrupted }
-        let frame = renderer?.lastFrameSize != nil
-        if frame != hasFrame { hasFrame = frame }
-    }
-
-    private func sampleStats() {
-        let now = CACurrentMediaTime()
-        guard now - lastStatsSample >= 1 else { return }
-        lastStatsSample = now
-        let current = engine.currentStats()
-        let presented = renderer?.presentedFrames ?? 0
-        defer { lastSample = (current, presented, now) }
-        guard prefs.showStats, let last = lastSample, now > last.time else { return }
-        let dt = now - last.time
-        stats = Stats(
-            inputFPS: Double(current.framesReceived &- last.stats.framesReceived) / dt,
-            renderFPS: Double(presented &- last.presented) / dt,
-            dropped: current.framesDropped,
-            frameSize: renderer?.lastFrameSize
-        )
+        #endif
     }
 
     // MARK: Persistence
@@ -543,4 +280,9 @@ final class AppModel {
             UserDefaults.standard.set(data, forKey: "viewerPrefs")
         }
     }
+}
+
+private struct WeakViewer {
+    weak var viewer: ViewerModel?
+    init(_ viewer: ViewerModel) { self.viewer = viewer }
 }
