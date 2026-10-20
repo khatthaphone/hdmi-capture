@@ -141,7 +141,6 @@ struct ProSettingsView: View {
             #endif
         }
         .formStyle(.grouped)
-        .frame(width: 460)
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(width: 480, height: 520)
     }
 }

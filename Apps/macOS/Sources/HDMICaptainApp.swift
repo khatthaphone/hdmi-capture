@@ -68,8 +68,14 @@ struct HDMICaptainApp: App {
 
         Settings {
             TabView {
-                SettingsView()
-                    .tabItem { Label("General", systemImage: "gearshape") }
+                SettingsView(page: .input)
+                    .tabItem { Label("Input", systemImage: "cable.connector") }
+                SettingsView(page: .picture)
+                    .tabItem { Label("Picture", systemImage: "camera.filters") }
+                SettingsView(page: .sound)
+                    .tabItem { Label("Sound", systemImage: "speaker.wave.2") }
+                SettingsView(page: .window)
+                    .tabItem { Label("Window", systemImage: "macwindow") }
                 ProfilesSettingsView()
                     .tabItem { Label("Profiles", systemImage: "person.crop.rectangle.stack") }
                 ProSettingsView()
