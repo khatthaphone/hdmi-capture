@@ -170,7 +170,29 @@ final class ViewerModel {
         deviceID.flatMap { app.sessions[$0] }
     }
 
+    #if DEBUG
+    /// QA: `-qaPhase scanning|permissionNeeded|permissionDenied|waiting|connecting|recovering|failed|paused`
+    /// shows that state's screen regardless of the card (for screenshots).
+    @ObservationIgnored lazy var debugPhase: Phase? = {
+        switch UserDefaults.standard.string(forKey: "qaPhase") {
+        case "scanning": .scanning
+        case "permissionNeeded": .permissionNeeded
+        case "permissionDenied": .permissionDenied
+        case "waiting": .waiting("UGREEN-25854")
+        case "connecting": .connecting("UGREEN-25854")
+        case "recovering": .recovering("No signal")
+        case "failed": .failed("The capture card stopped responding.")
+        case "paused": .paused(.multitasking)
+        case "pausedBackground": .paused(.background)
+        default: nil
+        }
+    }()
+    #endif
+
     var phase: Phase {
+        #if DEBUG
+        if let debugPhase { return debugPhase }
+        #endif
         if renderer == nil { return .failed("Metal is not available on this Mac.") }
         switch app.permission {
         case .needed: return .permissionNeeded

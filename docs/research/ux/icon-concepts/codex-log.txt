@@ -258,3 +258,7 @@ More principles shared by both modes: `references/prompting.md`.
 Copy/paste specs shared by both modes: `references/sample-prompts.md`.
 
 
+codex
+The four concepts are rendering now. Once they finish, I’ll inspect the outputs for legibility and copy only the final PNGs into `docs/research/ux/icon-concepts/`.
+codex
+Rendering is still in progress; there’s no failure reported. I’m keeping the four generations separate so each concept remains visually distinct rather than becoming a four-up sheet.

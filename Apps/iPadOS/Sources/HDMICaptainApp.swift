@@ -18,6 +18,14 @@ struct HDMICaptainApp: App {
             ViewerRoot(app: app, source: .automatic)
                 .environment(app)
                 .environment(store)
+                #if DEBUG
+                .task {
+                    // QA: `-qaAction upgrade` opens the upgrade sheet for screenshots.
+                    guard UserDefaults.standard.string(forKey: "qaAction") == "upgrade" else { return }
+                    try? await Task.sleep(for: .seconds(1.5))
+                    store.requestUpgrade(highlighting: .recording)
+                }
+                #endif
                 .sheet(isPresented: $store.isShowingUpgrade) {
                     UpgradeView().environment(store)
                 }
