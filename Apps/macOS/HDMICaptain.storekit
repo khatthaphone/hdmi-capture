@@ -1,0 +1,36 @@
+{
+  "identifier" : "6C1F2B7A",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : true,
+      "internalID" : "6700000001",
+      "localizations" : [
+        {
+          "description" : "Recording, instant replay, live streaming and virtual camera. One-time purchase.",
+          "displayName" : "HDMI Captain Pro",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.example.hdmicaptain.pro",
+      "referenceName" : "HDMI Captain Pro",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

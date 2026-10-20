@@ -42,7 +42,26 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.hdmicaptain
         PRODUCT_NAME: HDMI Captain
+        PRODUCT_MODULE_NAME: HDMICaptain
         ENABLE_HARDENED_RUNTIME: YES
     scheme:
+      storeKitConfiguration: Apps/macOS/HDMICaptain.storekit
       testTargets:
+        - HDMICaptainTests
         - package: CaptureCore/CaptureCoreTests
+  HDMICaptainTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Apps/macOS/Tests
+      - path: Apps/macOS/HDMICaptain.storekit
+        buildPhase: resources
+    dependencies:
+      - target: HDMICaptain
+      - package: CaptureCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.hdmicaptain.tests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/HDMI Captain.app/Contents/MacOS/HDMI Captain
+        BUNDLE_LOADER: $(TEST_HOST)
+        GENERATE_INFOPLIST_FILE: YES
