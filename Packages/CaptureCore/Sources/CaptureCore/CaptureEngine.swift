@@ -24,7 +24,34 @@ public enum CaptureState: Equatable, Sendable {
     case live(LiveInfo)
     /// Lost the stream; the engine is retrying on its own.
     case recovering(reason: String)
+    /// iPadOS took the camera away for now (background, Split View…); it resumes by itself.
+    case paused(PauseReason)
     case failed(message: String)
+}
+
+/// Why iPadOS paused the camera. Capture resumes by itself when the reason goes away.
+public enum PauseReason: String, Equatable, Sendable {
+    case background, multitasking, inUseByAnotherApp, tooHot, other
+
+    public var message: String {
+        switch self {
+        case .background: "HDMI Captain is in the background"
+        case .multitasking: "This iPad pauses video while other apps share the screen"
+        case .inUseByAnotherApp: "Another app is using the capture card"
+        case .tooHot: "The iPad is too hot"
+        case .other: "Capture was interrupted"
+        }
+    }
+
+    public var hint: String {
+        switch self {
+        case .background: "The picture comes back when you return to the app."
+        case .multitasking: "Make HDMI Captain full screen to resume."
+        case .inUseByAnotherApp: "Close the other app to resume."
+        case .tooHot: "Capture resumes when it cools down."
+        case .other: "It resumes automatically."
+        }
+    }
 }
 
 public struct CaptureStats: Sendable {
@@ -407,19 +434,20 @@ extension CaptureEngine {
     @objc private func wasInterrupted(_ note: Notification) {
         let raw = note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? Int
         let reason = raw.flatMap(AVCaptureSession.InterruptionReason.init(rawValue:))
-        let text = switch reason {
-        case .videoDeviceNotAvailableInBackground: "Paused while in the background"
-        case .videoDeviceNotAvailableWithMultipleForegroundApps: "Paused beside other apps (not supported on this iPad)"
-        case .videoDeviceInUseByAnotherClient: "Capture card in use by another app"
-        case .videoDeviceNotAvailableDueToSystemPressure: "Paused: iPad is too hot"
-        default: "Capture interrupted"
+        let pause: PauseReason = switch reason {
+        case .videoDeviceNotAvailableInBackground: .background
+        case .videoDeviceNotAvailableWithMultipleForegroundApps: .multitasking
+        case .videoDeviceInUseByAnotherClient: .inUseByAnotherApp
+        case .videoDeviceNotAvailableDueToSystemPressure: .tooHot
+        default: .other
         }
+        let text = pause.message
         sessionQueue.async { [self] in
             Self.log.info("Interrupted (reason \(raw ?? -1)): \(text, privacy: .public)")
             interruption = text
             watchdog?.cancel()
             watchdog = nil
-            emit(.recovering(reason: text))
+            emit(.paused(pause))
         }
     }
 

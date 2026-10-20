@@ -12,6 +12,8 @@ final class DeviceSession {
         case connecting(String)
         case live
         case recovering(String)
+        /// iPadOS paused the camera (background, Split View…); resumes by itself.
+        case paused(PauseReason)
         case failed(String)
         /// The card is not connected; capture resumes when it comes back.
         case absent
@@ -330,6 +332,8 @@ final class DeviceSession {
         case let .recovering(reason):
             if reason == "Device disconnected" { stopRecording(reason: "Recording saved: the device was disconnected") }
             state = .recovering(reason)
+        case let .paused(reason):
+            state = .paused(reason)
         case let .failed(message):
             stopRecording()
             state = .failed(message)

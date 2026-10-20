@@ -27,6 +27,8 @@ final class ViewerModel {
         case connecting(String)
         case live
         case recovering(String)
+        /// iPadOS paused the camera; the last frame stays behind a clear "Paused" screen.
+        case paused(PauseReason)
         case failed(String)
     }
 
@@ -185,6 +187,7 @@ final class ViewerModel {
         case let .connecting(name): return .connecting(name)
         case .live: return .live
         case let .recovering(reason): return .recovering(reason)
+        case let .paused(reason): return .paused(reason)
         case let .failed(message): return .failed(message)
         case .absent: return .waiting(session.deviceName)
         }

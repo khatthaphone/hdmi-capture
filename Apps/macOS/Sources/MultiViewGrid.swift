@@ -111,6 +111,7 @@ private struct Tile: View {
         case let .connecting(name): "Connecting to \(name)…"
         case let .waiting(name): "\(name) not connected"
         case let .recovering(reason): reason
+        case let .paused(reason): reason.message
         case let .failed(message): message
         case .permissionNeeded, .permissionDenied: "Camera access needed"
         case .scanning, .live: ""

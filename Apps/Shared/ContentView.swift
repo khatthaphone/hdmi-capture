@@ -228,6 +228,12 @@ private struct StatusOverlay: View {
             ProgressView().controlSize(.large).tint(.white)
             Text(reason).font(.title2)
             Text("Reconnecting automatically…").foregroundStyle(.secondary)
+        case let .paused(reason):
+            PauseIllustration(reason: reason)
+                .padding(.bottom, 8)
+            Label("Paused", systemImage: "pause.fill").font(.largeTitle.bold())
+            Text(reason.message).font(.title3)
+            Text(reason.hint).foregroundStyle(.secondary)
         case let .failed(message):
             Label("Can't show video", systemImage: "exclamationmark.triangle").font(.title2)
             Text(message).foregroundStyle(.secondary)

@@ -69,6 +69,7 @@ struct MenuBarPanel: View {
         case .live: return session.liveInfo.map { "\(session.deviceName) · \($0.format.width)×\($0.format.height)" } ?? session.deviceName
         case .idle, .connecting: return "Connecting to \(session.deviceName)"
         case let .recovering(reason): return reason
+        case let .paused(reason): return reason.message
         case let .failed(message): return message
         case .absent: return "\(session.deviceName) disconnected"
         }
