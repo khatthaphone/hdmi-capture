@@ -339,6 +339,7 @@ final class AppModel {
             case "copy": viewer.copyFrame()
             case "actualPixels": viewer.setWindowSize(scale: 1, actualPixels: true)
             case "size50": viewer.setWindowSize(scale: 0.5)
+            case "fullScreen": viewer.toggleFullScreen()
             case "record3s":
                 viewer.toggleRecording()
                 try? await Task.sleep(for: .seconds(3))

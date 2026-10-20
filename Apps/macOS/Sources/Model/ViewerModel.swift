@@ -51,6 +51,8 @@ final class ViewerModel {
     private(set) var toast: String?
     /// More than a couple of dropped frames per second (often shared USB 2.0 bandwidth).
     private(set) var isDroppingFrames = false
+    /// The window is in native full screen.
+    private(set) var isFullScreen = false
     /// The hover control bar is showing (cursor near the bottom edge, over the bar, or in one of its menus).
     private(set) var controlsVisible = false
     /// QA: keep the control bar on screen.
@@ -76,6 +78,7 @@ final class ViewerModel {
     @ObservationIgnored private var lastStatsSample: CFTimeInterval = 0
     @ObservationIgnored private var lastSample: (stats: CaptureStats, presented: UInt64, time: CFTimeInterval)?
     @ObservationIgnored private var keyObserver: NSObjectProtocol?
+    @ObservationIgnored private var fullScreenObservers: [NSObjectProtocol] = []
     @ObservationIgnored private var pointerNearBottom = false
     @ObservationIgnored private var menuOpen = false
     @ObservationIgnored private var hideControlsTask: Task<Void, Never>?
@@ -310,6 +313,8 @@ final class ViewerModel {
     private func observeWindow() {
         if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
         keyObserver = nil
+        fullScreenObservers.forEach(NotificationCenter.default.removeObserver)
+        fullScreenObservers = []
         guard let window else { return }
         keyObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -318,6 +323,12 @@ final class ViewerModel {
             }
         }
         if window.isKeyWindow { app.viewerBecameActive(self) }
+        isFullScreen = window.styleMask.contains(.fullScreen)
+        fullScreenObservers = [NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification].map { name in
+            NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.isFullScreen = name == NSWindow.didEnterFullScreenNotification }
+            }
+        }
     }
 
     /// Detects short dropouts (before the engine's 3 s stall restart) so the UI can show a banner.

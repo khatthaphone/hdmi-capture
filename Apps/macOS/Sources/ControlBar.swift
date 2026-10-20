@@ -28,11 +28,13 @@ struct ControlBar: View {
                 SoundControl(layout: layout)
                 BarDivider()
                 ScreenshotButton(layout: layout)
+            }
+            RecordButton(layout: layout)
+            if layout != .minimal {
                 SaveRecentButton(layout: layout)
                 BarDivider()
                 GoLiveButton(layout: layout)
             }
-            RecordButton(layout: layout)
             BarDivider()
             OptionsMenu(layout: layout)
             if layout != .minimal {
@@ -43,9 +45,10 @@ struct ControlBar: View {
         .padding(.vertical, 5)
         .fixedSize()
         .background {
+            // See-through: a light blur with a faint tint, so the picture shows behind the bar.
             Capsule()
-                .fill(.black.opacity(0.5))
-                .background(.ultraThinMaterial, in: Capsule())
+                .fill(.black.opacity(0.18))
+                .background(.ultraThinMaterial.opacity(0.6), in: Capsule())
         }
         .overlay(Capsule().strokeBorder(.white.opacity(0.14), lineWidth: 1))
         .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
@@ -282,27 +285,34 @@ private struct OptionsMenu: View {
         @Bindable var viewer = viewer
         Menu {
             if layout == .minimal {
-                Toggle("Mute", isOn: $viewer.preset.muted)
-                Button("Save Screenshot") { viewer.saveScreenshot() }
-                Button("Toggle Full Screen") { viewer.toggleFullScreen() }
+                Toggle(isOn: $viewer.preset.muted) { Label("Mute", systemImage: "speaker.slash") }
+                Button { viewer.saveScreenshot() } label: { Label("Save Screenshot", systemImage: "camera") }
+                Button { viewer.toggleFullScreen() } label: {
+                    Label(viewer.isFullScreen ? "Exit Full Screen" : "Full Screen",
+                          systemImage: viewer.isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                }
                 Divider()
             }
-            Picker("Scale", selection: $viewer.preset.scale) {
+            Picker(selection: $viewer.preset.scale) {
                 ForEach(ScaleMode.allCases, id: \.self) { Text($0.title).tag($0) }
+            } label: {
+                Label("Scale", systemImage: "aspectratio")
             }
-            Menu("Picture Look") { PictureLookItems(viewer: viewer) }
-            Toggle("Sharp Pixels", isOn: Binding(
+            Menu { PictureLookItems(viewer: viewer) } label: { Label("Picture Look", systemImage: "camera.filters") }
+            Toggle(isOn: Binding(
                 get: { viewer.preset.filter == .nearest },
                 set: { viewer.preset.filter = $0 ? .nearest : .linear }
-            ))
-            Menu("Guides") { GuideItems(app: app) }
+            )) {
+                Label("Sharp Pixels", systemImage: "square.grid.3x3")
+            }
+            Menu { GuideItems(app: app) } label: { Label("Guides", systemImage: "squareshape.split.3x3") }
             Divider()
-            Toggle("Show Stats", isOn: $app.prefs.showStats)
-            Toggle("Float on Top", isOn: $app.prefs.floatOnTop)
-            Toggle("Clean Mode", isOn: $app.prefs.cleanMode)
-            Button("Show Scopes") { openWindow(id: "scopes") }
+            Toggle(isOn: $app.prefs.showStats) { Label("Show Stats", systemImage: "chart.bar.xaxis") }
+            Toggle(isOn: $app.prefs.floatOnTop) { Label("Float on Top", systemImage: "pin") }
+            Toggle(isOn: $app.prefs.cleanMode) { Label("Clean Mode", systemImage: "rectangle.dashed") }
+            Button { openWindow(id: "scopes") } label: { Label("Show Scopes", systemImage: "waveform.path.ecg") }
             Divider()
-            Button("Copy Frame") { viewer.copyFrame() }
+            Button { viewer.copyFrame() } label: { Label("Copy Frame", systemImage: "doc.on.doc") }
         } label: {
             BarLabel(symbol: "ellipsis.circle", title: nil)
         }
@@ -316,10 +326,10 @@ private struct FullScreenButton: View {
 
     var body: some View {
         Button { viewer.toggleFullScreen() } label: {
-            BarLabel(symbol: "arrow.up.left.and.arrow.down.right", title: nil)
+            BarLabel(symbol: viewer.isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right", title: nil)
         }
         .buttonStyle(BarButtonStyle())
-        .help("Full Screen (⌘F)")
+        .help(viewer.isFullScreen ? "Exit Full Screen (⌘F)" : "Full Screen (⌘F)")
     }
 }
 
@@ -351,6 +361,7 @@ private struct BarLabel: View {
             }
         }
         .foregroundStyle(.white)
+        .shadow(color: .black.opacity(0.5), radius: 1.5)
         .padding(.horizontal, 7)
         .frame(minWidth: 28, minHeight: 28)
         .contentShape(Rectangle())
