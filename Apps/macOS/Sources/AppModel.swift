@@ -12,6 +12,9 @@ struct ViewerPrefs: Codable, Equatable {
     var showStats = false
     var includeNonExternalCameras = false
     var guides = GuideSettings()
+    var showMenuBarItem = true
+    /// No Dock icon or app menu; control from the menu-bar item.
+    var menuBarOnly = false
 
     init() {}
 
@@ -25,6 +28,8 @@ struct ViewerPrefs: Codable, Equatable {
         showStats = try c.decodeIfPresent(Bool.self, forKey: .showStats) ?? d.showStats
         includeNonExternalCameras = try c.decodeIfPresent(Bool.self, forKey: .includeNonExternalCameras) ?? d.includeNonExternalCameras
         guides = try c.decodeIfPresent(GuideSettings.self, forKey: .guides) ?? d.guides
+        showMenuBarItem = try c.decodeIfPresent(Bool.self, forKey: .showMenuBarItem) ?? d.showMenuBarItem
+        menuBarOnly = try c.decodeIfPresent(Bool.self, forKey: .menuBarOnly) ?? d.menuBarOnly
     }
 }
 
@@ -73,6 +78,9 @@ final class AppModel {
         didSet {
             savePrefs()
             catalog.includeNonExternalCameras = prefs.includeNonExternalCameras
+            if prefs.menuBarOnly != oldValue.menuBarOnly || prefs.showMenuBarItem != oldValue.showMenuBarItem {
+                applyActivationPolicy()
+            }
         }
     }
 
@@ -154,7 +162,7 @@ final class AppModel {
     }
 
     #if DEBUG
-    /// Unattended checks for development: `-qaAction screenshot` (see CLAUDE.md).
+    /// Unattended checks for development: `-qaAction screenshot|copy|actualPixels|size50` (see CLAUDE.md).
     private func runQAAction() {
         guard let action = UserDefaults.standard.string(forKey: "qaAction") else { return }
         Task {
@@ -162,6 +170,8 @@ final class AppModel {
             switch action {
             case "screenshot": saveScreenshot()
             case "copy": copyFrame()
+            case "actualPixels": setWindowSize(scale: 1, actualPixels: true)
+            case "size50": setWindowSize(scale: 0.5)
             default: break
             }
         }
@@ -184,6 +194,36 @@ final class AppModel {
     func toggleFullScreen() {
         (window ?? NSApp.keyWindow)?.toggleFullScreen(nil)
     }
+
+    /// Sizes the window relative to the source: `scale` × source pixels in points, or 1:1 device
+    /// pixels when `actualPixels` is set. Clamped to the screen, keeping the window's center.
+    func setWindowSize(scale: Double, actualPixels: Bool = false) {
+        guard let window = window ?? NSApp.keyWindow, let source = sourceSize, !window.styleMask.contains(.fullScreen) else { return }
+        let pointsPerPixel = actualPixels ? 1 / window.backingScaleFactor : scale
+        var size = NSSize(width: (source.width * pointsPerPixel).rounded(), height: (source.height * pointsPerPixel).rounded())
+        if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
+            let fit = min(1, visible.width / size.width, visible.height / size.height)
+            size = NSSize(width: (size.width * fit).rounded(), height: (size.height * fit).rounded())
+            if fit < 1 { showToast("Limited to screen size") }
+        }
+        let frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
+        var origin = NSPoint(x: window.frame.midX - frame.width / 2, y: window.frame.midY - frame.height / 2)
+        if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
+            origin.x = min(max(origin.x, visible.minX), visible.maxX - frame.width)
+            origin.y = min(max(origin.y, visible.minY), visible.maxY - frame.height)
+        }
+        window.setFrame(NSRect(origin: origin, size: frame.size), display: true, animate: true)
+    }
+
+    /// Dock icon + menus normally; accessory app (menu-bar item only) when requested.
+    func applyActivationPolicy() {
+        let accessory = prefs.menuBarOnly && prefs.showMenuBarItem
+        NSApp.setActivationPolicy(accessory ? .accessory : .regular)
+        if !accessory { NSApp.activate() }
+    }
+
+    /// With a menu-bar item the app keeps running (and capturing) after the window closes.
+    var keepsRunningWithoutWindow: Bool { prefs.showMenuBarItem }
 
     /// Saves the current source frame at full resolution to ~/Pictures/HDMI Captain.
     func saveScreenshot() {

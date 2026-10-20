@@ -8,6 +8,12 @@ struct HDMICaptainApp: App {
     @State private var model = AppModel()
     @State private var store = EntitlementStore()
 
+    init() {
+        let model = _model.wrappedValue
+        AppDelegate.keepsRunningWithoutWindow = { model.keepsRunningWithoutWindow }
+        DispatchQueue.main.async { model.applyActivationPolicy() }
+    }
+
     var body: some Scene {
         Window("HDMI Captain", id: "main") {
             ContentView()
@@ -21,8 +27,16 @@ struct HDMICaptainApp: App {
         .windowStyle(.hiddenTitleBar)
         .commands {
             ViewerCommands(model: model)
+            WindowSizeCommands(model: model)
             ProCommands(store: store)
         }
+
+        MenuBarExtra("HDMI Captain", systemImage: "rectangle.inset.filled.on.rectangle", isInserted: $model.prefs.showMenuBarItem) {
+            MenuBarPanel()
+                .environment(model)
+                .environment(store)
+        }
+        .menuBarExtraStyle(.window)
 
         Settings {
             TabView {
@@ -38,7 +52,28 @@ struct HDMICaptainApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    /// Set by the app once the model exists.
+    @MainActor static var keepsRunningWithoutWindow: () -> Bool = { false }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        MainActor.assumeIsolated { !Self.keepsRunningWithoutWindow() }
+    }
+}
+
+struct WindowSizeCommands: Commands {
+    let model: AppModel
+
+    var body: some Commands {
+        CommandGroup(after: .windowSize) {
+            Divider()
+            Button("Actual Pixels (1:1)") { model.setWindowSize(scale: 1, actualPixels: true) }
+                .keyboardShortcut("0")
+            ForEach([0.5, 1, 1.5, 2], id: \.self) { scale in
+                Button("\(Int(scale * 100)) % Size") { model.setWindowSize(scale: scale) }
+            }
+            Divider()
+        }
+    }
 }
 
 struct ViewerCommands: Commands {

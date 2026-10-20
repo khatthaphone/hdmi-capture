@@ -75,6 +75,9 @@ struct SettingsView: View {
                 Toggle("Show on all Spaces", isOn: $model.prefs.allSpaces)
                 Toggle("Clean mode (hide title bar)", isOn: $model.prefs.cleanMode)
                 Toggle("Show stats", isOn: $model.prefs.showStats)
+                Toggle("Show menu bar item", isOn: $model.prefs.showMenuBarItem)
+                Toggle("Menu bar only (hide Dock icon)", isOn: $model.prefs.menuBarOnly)
+                    .disabled(!model.prefs.showMenuBarItem)
             }
 
             Section("Guides") {
