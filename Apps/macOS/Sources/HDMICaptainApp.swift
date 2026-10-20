@@ -291,14 +291,16 @@ struct ProCommands: Commands {
             let recording = app.currentViewer?.session?.isRecording ?? false
             item(.recording, recording ? "Stop Recording" : "Start Recording", key: "r", modifiers: .command)
             Button("Show Recordings in Finder") { app.showRecordingsInFinder() }
+            Divider()
             Toggle(isOn: Binding(
-                get: { app.prefs.replayEnabled && store.isUnlocked(.replayBuffer) },
-                set: { on in if !on || store.gate(.replayBuffer) { app.prefs.replayEnabled = on } }
+                get: { app.prefs.recentEnabled && store.isUnlocked(.replayBuffer) },
+                set: { on in if !on || store.gate(.replayBuffer) { app.prefs.recentEnabled = on } }
             )) {
-                Label("Instant Replay Buffer (\(Int(app.prefs.replaySeconds)) s)",
-                      systemImage: store.isUnlocked(.replayBuffer) ? "gobackward" : "lock.fill")
+                Label("Keep Recent Footage (\(app.prefs.recentMinutes) min)",
+                      systemImage: store.isUnlocked(.replayBuffer) ? "clock.arrow.circlepath" : "lock.fill")
             }
-            item(.replayBuffer, "Save Instant Replay", key: "r", modifiers: [.command, .shift])
+            SaveRecentMenu(app: app, store: store)
+            Divider()
             item(.streaming, app.streamer.state.isActive ? "Stop Streaming" : "Go Live…", key: "l", modifiers: [.command, .shift])
             item(.virtualCamera, "Virtual Camera", key: nil, modifiers: [])
             Divider()
@@ -316,7 +318,7 @@ struct ProCommands: Commands {
             guard store.gate(feature) else { return }
             switch feature {
             case .recording: app.currentViewer?.toggleRecording()
-            case .replayBuffer: app.currentViewer?.session?.saveReplay()
+            case .replayBuffer: app.currentViewer?.session?.saveRecent(seconds: 30)
             case .streaming: app.streamer.state.isActive ? app.stopStreaming() : (app.isShowingStreamSetup = true)
             default: break
             }
@@ -330,5 +332,45 @@ struct ProCommands: Commands {
         } else {
             button
         }
+    }
+}
+
+/// Pro → Save Recent ▸ Last 15 Seconds … Everything (PlayStation "Save recent gameplay" style).
+private struct SaveRecentMenu: View {
+    let app: AppModel
+    let store: EntitlementStore
+
+    private static let spans: [(title: String, seconds: Double)] = [
+        ("Last 15 Seconds", 15), ("Last 30 Seconds", 30), ("Last 1 Minute", 60), ("Last 5 Minutes", 300),
+        ("Last 15 Minutes", 900), ("Last 30 Minutes", 1800), ("Last 60 Minutes", 3600),
+    ]
+
+    var body: some View {
+        let session = app.currentViewer?.session
+        let enabled = app.prefs.recentEnabled && store.isUnlocked(.replayBuffer)
+        let buffered = session?.recent.bufferedSeconds ?? 0
+        Menu {
+            ForEach(Self.spans.filter { $0.seconds <= Double(app.prefs.recentMinutes * 60) }, id: \.seconds) { span in
+                let button = Button(span.title) { save(span.seconds) }
+                    // Allow a few seconds of slack: segments close every 10 s.
+                    .disabled(!enabled || buffered + 10 < span.seconds)
+                if span.seconds == 30 {
+                    button.keyboardShortcut("r", modifiers: [.command, .shift])
+                } else {
+                    button
+                }
+            }
+            Divider()
+            Button("Everything (\(DeviceSession.describe(buffered)))") { save(nil) }
+                .keyboardShortcut("r", modifiers: [.command, .shift, .option])
+                .disabled(!enabled || buffered < 1)
+        } label: {
+            Label("Save Recent", systemImage: store.isUnlocked(.replayBuffer) ? "gobackward" : "lock.fill")
+        }
+    }
+
+    private func save(_ seconds: Double?) {
+        guard store.gate(.replayBuffer) else { return }
+        app.currentViewer?.session?.saveRecent(seconds: seconds)
     }
 }

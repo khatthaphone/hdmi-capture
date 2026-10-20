@@ -30,8 +30,8 @@ final class AppModel {
             if prefs.menuBarOnly != oldValue.menuBarOnly || prefs.showMenuBarItem != oldValue.showMenuBarItem {
                 applyActivationPolicy()
             }
-            if prefs.replayEnabled != oldValue.replayEnabled || prefs.replaySeconds != oldValue.replaySeconds {
-                sessions.values.forEach { $0.configureReplay(enabled: prefs.replayEnabled, seconds: prefs.replaySeconds) }
+            if prefs.recentEnabled != oldValue.recentEnabled || prefs.recentMinutes != oldValue.recentMinutes {
+                sessions.values.forEach { $0.configureRecent(enabled: prefs.recentEnabled, minutes: prefs.recentMinutes) }
             }
         }
     }
@@ -67,6 +67,8 @@ final class AppModel {
         catalog = DeviceCatalog(provider: AVDeviceProvider(), includeNonExternalCameras: prefs.includeNonExternalCameras)
         catalog.onChange = { [weak self] in self?.reconcile() }
         profiles = profileStore.all
+        // Leftover Save Recent segments from a previous run (crash or force quit).
+        try? FileManager.default.removeItem(at: DeviceSession.recentRoot)
         observeSystemEvents()
         Task { await requestPermissions() }
     }
@@ -282,7 +284,7 @@ final class AppModel {
         session.onNeedsReconcile = { [weak self] in self?.reconcile() }
         session.onMessage = { [weak self] message in self?.broadcast(message, about: device.id) }
         session.recordingCodec = { [weak self] in self?.prefs.recordingCodec ?? .hevc }
-        session.configureReplay(enabled: prefs.replayEnabled, seconds: prefs.replaySeconds)
+        session.configureRecent(enabled: prefs.recentEnabled, minutes: prefs.recentMinutes)
         return session
     }
 
@@ -339,6 +341,13 @@ final class AppModel {
                 viewer.toggleRecording()
                 try? await Task.sleep(for: .seconds(3))
                 viewer.toggleRecording()
+            case "recent15":
+                // Keep Recent on for ~25 s, save the last 15 s, then turn it back off.
+                prefs.recentEnabled = true
+                try? await Task.sleep(for: .seconds(25))
+                viewer.session?.saveRecent(seconds: 15)
+                try? await Task.sleep(for: .seconds(6))
+                prefs.recentEnabled = false
             case "stream10s":
                 // `-qaStreamURL rtmp://127.0.0.1:1935/live/test` (e.g. an `ffmpeg -listen 1` server).
                 guard let url = UserDefaults.standard.string(forKey: "qaStreamURL").flatMap(URL.init(string:)) else { break }

@@ -17,9 +17,9 @@ struct ViewerPrefs: Codable, Equatable {
     var menuBarOnly = false
     /// Sound follows the focused window or grid tile when several cards are open.
     var audioFollowsFocus = true
-    /// Pro: keep the last `replaySeconds` in memory for ⇧⌘R.
-    var replayEnabled = false
-    var replaySeconds: Double = 30
+    /// Pro "Save Recent": keep the last `recentMinutes` on disk.
+    var recentEnabled = false
+    var recentMinutes = 15
     var stream = StreamSettings()
 
     init() {}
@@ -39,8 +39,8 @@ struct ViewerPrefs: Codable, Equatable {
         recordingCodec = try c.decodeIfPresent(Recorder.Codec.self, forKey: .recordingCodec) ?? d.recordingCodec
         showRecordingIndicator = try c.decodeIfPresent(Bool.self, forKey: .showRecordingIndicator) ?? d.showRecordingIndicator
         audioFollowsFocus = try c.decodeIfPresent(Bool.self, forKey: .audioFollowsFocus) ?? d.audioFollowsFocus
-        replayEnabled = try c.decodeIfPresent(Bool.self, forKey: .replayEnabled) ?? d.replayEnabled
-        replaySeconds = try c.decodeIfPresent(Double.self, forKey: .replaySeconds) ?? d.replaySeconds
+        recentEnabled = try c.decodeIfPresent(Bool.self, forKey: .recentEnabled) ?? d.recentEnabled
+        recentMinutes = try c.decodeIfPresent(Int.self, forKey: .recentMinutes) ?? d.recentMinutes
         stream = try c.decodeIfPresent(StreamSettings.self, forKey: .stream) ?? d.stream
     }
 }

@@ -47,7 +47,7 @@ final class DeviceSession {
     @ObservationIgnored let engine = CaptureEngine()
     @ObservationIgnored let signalMonitor = SignalMonitor()
     @ObservationIgnored let recorder = Recorder()
-    @ObservationIgnored let replay = ReplayBuffer()
+    @ObservationIgnored let recent: RollingRecorder
     @ObservationIgnored private let store: PresetStore
     @ObservationIgnored private var runningConfig: CaptureEngine.Config?
     @ObservationIgnored private var recordingSize: (width: Int, height: Int)?
@@ -61,13 +61,15 @@ final class DeviceSession {
         deviceName = device.name
         self.store = store
         preset = store.preset(for: device.id)
+        let safeName = device.id.map { $0.isLetter || $0.isNumber ? $0 : "-" }
+        recent = RollingRecorder(folder: Self.recentRoot.appendingPathComponent(String(safeName), isDirectory: true))
         formats = CaptureEngine.formats(forDeviceID: device.id)
         loadLUT()
         engine.addSink(signalMonitor)
         engine.addSink(recorder)
         engine.addAudioSink(recorder)
-        engine.addSink(replay)
-        engine.addAudioSink(replay)
+        engine.addSink(recent)
+        engine.addAudioSink(recent)
         engine.stateHandler = { [weak self] state in
             MainActor.assumeIsolated { self?.apply(state) }
         }
@@ -194,31 +196,43 @@ final class DeviceSession {
         }
     }
 
-    // MARK: Instant replay (Pro — callers go through EntitlementStore.gate)
+    // MARK: Save Recent (Pro — callers go through EntitlementStore.gate)
 
-    func configureReplay(enabled: Bool, seconds: Double) {
-        replay.duration = seconds
-        if replay.isEnabled != enabled { replay.isEnabled = enabled }
+    /// Segments live in the app's Caches folder and are deleted when the feature is turned off.
+    static var recentRoot: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Save Recent", isDirectory: true)
     }
 
-    func saveReplay() {
-        guard replay.isEnabled else {
-            onMessage?("Turn on Instant Replay first (Pro menu)")
+    func configureRecent(enabled: Bool, minutes: Int) {
+        recent.keepSeconds = Double(minutes * 60)
+        if recent.isEnabled != enabled { recent.setEnabled(enabled) }
+    }
+
+    /// Saves the last `seconds` (nil = everything kept) to Movies/HDMI Captain.
+    func saveRecent(seconds: Double?) {
+        guard recent.isEnabled else {
+            onMessage?("Turn on Keep Recent Footage first (Pro menu)")
             return
         }
         let folder = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("HDMI Captain", isDirectory: true)
-        let url = ReplayBuffer.fileURL(in: folder)
-        let seconds = Int(replay.bufferedSeconds.rounded())
+        let url = RollingRecorder.fileURL(in: folder)
+        onMessage?("Saving…")
         Task {
             do {
-                try await replay.save(to: url)
+                try await recent.save(last: seconds, to: url)
+                let duration = try await AVURLAsset(url: url).load(.duration).seconds
                 lastRecordingURL = url
-                onMessage?("Saved \(seconds) s replay")
+                onMessage?("Saved last \(Self.describe(duration))")
             } catch {
-                onMessage?("Replay not saved: \(error.localizedDescription)")
+                onMessage?("Couldn't save: \(error.localizedDescription)")
             }
         }
+    }
+
+    static func describe(_ seconds: Double) -> String {
+        let s = Int(seconds.rounded())
+        return s < 60 ? "\(s) s" : s % 60 == 0 ? "\(s / 60) min" : "\(s / 60) min \(s % 60) s"
     }
 
     // MARK: Profiles
@@ -297,7 +311,7 @@ final class DeviceSession {
         case let .connecting(name):
             state = .connecting(name)
         case let .live(info):
-            replay.setFrameRate(info.frameRate)
+            recent.configure(frameRate: info.frameRate, includeAudio: activeAudioID != nil)
             // A new mode mid-recording would corrupt the track; close the file instead.
             if let size = recordingSize, size != (info.format.width, info.format.height) {
                 stopRecording(reason: "Recording stopped: the video mode changed")

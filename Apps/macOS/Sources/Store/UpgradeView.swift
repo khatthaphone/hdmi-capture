@@ -6,7 +6,7 @@ extension ProFeature {
     var symbol: String {
         switch self {
         case .recording: "record.circle"
-        case .replayBuffer: "gobackward.30"
+        case .replayBuffer: "gobackward"
         case .streaming: "dot.radiowaves.left.and.right"
         case .virtualCamera: "web.camera"
         }
@@ -15,7 +15,7 @@ extension ProFeature {
     var summary: String {
         switch self {
         case .recording: "Record the HDMI input to HEVC or H.264 with audio."
-        case .replayBuffer: "Keep the last moments in memory and save them with one key."
+        case .replayBuffer: "Missed a great moment? Save the last 15 seconds to 60 minutes after the fact."
         case .streaming: "Go live on Twitch, YouTube or any RTMP/SRT server."
         case .virtualCamera: "Use the capture card as a camera in Zoom, Meet and FaceTime."
         }
@@ -100,6 +100,16 @@ struct ProSettingsView: View {
     @Environment(EntitlementStore.self) private var store
     @Environment(AppModel.self) private var app
 
+
+    /// Disk space the buffer uses at the current card's mode (≈ 0.10 bit per pixel per frame).
+    private var diskEstimate: String {
+        let info = app.currentViewer?.liveInfo
+        let width = Double(info?.format.width ?? 1920), height = Double(info?.format.height ?? 1080)
+        let fps = info?.frameRate ?? 60
+        let bytes = width * height * fps * 0.10 / 8 * Double(app.prefs.recentMinutes * 60)
+        let size = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+        return "Uses about \(size) of disk at \(Int(width))×\(Int(height))@\(Int(fps.rounded())). Pro → Save Recent (⇧⌘R = last 30 s)."
+    }
     var body: some View {
         @Bindable var store = store
         @Bindable var app = app
@@ -116,15 +126,15 @@ struct ProSettingsView: View {
                     Label(feature.title, systemImage: feature.symbol)
                 }
             }
-            Section("Instant replay") {
-                Toggle("Keep the last moments in memory", isOn: Binding(
-                    get: { app.prefs.replayEnabled && store.isUnlocked(.replayBuffer) },
-                    set: { on in if !on || store.gate(.replayBuffer) { app.prefs.replayEnabled = on } }
+            Section("Save Recent") {
+                Toggle("Keep recent footage", isOn: Binding(
+                    get: { app.prefs.recentEnabled && store.isUnlocked(.replayBuffer) },
+                    set: { on in if !on || store.gate(.replayBuffer) { app.prefs.recentEnabled = on } }
                 ))
-                Picker("Length", selection: $app.prefs.replaySeconds) {
-                    ForEach([15.0, 30, 60, 120], id: \.self) { Text("\(Int($0)) seconds").tag($0) }
+                Picker("Keep up to", selection: $app.prefs.recentMinutes) {
+                    ForEach([1, 5, 15, 30, 60], id: \.self) { Text($0 == 1 ? "1 minute" : "\($0) minutes").tag($0) }
                 }
-                Text("Save with ⇧⌘R. Uses about 2 MB per second at 1080p60.")
+                Text(diskEstimate)
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Recording") {

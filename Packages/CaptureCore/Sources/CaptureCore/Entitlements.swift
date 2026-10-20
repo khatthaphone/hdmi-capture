@@ -11,7 +11,7 @@ public enum ProFeature: String, CaseIterable, Sendable {
     public var title: String {
         switch self {
         case .recording: "Recording"
-        case .replayBuffer: "Instant replay"
+        case .replayBuffer: "Save Recent"
         case .streaming: "Live streaming"
         case .virtualCamera: "Virtual camera"
         }
