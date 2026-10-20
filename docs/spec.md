@@ -34,7 +34,7 @@ HDMI-to-USB capture dongles (UVC video + UAC audio) let a Mac/iPad act as a moni
 **Swift, native per platform. No Kotlin Multiplatform.**
 
 - The core work — capture, GPU rendering, encoding, virtual camera — is platform-native everywhere (AVFoundation/Metal/VideoToolbox/CoreMediaIO; Camera2/USB-host/MediaCodec; Media Foundation/D3D11). KMP would only wrap these via `expect/actual`; Compose Multiplatform on Windows is JVM-based, a poor fit for low-latency video.
-- One Swift codebase serves **macOS + iPadOS (+ USB-C iPhone, visionOS)** via a shared Swift package (~80 % shared).
+- One Swift codebase serves **macOS + iPadOS (+ visionOS later)** via a shared Swift package (~80 % shared). iPhone is out: Apple supports external (UVC) cameras on iPad only (`docs/research/ipados.md`).
 - **Android:** Kotlin + Jetpack Compose. **Windows:** C# WinUI 3 (or C++/WinRT) + Media Foundation.
 - Cross-platform sharing is **specs as data**: scene/layout JSON schema, settings keys, stream presets (in `docs/`). If shared logic later becomes substantial, extract a **Rust core with UniFFI** bindings (Swift/Kotlin/C#).
 - Licensing: avoid GPL dependencies (e.g. libobs) unless we decide to ship GPL. Preferred: HaishinKit (BSD), RootEncoder (Apache-2.0), FFmpeg LGPL builds.
@@ -92,6 +92,7 @@ Packages/CaptureCore/            Swift package shared by macOS + iPadOS
     Presets.swift                per-device settings persistence
   Tests/CaptureCoreTests/
 Apps/macOS/                      SwiftUI app shell, windowing, menus, entitlements
+Apps/Shared/                     app-layer code shared by macOS + iPadOS (phase 3)
 Apps/iPadOS/                     (phase 3)
 docs/spec.md                     this file
 docs/tasks/                      task plan
@@ -108,7 +109,7 @@ Data flow: `DeviceCatalog` → selected device → `CaptureEngine` (session queu
 | 0 | Confirm root cause, device inventory, project scaffold |
 | 1 | macOS MVP viewer (§5) |
 | 2 | Snapshot, recording (AVAssetWriter, HEVC/H.264), latency HUD, multi-device windows, Sparkle |
-| 3 | iPadOS / USB-C iPhone target reusing CaptureCore; graceful background handling (OS-enforced there) |
+| 3 | iPadOS target (USB-C iPads, iPadOS 17+) reusing CaptureCore + `Apps/Shared`; instant resume after backgrounding (OS-enforced), multitasking camera access in Stage Manager, external-display clean feed. Tasks 020–021, 049–058 |
 | 4 | Mini-OBS: scene schema, Metal compositor (HDMI, webcam, ScreenCaptureKit, image, text, browser, chroma key), audio mixer, RTMP/SRT via HaishinKit, CoreMediaIO **virtual camera** |
 | 5 | Android: Kotlin/Compose, UVC via USB Host + libuvc (Camera2 external where available), UAC audio, RootEncoder streaming |
 | 6 | Windows: WinUI 3 + Media Foundation `MediaCapture`, D3D11 render, MF/FFmpeg-LGPL encode |
