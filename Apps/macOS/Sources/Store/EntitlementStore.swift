@@ -21,6 +21,10 @@ final class EntitlementStore {
     private(set) var product: Product?
     private(set) var purchaseState: PurchaseState = .idle
 
+    /// Drives the upgrade sheet; set when a locked Pro feature is chosen.
+    var isShowingUpgrade = false
+    private(set) var highlightedFeature: ProFeature?
+
     #if DEBUG
     /// Developer toggle for exercising Pro features without the store.
     var debugUnlock = UserDefaults.standard.bool(forKey: "debugUnlockPro") {
@@ -29,8 +33,10 @@ final class EntitlementStore {
     #endif
 
     @ObservationIgnored private var updates: Task<Void, Never>?
+    @ObservationIgnored private let honorsDebugUnlock: Bool
 
-    init(listenForUpdates: Bool = true) {
+    init(listenForUpdates: Bool = true, honorsDebugUnlock: Bool = true) {
+        self.honorsDebugUnlock = honorsDebugUnlock
         if listenForUpdates {
             // Refunds, revocations, Family Sharing and purchases made on another Mac arrive here.
             updates = Task { [weak self] in
@@ -48,9 +54,24 @@ final class EntitlementStore {
 
     func isUnlocked(_ feature: ProFeature) -> Bool {
         #if DEBUG
-        if debugUnlock { return true }
+        if honorsDebugUnlock, debugUnlock { return true }
         #endif
         return isPro
+    }
+
+    /// Entry point for every Pro action: runs it when unlocked, otherwise offers the upgrade.
+    /// Returns whether the action may proceed.
+    @discardableResult
+    func gate(_ feature: ProFeature) -> Bool {
+        if isUnlocked(feature) { return true }
+        requestUpgrade(highlighting: feature)
+        return false
+    }
+
+    func requestUpgrade(highlighting feature: ProFeature? = nil) {
+        highlightedFeature = feature
+        if case .failed = purchaseState { purchaseState = .idle }
+        isShowingUpgrade = true
     }
 
     func loadProduct() async {

@@ -6,16 +6,32 @@ import SwiftUI
 struct HDMICaptainApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
+    @State private var store = EntitlementStore()
 
     var body: some Scene {
         Window("HDMI Captain", id: "main") {
-            ContentView().environment(model)
+            ContentView()
+                .environment(model)
+                .environment(store)
+                .sheet(isPresented: $store.isShowingUpgrade) {
+                    UpgradeView().environment(store)
+                }
         }
         .defaultSize(width: 1280, height: 720)
-        .commands { ViewerCommands(model: model) }
+        .commands {
+            ViewerCommands(model: model)
+            ProCommands(store: store)
+        }
 
         Settings {
-            SettingsView().environment(model)
+            TabView {
+                SettingsView()
+                    .tabItem { Label("General", systemImage: "gearshape") }
+                ProSettingsView()
+                    .tabItem { Label("Pro", systemImage: "sparkles") }
+            }
+            .environment(model)
+            .environment(store)
         }
     }
 }
@@ -64,7 +80,43 @@ struct ViewerCommands: Commands {
                 }
             }
             Button("Reconnect") { model.retry() }
-                .keyboardShortcut("r")
+                .keyboardShortcut("r", modifiers: [.command, .option])
+        }
+    }
+}
+
+/// Pro actions: locked items open the upgrade sheet; unlocked-but-unbuilt items are disabled.
+struct ProCommands: Commands {
+    let store: EntitlementStore
+
+    var body: some Commands {
+        CommandMenu("Pro") {
+            item(.recording, "Start Recording", key: "r", modifiers: .command)
+            item(.replayBuffer, "Save Instant Replay", key: "r", modifiers: [.command, .shift])
+            item(.streaming, "Go Live…", key: "l", modifiers: [.command, .shift])
+            item(.virtualCamera, "Virtual Camera", key: nil, modifiers: [])
+            Divider()
+            Button(store.isPro ? "HDMI Captain Pro ✓" : "Upgrade to Pro…") {
+                store.requestUpgrade()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func item(_ feature: ProFeature, _ title: String, key: KeyEquivalent?, modifiers: EventModifiers) -> some View {
+        let unlocked = store.isUnlocked(feature)
+        let built = ProFeature.available.contains(feature)
+        let button = Button {
+            store.gate(feature)
+        } label: {
+            Label(unlocked && !built ? "\(title) (coming soon)" : title,
+                  systemImage: unlocked ? feature.symbol : "lock.fill")
+        }
+        .disabled(unlocked && !built)
+        if let key {
+            button.keyboardShortcut(key, modifiers: modifiers)
+        } else {
+            button
         }
     }
 }

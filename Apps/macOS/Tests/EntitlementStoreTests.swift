@@ -16,7 +16,7 @@ final class EntitlementStoreTests: XCTestCase {
     }
 
     func testLockedBeforePurchase() async {
-        let store = EntitlementStore(listenForUpdates: false)
+        let store = EntitlementStore(listenForUpdates: false, honorsDebugUnlock: false)
         await store.refresh()
         XCTAssertFalse(store.isPro)
         for feature in ProFeature.allCases {
@@ -25,27 +25,27 @@ final class EntitlementStoreTests: XCTestCase {
     }
 
     func testProductLoads() async {
-        let store = EntitlementStore(listenForUpdates: false)
+        let store = EntitlementStore(listenForUpdates: false, honorsDebugUnlock: false)
         await store.loadProduct()
         XCTAssertEqual(store.product?.id, EntitlementStore.proProductID)
         XCTAssertEqual(store.product?.type, .nonConsumable)
     }
 
     func testPurchaseUnlocksAndSurvivesNewStore() async {
-        let store = EntitlementStore(listenForUpdates: false)
+        let store = EntitlementStore(listenForUpdates: false, honorsDebugUnlock: false)
         await store.purchase()
         XCTAssertEqual(store.purchaseState, .idle)
         XCTAssertTrue(store.isPro)
 
         // A fresh store (simulating relaunch) sees the same entitlement.
-        let relaunched = EntitlementStore(listenForUpdates: false)
+        let relaunched = EntitlementStore(listenForUpdates: false, honorsDebugUnlock: false)
         await relaunched.refresh()
         XCTAssertTrue(relaunched.isPro)
     }
 
     func testRefundRevokes() async throws {
         let transaction = try await session.buyProduct(identifier: EntitlementStore.proProductID)
-        let store = EntitlementStore(listenForUpdates: false)
+        let store = EntitlementStore(listenForUpdates: false, honorsDebugUnlock: false)
         await store.refresh()
         XCTAssertTrue(store.isPro)
 
@@ -56,5 +56,23 @@ final class EntitlementStoreTests: XCTestCase {
             await store.refresh()
         }
         XCTAssertFalse(store.isPro)
+    }
+
+    func testLockedFeatureOffersUpgradeInsteadOfRunning() async {
+        let store = EntitlementStore(listenForUpdates: false, honorsDebugUnlock: false)
+        await store.refresh()
+        XCTAssertFalse(store.gate(.recording))
+        XCTAssertTrue(store.isShowingUpgrade)
+        XCTAssertEqual(store.highlightedFeature, .recording)
+    }
+
+    func testPurchaseUnlocksEveryFeatureWithoutRelaunch() async {
+        let store = EntitlementStore(listenForUpdates: false, honorsDebugUnlock: false)
+        await store.refresh()
+        XCTAssertFalse(store.gate(.streaming))
+        await store.purchase()
+        for feature in ProFeature.allCases {
+            XCTAssertTrue(store.gate(feature), "\(feature) should be unlocked")
+        }
     }
 }
