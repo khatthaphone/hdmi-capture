@@ -71,6 +71,13 @@ public final class AVDeviceProvider: DeviceProviding {
         for name in [AVCaptureDevice.wasConnectedNotification, AVCaptureDevice.wasDisconnectedNotification] {
             observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated { onChange() }
+                // A card that re-enumerates (e.g. when a source is plugged into it) can post its
+                // notifications before discovery lists it again; look again shortly after.
+                for delay in [1.0, 3.0] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                        MainActor.assumeIsolated { onChange() }
+                    }
+                }
             })
         }
     }
