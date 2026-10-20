@@ -43,6 +43,12 @@ struct HDMICaptainApp: App {
         .defaultSize(width: 960, height: 540)
         .windowStyle(.hiddenTitleBar)
 
+        Window("Scopes", id: "scopes") {
+            ScopesPanel()
+                .environment(app)
+        }
+        .defaultSize(width: 900, height: 300)
+
         Window("Multi-View", id: "grid") {
             MultiViewGrid()
                 .environment(app)
@@ -156,6 +162,7 @@ struct ViewerCommands: Commands {
 private struct VideoMenuItems: View {
     @Bindable var app: AppModel
     @Bindable var viewer: ViewerModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Button("Toggle Full Screen") { viewer.toggleFullScreen() }
@@ -206,6 +213,8 @@ private struct VideoMenuItems: View {
                 ))
             }
         }
+        Button("Show Scopes") { openWindow(id: "scopes") }
+            .keyboardShortcut("s", modifiers: [.command, .option])
         Menu("Guides") {
             Toggle("Rule of Thirds", isOn: $app.prefs.guides.thirds)
             Toggle("Center Cross", isOn: $app.prefs.guides.center)

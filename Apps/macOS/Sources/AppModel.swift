@@ -44,7 +44,13 @@ final class AppModel {
     var currentViewer: ViewerModel? { activeViewer ?? mainViewer }
 
     init() {
-        let prefs = Self.loadPrefs()
+        var prefs = Self.loadPrefs()
+        #if DEBUG
+        // QA overrides from launch arguments; applied in memory only (init doesn't trigger savePrefs).
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: "qaBuiltInCameras") { prefs.includeNonExternalCameras = true }
+        if defaults.bool(forKey: "qaShowStats") { prefs.showStats = true }
+        #endif
         self.prefs = prefs
         catalog = DeviceCatalog(provider: AVDeviceProvider(), includeNonExternalCameras: prefs.includeNonExternalCameras)
         catalog.onChange = { [weak self] in self?.reconcile() }
