@@ -13,6 +13,8 @@ struct ViewerPrefs: Codable, Equatable {
     var includeNonExternalCameras = false
     var guides = GuideSettings()
     var showMenuBarItem = true
+    var recordingCodec: Recorder.Codec = .hevc
+    var showRecordingIndicator = true
     /// No Dock icon or app menu; control from the menu-bar item.
     var menuBarOnly = false
 
@@ -30,6 +32,8 @@ struct ViewerPrefs: Codable, Equatable {
         guides = try c.decodeIfPresent(GuideSettings.self, forKey: .guides) ?? d.guides
         showMenuBarItem = try c.decodeIfPresent(Bool.self, forKey: .showMenuBarItem) ?? d.showMenuBarItem
         menuBarOnly = try c.decodeIfPresent(Bool.self, forKey: .menuBarOnly) ?? d.menuBarOnly
+        recordingCodec = try c.decodeIfPresent(Recorder.Codec.self, forKey: .recordingCodec) ?? d.recordingCodec
+        showRecordingIndicator = try c.decodeIfPresent(Bool.self, forKey: .showRecordingIndicator) ?? d.showRecordingIndicator
     }
 }
 
@@ -66,6 +70,12 @@ final class AppModel {
     private(set) var signalInterrupted = false
     /// A frame has been shown since the current device was selected.
     private(set) var hasFrame = false
+    /// When the current recording started; nil when not recording.
+    private(set) var recordingSince: Date?
+    @ObservationIgnored private var recordingSize: (width: Int, height: Int)?
+    @ObservationIgnored let recorder = Recorder()
+    @ObservationIgnored private(set) var lastRecordingURL: URL?
+
     /// Short confirmation shown at the bottom of the window.
     private(set) var toast: String?
     @ObservationIgnored private var toastTask: Task<Void, Never>?
@@ -141,6 +151,11 @@ final class AppModel {
         catalog = DeviceCatalog(provider: AVDeviceProvider(), includeNonExternalCameras: Self.loadPrefs().includeNonExternalCameras)
         if let renderer { engine.addSink(renderer) }
         engine.addSink(signalMonitor)
+        engine.addSink(recorder)
+        engine.addAudioSink(recorder)
+        recorder.onStateChange = { [weak self] state in
+            MainActor.assumeIsolated { self?.recorderChanged(state) }
+        }
         signalMonitor.onChange = { [weak self] content in
             MainActor.assumeIsolated { self?.signal = content }
         }
@@ -162,7 +177,7 @@ final class AppModel {
     }
 
     #if DEBUG
-    /// Unattended checks for development: `-qaAction screenshot|copy|actualPixels|size50` (see CLAUDE.md).
+    /// Unattended checks for development: `-qaAction screenshot|copy|actualPixels|size50|record3s` (see CLAUDE.md).
     private func runQAAction() {
         guard let action = UserDefaults.standard.string(forKey: "qaAction") else { return }
         Task {
@@ -171,6 +186,10 @@ final class AppModel {
             case "screenshot": saveScreenshot()
             case "copy": copyFrame()
             case "actualPixels": setWindowSize(scale: 1, actualPixels: true)
+            case "record3s":
+                startRecording()
+                try? await Task.sleep(for: .seconds(3))
+                stopRecording()
             case "size50": setWindowSize(scale: 0.5)
             default: break
             }
@@ -382,16 +401,80 @@ final class AppModel {
     private func apply(_ state: CaptureState) {
         switch state {
         case .idle:
+            stopRecording()
             if selectedVideoID == nil, authorized { phase = .scanning }
         case let .connecting(name):
             phase = .connecting(name)
         case let .live(info):
+            // A new mode mid-recording would corrupt the track; close the file instead.
+            if let size = recordingSize, size != (info.format.width, info.format.height) {
+                stopRecording(reason: "Recording stopped: the video mode changed")
+            }
             liveInfo = info
             phase = .live
         case let .recovering(reason):
+            if reason == "Device disconnected" { stopRecording(reason: "Recording saved: the device was disconnected") }
             phase = .recovering(reason)
         case let .failed(message):
+            stopRecording()
             phase = .failed(message)
+        }
+    }
+
+    // MARK: Recording (Pro — callers go through EntitlementStore.gate)
+
+    var isRecording: Bool { recordingSince != nil }
+
+    func toggleRecording() {
+        isRecording ? stopRecording() : startRecording()
+    }
+
+    func startRecording() {
+        guard phase == .live, testPattern == nil, let info = liveInfo else {
+            showToast("Nothing live to record")
+            return
+        }
+        let folder = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("HDMI Captain", isDirectory: true)
+        recordingSize = (info.format.width, info.format.height)
+        recorder.start(
+            url: Recorder.fileURL(in: folder),
+            settings: Recorder.Settings(codec: prefs.recordingCodec),
+            frameRate: info.frameRate,
+            includeAudio: activeAudioID != nil
+        )
+    }
+
+    func stopRecording(reason: String? = nil) {
+        guard isRecording else { return }
+        recordingSize = nil
+        if let reason { showToast(reason) }
+        recorder.stop()
+    }
+
+    func showRecordingsInFinder() {
+        let folder = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("HDMI Captain", isDirectory: true)
+        if let lastRecordingURL {
+            NSWorkspace.shared.activateFileViewerSelecting([lastRecordingURL])
+        } else {
+            NSWorkspace.shared.open(folder)
+        }
+    }
+
+    private func recorderChanged(_ state: Recorder.State) {
+        switch state {
+        case let .recording(_, startedAt):
+            recordingSince = startedAt
+        case let .finished(url):
+            recordingSince = nil
+            lastRecordingURL = url
+            if toast == nil || !(toast ?? "").hasPrefix("Recording") { showToast("Saved \(url.lastPathComponent)") }
+        case .idle:
+            recordingSince = nil
+        case let .failed(message):
+            recordingSince = nil
+            showToast("Recording failed: \(message)")
         }
     }
 

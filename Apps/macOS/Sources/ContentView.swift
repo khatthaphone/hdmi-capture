@@ -27,6 +27,12 @@ struct ContentView: View {
                     .padding(.top, model.prefs.cleanMode ? 12 : 40)
                     .allowsHitTesting(false)
             }
+            if let since = model.recordingSince, model.prefs.showRecordingIndicator {
+                RecordingIndicator(since: since)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(12)
+                    .allowsHitTesting(false)
+            }
             if let toast = model.toast {
                 Banner(text: toast, symbol: "checkmark.circle.fill")
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -224,6 +230,25 @@ private struct GuidesOverlay: View {
                 stroke(Path(video.insetBy(dx: video.width * 0.05, dy: video.height * 0.05)), dash: [6, 4])  // action safe 90 %
                 stroke(Path(video.insetBy(dx: video.width * 0.10, dy: video.height * 0.10)), dash: [2, 3])  // title safe 80 %
             }
+        }
+    }
+}
+
+private struct RecordingIndicator: View {
+    let since: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: since, by: 1)) { context in
+            let elapsed = Int(context.date.timeIntervalSince(since))
+            HStack(spacing: 6) {
+                Circle().fill(.red).frame(width: 8, height: 8)
+                Text(String(format: "REC %d:%02d:%02d", elapsed / 3600, elapsed / 60 % 60, elapsed % 60))
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.black.opacity(0.6), in: Capsule())
         }
     }
 }

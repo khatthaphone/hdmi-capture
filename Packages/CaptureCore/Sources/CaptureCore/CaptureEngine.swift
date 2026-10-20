@@ -6,6 +6,11 @@ public protocol FrameSink: AnyObject {
     func consume(_ sampleBuffer: CMSampleBuffer)
 }
 
+/// Receives captured audio (float32 interleaved stereo, 48 kHz, capture timestamps) on the audio queue.
+public protocol AudioSampleSink: AnyObject {
+    func consumeAudio(_ sampleBuffer: CMSampleBuffer)
+}
+
 public struct LiveInfo: Equatable, Sendable {
     public var deviceName: String
     public var format: FormatDescriptor
@@ -71,6 +76,7 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
     // Shared with the video queue.
     private let lock = NSLock()
     private var sinks: [WeakSink] = []
+    private var audioSinks: [WeakAudioSink] = []
     private var stats = CaptureStats()
     /// Set after (re)start; the first frame flips the state to `.live`.
     private var pendingLive: LiveInfo?
@@ -105,6 +111,10 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
 
     public func addSink(_ sink: FrameSink) {
         lock.withLock { sinks.append(WeakSink(sink)) }
+    }
+
+    public func addAudioSink(_ sink: AudioSampleSink) {
+        lock.withLock { audioSinks.append(WeakAudioSink(sink)) }
     }
 
     /// Starts (or reconfigures) capture. No-op if already live with the same config.
@@ -353,6 +363,9 @@ extension CaptureEngine: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapture
     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         if output === audioOutput {
             audio.enqueue(sampleBuffer)
+            for sink in lock.withLock({ audioSinks.compactMap(\.sink) }) {
+                sink.consumeAudio(sampleBuffer)
+            }
             return
         }
         let (targets, becameLive): ([FrameSink], LiveInfo?) = lock.withLock {
@@ -384,6 +397,11 @@ private extension CaptureState {
         default: false
         }
     }
+}
+
+private struct WeakAudioSink {
+    weak var sink: AudioSampleSink?
+    init(_ sink: AudioSampleSink) { self.sink = sink }
 }
 
 private struct WeakSink {

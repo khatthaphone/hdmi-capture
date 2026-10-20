@@ -28,7 +28,7 @@ struct HDMICaptainApp: App {
         .commands {
             ViewerCommands(model: model)
             WindowSizeCommands(model: model)
-            ProCommands(store: store)
+            ProCommands(model: model, store: store)
         }
 
         MenuBarExtra("HDMI Captain", systemImage: "rectangle.inset.filled.on.rectangle", isInserted: $model.prefs.showMenuBarItem) {
@@ -159,11 +159,13 @@ struct ViewerCommands: Commands {
 
 /// Pro actions: locked items open the upgrade sheet; unlocked-but-unbuilt items are disabled.
 struct ProCommands: Commands {
+    let model: AppModel
     let store: EntitlementStore
 
     var body: some Commands {
         CommandMenu("Pro") {
-            item(.recording, "Start Recording", key: "r", modifiers: .command)
+            item(.recording, model.isRecording ? "Stop Recording" : "Start Recording", key: "r", modifiers: .command)
+            Button("Show Recordings in Finder") { model.showRecordingsInFinder() }
             item(.replayBuffer, "Save Instant Replay", key: "r", modifiers: [.command, .shift])
             item(.streaming, "Go Live…", key: "l", modifiers: [.command, .shift])
             item(.virtualCamera, "Virtual Camera", key: nil, modifiers: [])
@@ -179,7 +181,11 @@ struct ProCommands: Commands {
         let unlocked = store.isUnlocked(feature)
         let built = ProFeature.available.contains(feature)
         let button = Button {
-            store.gate(feature)
+            guard store.gate(feature) else { return }
+            switch feature {
+            case .recording: model.toggleRecording()
+            default: break
+            }
         } label: {
             Label(unlocked && !built ? "\(title) (coming soon)" : title,
                   systemImage: unlocked ? feature.symbol : "lock.fill")
