@@ -20,7 +20,7 @@ struct TestPatternTests {
         let device = renderer.device
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
         descriptor.usage = [.renderTarget]
-        descriptor.storageMode = device.hasUnifiedMemory ? .shared : .managed
+        descriptor.storageMode = .readable(on: device)
         let target = try #require(device.makeTexture(descriptor: descriptor))
         let commandBuffer = try #require(device.makeCommandQueue()?.makeCommandBuffer())
         let textures = renderer.encode(buffer, into: target, options: RenderOptions(filter: .nearest), commandBuffer: commandBuffer)

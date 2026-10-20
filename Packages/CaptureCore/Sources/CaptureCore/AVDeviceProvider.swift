@@ -14,7 +14,12 @@ extension FormatDescriptor {
 
 extension CaptureDeviceInfo {
     public init(_ device: AVCaptureDevice) {
+        #if os(macOS)
         let transport = FourCC.string(UInt32(bitPattern: device.transportType))
+        #else
+        // iPadOS has no transportType; external cameras there are always USB-C UVC devices.
+        let transport = device.deviceType == .external ? "usb " : ""
+        #endif
         let kind: Kind
         // Continuity Camera (iPhone) also reports deviceType .external on macOS 14+.
         if device.isContinuityCamera {

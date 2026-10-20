@@ -52,16 +52,18 @@ struct ColorConversionTests {
         let device = renderer.device
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: 16, height: 16, mipmapped: false)
         descriptor.usage = [.renderTarget]
-        descriptor.storageMode = device.hasUnifiedMemory ? .shared : .managed
+        descriptor.storageMode = .readable(on: device)
         let target = try #require(device.makeTexture(descriptor: descriptor))
         let queue = try #require(device.makeCommandQueue())
         let commandBuffer = try #require(queue.makeCommandBuffer())
         let textures = renderer.encode(pixelBuffer, into: target, options: RenderOptions(colorRange: range), commandBuffer: commandBuffer)
         #expect(textures.count == 2)
+        #if os(macOS)
         if !device.hasUnifiedMemory, let blit = commandBuffer.makeBlitCommandEncoder() {
             blit.synchronize(resource: target)
             blit.endEncoding()
         }
+        #endif
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()
 

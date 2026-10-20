@@ -51,7 +51,7 @@ struct CubeLUTTests {
         let device = renderer.device
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: 640, height: 360, mipmapped: false)
         descriptor.usage = [.renderTarget]
-        descriptor.storageMode = device.hasUnifiedMemory ? .shared : .managed
+        descriptor.storageMode = .readable(on: device)
         let target = try #require(device.makeTexture(descriptor: descriptor))
         let commandBuffer = try #require(device.makeCommandQueue()?.makeCommandBuffer())
         let textures = renderer.encode(buffer, into: target, options: RenderOptions(filter: .nearest, lutIntensity: intensity), commandBuffer: commandBuffer)

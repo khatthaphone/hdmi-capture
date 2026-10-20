@@ -320,6 +320,8 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
         else { return }
 
         let textures = encode(pixelBuffer, into: drawable.texture, options: options, commandBuffer: commandBuffer)
+        #if !targetEnvironment(simulator)
+        // Not available in the iOS simulator; display latency is simply not measured there.
         if let capturedAt {
             drawable.addPresentedHandler { [weak self] drawable in
                 // presentedTime is 0 for some layer setups on macOS; the handler itself runs right
@@ -329,6 +331,7 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
                 self.stateLock.withLock { self.displayLatency.add(shownAt - capturedAt, at: shownAt) }
             }
         }
+        #endif
         commandBuffer.present(drawable)
         commandBuffer.addCompletedHandler { [weak self] _ in
             _ = textures // keep CVMetalTextures alive until the GPU is done

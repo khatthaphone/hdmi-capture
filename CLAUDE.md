@@ -14,6 +14,7 @@ Native HDMI-capture viewer for macOS (iPadOS/Android/Windows later; mini-OBS lat
 - `make build` — xcodegen + xcodebuild (Debug, DerivedData in `.build/xcode`)
 - `make run` — build and open the app
 - `make test` — `swift test` in CaptureCore (Swift Testing)
+- `make build-ios-core` / `make test-ios-core` — CaptureCore for iOS (device build / iPad simulator tests; `IOS_SIM=` picks the simulator). Use `#if os(macOS)` for macOS-only APIs and `#if !targetEnvironment(simulator)` for device-only ones (e.g. `addPresentedHandler`)
 - `make inventory` — run device-inventory
 - `/usr/bin/log stream --level debug --predicate 'subsystem == "hdmicaptain"'` — engine logs (in zsh, `log` is a builtin; use the full path)
 

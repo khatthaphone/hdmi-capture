@@ -1,4 +1,5 @@
 import CoreVideo
+import Metal
 
 /// Builds 4:2:0 bi-planar pixel buffers for tests. `pixel(x, y)` returns (Y, Cb, Cr) in 0…255.
 func makeYCbCrBuffer(width: Int = 64, height: Int = 36, fullRange: Bool = false,
@@ -25,4 +26,15 @@ func makeYCbCrBuffer(width: Int = 64, height: Int = 36, fullRange: Bool = false,
     }
     CVPixelBufferUnlockBaseAddress(pb, [])
     return pb
+}
+
+extension MTLStorageMode {
+    /// CPU-readable storage for render targets read back in tests (`.managed` exists only on macOS).
+    static func readable(on device: MTLDevice) -> MTLStorageMode {
+        #if os(macOS)
+        device.hasUnifiedMemory ? .shared : .managed
+        #else
+        .shared
+        #endif
+    }
 }
