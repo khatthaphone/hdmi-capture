@@ -53,6 +53,12 @@ final class AppModel {
     private(set) var activeAudioID: String?
     private(set) var formats: [FormatDescriptor] = []
     private(set) var stats = Stats()
+    /// What the card is delivering (picture vs. no-signal/HDCP black/vendor screen).
+    private(set) var signal: SignalContent = .picture
+    /// Frames stopped arriving briefly while live; the last frame stays on screen.
+    private(set) var signalInterrupted = false
+    /// A frame has been shown since the current device was selected.
+    private(set) var hasFrame = false
 
     var preset = DevicePreset() {
         didSet { presetChanged(from: oldValue) }
@@ -69,6 +75,8 @@ final class AppModel {
     @ObservationIgnored let renderer = MetalRenderer()
     @ObservationIgnored weak var window: NSWindow?
     @ObservationIgnored private let engine = CaptureEngine()
+    @ObservationIgnored private let signalMonitor = SignalMonitor()
+    @ObservationIgnored private var lastStatsSample: CFTimeInterval = 0
     @ObservationIgnored private let store = PresetStore()
     @ObservationIgnored private var authorized = false
     @ObservationIgnored private var manualVideoID: String?
@@ -99,6 +107,10 @@ final class AppModel {
         prefs = Self.loadPrefs()
         catalog = DeviceCatalog(provider: AVDeviceProvider(), includeNonExternalCameras: Self.loadPrefs().includeNonExternalCameras)
         if let renderer { engine.addSink(renderer) }
+        engine.addSink(signalMonitor)
+        signalMonitor.onChange = { [weak self] content in
+            MainActor.assumeIsolated { self?.signal = content }
+        }
         engine.stateHandler = { [weak self] state in
             MainActor.assumeIsolated { self?.apply(state) }
         }
@@ -179,11 +191,16 @@ final class AppModel {
             formats = []
             engine.stop()
             renderer?.clear()
+            signalMonitor.reset()
+            hasFrame = false
             phase = .scanning
             return
         }
         if pick != selectedVideoID {
             selectedVideoID = pick
+            renderer?.clear()
+            signalMonitor.reset()
+            hasFrame = false
             store.lastVideoDeviceID = pick
             formats = CaptureEngine.formats(forDeviceID: pick)
             loadingPreset = true
@@ -262,17 +279,31 @@ final class AppModel {
     }
 
     private func startStatsTimer() {
-        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.sampleStats() }
+        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.checkFrameFlow()
+                self?.sampleStats()
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         timers.append(timer)
     }
 
+    /// Detects short dropouts (before the engine's 3 s stall restart) so the UI can show a banner.
+    private func checkFrameFlow() {
+        let gap = CACurrentMediaTime() - engine.currentStats().lastFrameTime
+        let interrupted = phase == .live && gap > 0.5
+        if interrupted != signalInterrupted { signalInterrupted = interrupted }
+        let frame = renderer?.lastFrameSize != nil
+        if frame != hasFrame { hasFrame = frame }
+    }
+
     private func sampleStats() {
+        let now = CACurrentMediaTime()
+        guard now - lastStatsSample >= 1 else { return }
+        lastStatsSample = now
         let current = engine.currentStats()
         let presented = renderer?.presentedFrames ?? 0
-        let now = CACurrentMediaTime()
         defer { lastSample = (current, presented, now) }
         guard prefs.showStats, let last = lastSample, now > last.time else { return }
         let dt = now - last.time

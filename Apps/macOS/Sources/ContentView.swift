@@ -10,8 +10,18 @@ struct ContentView: View {
             if let renderer = model.renderer {
                 MetalPreview(renderer: renderer) { model.toggleFullScreen() }
             }
-            if model.phase != .live {
+            switch overlay {
+            case .none:
+                EmptyView()
+            case .full:
                 StatusOverlay()
+            case .noSignal:
+                NoSignalOverlay()
+            case let .banner(text):
+                Banner(text: text)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .padding(.top, model.prefs.cleanMode ? 12 : 40)
+                    .allowsHitTesting(false)
             }
             if model.prefs.showStats, model.phase == .live {
                 StatsOverlay()
@@ -23,6 +33,68 @@ struct ContentView: View {
         .ignoresSafeArea()
         .frame(minWidth: 320, minHeight: 180)
         .background(WindowConfigurator(prefs: model.prefs, aspect: model.aspect) { model.window = $0 })
+    }
+
+    private enum Overlay: Equatable {
+        case none, full, noSignal
+        case banner(String)
+    }
+
+    /// Prefer keeping the last picture on screen with a small banner; cover it only when
+    /// there is nothing meaningful to show.
+    private var overlay: Overlay {
+        switch model.phase {
+        case .live:
+            if model.signal.isNoSignal { return .noSignal }
+            if model.signalInterrupted { return .banner("Signal interrupted") }
+            return .none
+        case let .recovering(reason) where model.hasFrame:
+            return .banner("\(reason) — reconnecting…")
+        default:
+            return .full
+        }
+    }
+}
+
+private struct Banner: View {
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: "exclamationmark.triangle.fill")
+            .font(.callout.weight(.medium))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.black.opacity(0.7), in: Capsule())
+    }
+}
+
+private struct NoSignalOverlay: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "rectangle.slash").font(.system(size: 40))
+            Text("No signal").font(.title2)
+            Text(hint)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: 420)
+        }
+        .foregroundStyle(.white)
+        .multilineTextAlignment(.center)
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.black.opacity(0.55))
+        .allowsHitTesting(false)
+    }
+
+    private var hint: String {
+        switch model.signal {
+        case .black:
+            "The capture card sends a black picture. Check that the source is on and outputting video. Sources that use HDCP (PlayStation, Apple TV, streaming apps) can't be captured — turn HDCP off in the source's settings."
+        default:
+            "The capture card is showing its own screen. Check the HDMI cable and that the source is on."
+        }
     }
 }
 
@@ -80,9 +152,11 @@ private struct StatsOverlay: View {
         if let info = model.liveInfo {
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(info.deviceName)")
-                Text("\(info.format.width)×\(info.format.height) \(info.format.fourCC) @ \(info.frameRate, specifier: "%.2f")")
+                Text("requested \(info.format.width)×\(info.format.height) \(info.format.fourCC) @ \(info.frameRate, specifier: "%.2f")")
                 if let size = model.stats.frameSize {
-                    Text("frames \(Int(size.width))×\(Int(size.height))")
+                    let mismatch = Int(size.width) != info.format.width || Int(size.height) != info.format.height
+                    Text("actual \(Int(size.width))×\(Int(size.height))\(mismatch ? "  ⚠︎ differs" : "")")
+                        .foregroundStyle(mismatch ? .orange : .white)
                 }
                 Text("in \(model.stats.inputFPS, specifier: "%.1f") fps · out \(model.stats.renderFPS, specifier: "%.1f") fps · dropped \(model.stats.dropped)")
                 Text("audio: \(info.audioDeviceName ?? "none")\(model.preset.muted ? " (muted)" : "") · delay \(model.preset.audioDelayMs) ms")
