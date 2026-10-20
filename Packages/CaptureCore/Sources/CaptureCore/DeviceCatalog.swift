@@ -25,6 +25,8 @@ public struct CaptureDeviceInfo: Hashable, Sendable, Identifiable {
     }
 
     public var isUSB: Bool { transport == "usb " }
+    /// Identity that survives a changed `uniqueID`: same model and name means the same kind of card.
+    public var stableKey: String { "model:\(modelID)|\(name)" }
 }
 
 /// Source of devices; real implementation wraps AVFoundation, tests inject fakes.

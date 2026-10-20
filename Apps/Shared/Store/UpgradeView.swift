@@ -104,9 +104,19 @@ struct UpgradeView: View {
 
 /// Settings → Pro tab.
 struct ProSettingsView: View {
+    var body: some View {
+        Form {
+            ProSettingsSections()
+        }
+        .formStyle(.grouped)
+        .frame(width: 480, height: 520)
+    }
+}
+
+/// The Pro sections; the Mac's Settings → Pro tab and the iPad Settings sheet.
+struct ProSettingsSections: View {
     @Environment(EntitlementStore.self) private var store
     @Environment(AppModel.self) private var app
-
 
     /// Disk space the buffer uses at the current card's mode (≈ 0.10 bit per pixel per frame).
     private var diskEstimate: String {
@@ -115,13 +125,14 @@ struct ProSettingsView: View {
         let fps = info?.frameRate ?? 60
         let bytes = width * height * fps * 0.10 / 8 * Double(app.prefs.recentMinutes * 60)
         let size = ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
-        return "Uses about \(size) of disk at \(Int(width))×\(Int(height))@\(Int(fps.rounded())). Pro → Save Recent (⇧⌘R = last 30 s)."
+        return "Uses about \(size) of storage at \(Int(width))×\(Int(height))@\(Int(fps.rounded())). Pro → Save Recent (⇧⌘R = last 30 s)."
     }
+
     var body: some View {
         @Bindable var store = store
         @Bindable var app = app
-        Form {
-            Section {
+        Group {
+            Section("Pro") {
                 LabeledContent("Status", value: store.isPro ? "Pro unlocked" : "Free")
                 if !store.isPro {
                     Button("Upgrade to Pro…") { store.requestUpgrade() }
@@ -159,7 +170,5 @@ struct ProSettingsView: View {
             }
             #endif
         }
-        .formStyle(.grouped)
-        .frame(width: 480, height: 520)
     }
 }

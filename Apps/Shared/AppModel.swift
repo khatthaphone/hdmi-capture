@@ -49,6 +49,11 @@ final class AppModel {
     var isShowingStreamSetup = false
     #endif
 
+    #if os(iOS)
+    /// iPad Settings sheet (⋯ menu, ⌘,).
+    var isShowingSettings = false
+    #endif
+
     /// Built-in and user profiles (refreshed after every change).
     private(set) var profiles: [Profile] = []
     @ObservationIgnored let profileStore = ProfileStore()
@@ -367,6 +372,9 @@ final class AppModel {
             case "size50": viewer.setWindowSize(scale: 0.5)
             #endif
             case "fullScreen": viewer.toggleFullScreen()
+            #if os(iOS)
+            case "settings": isShowingSettings = true
+            #endif
             case "record3s":
                 viewer.toggleRecording()
                 try? await Task.sleep(for: .seconds(3))

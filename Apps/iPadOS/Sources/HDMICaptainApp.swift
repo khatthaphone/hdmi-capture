@@ -20,8 +20,14 @@ struct HDMICaptainApp: App {
                 .sheet(isPresented: $store.isShowingUpgrade) {
                     UpgradeView().environment(store)
                 }
+                .sheet(isPresented: $app.isShowingSettings) {
+                    SettingsSheet()
+                        .environment(app)
+                        .environment(store)
+                }
                 .persistentSystemOverlays(.hidden)
                 .statusBarHidden()
         }
+        .commands { IPadCommands(app: app, store: store) }
     }
 }

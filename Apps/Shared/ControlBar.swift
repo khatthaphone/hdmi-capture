@@ -325,6 +325,9 @@ private struct OptionsMenu: View {
             Menu { GuideItems(app: app) } label: { Label("Guides", systemImage: Symbol.guides) }
             Divider()
             Toggle(isOn: $app.prefs.showStats) { Label("Show Stats", systemImage: Symbol.stats) }
+            #if os(iOS)
+            Button { app.isShowingSettings = true } label: { Label("Settings…", systemImage: Symbol.settings) }
+            #endif
             #if os(macOS)
             Toggle(isOn: $app.prefs.floatOnTop) { Label("Float on Top", systemImage: Symbol.floatOnTop) }
             Toggle(isOn: $app.prefs.cleanMode) { Label("Clean Mode", systemImage: Symbol.cleanMode) }

@@ -38,6 +38,7 @@ enum Symbol {
     static let upgrade = "sparkles"
     static let locked = "lock.fill"
     static let options = "ellipsis.circle"
+    static let settings = "gearshape"
 }
 
 extension ScaleMode {

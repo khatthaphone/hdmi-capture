@@ -58,17 +58,21 @@ public final class PresetStore {
         self.defaults = defaults
     }
 
-    public func preset(for deviceID: String) -> DevicePreset {
-        guard let data = defaults.data(forKey: key(deviceID)),
-              let preset = try? JSONDecoder().decode(DevicePreset.self, from: data)
-        else { return DevicePreset() }
-        return preset
+    /// The card's settings. `stableKey` (see `CaptureDeviceInfo.stableKey`) finds them again when
+    /// the card comes back with a different `uniqueID` (re-enumeration, iPadOS reconnects).
+    public func preset(for deviceID: String, stableKey: String? = nil) -> DevicePreset {
+        for key in [key(deviceID)] + (stableKey.map { [self.key($0)] } ?? []) {
+            if let data = defaults.data(forKey: key), let preset = try? JSONDecoder().decode(DevicePreset.self, from: data) {
+                return preset
+            }
+        }
+        return DevicePreset()
     }
 
-    public func save(_ preset: DevicePreset, for deviceID: String) {
-        if let data = try? JSONEncoder().encode(preset) {
-            defaults.set(data, forKey: key(deviceID))
-        }
+    public func save(_ preset: DevicePreset, for deviceID: String, stableKey: String? = nil) {
+        guard let data = try? JSONEncoder().encode(preset) else { return }
+        defaults.set(data, forKey: key(deviceID))
+        if let stableKey { defaults.set(data, forKey: key(stableKey)) }
     }
 
     public var lastVideoDeviceID: String? {

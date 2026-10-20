@@ -51,6 +51,7 @@ final class DeviceSession {
     @ObservationIgnored let recorder = Recorder()
     @ObservationIgnored let recent: RollingRecorder
     @ObservationIgnored private let store: PresetStore
+    @ObservationIgnored private let stableKey: String
     @ObservationIgnored private var runningConfig: CaptureEngine.Config?
     @ObservationIgnored private var recordingSize: (width: Int, height: Int)?
     @ObservationIgnored private var renderers: [WeakRenderer] = []
@@ -62,7 +63,8 @@ final class DeviceSession {
         deviceID = device.id
         deviceName = device.name
         self.store = store
-        preset = store.preset(for: device.id)
+        stableKey = device.stableKey
+        preset = store.preset(for: device.id, stableKey: device.stableKey)
         let safeName = device.id.map { $0.isLetter || $0.isNumber ? $0 : "-" }
         recent = RollingRecorder(folder: Self.recentRoot.appendingPathComponent(String(safeName), isDirectory: true))
         formats = CaptureEngine.formats(forDeviceID: device.id)
@@ -292,7 +294,7 @@ final class DeviceSession {
     }
 
     private func presetChanged(from old: DevicePreset) {
-        store.save(preset, for: deviceID)
+        store.save(preset, for: deviceID, stableKey: stableKey)
         if preset.lutBookmark != old.lutBookmark {
             loadLUT()
             renderers.compactMap(\.renderer).forEach { $0.setLUT(lut) }
