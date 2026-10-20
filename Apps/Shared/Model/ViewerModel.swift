@@ -258,15 +258,14 @@ final class ViewerModel {
             return
         }
         Task.detached(priority: .userInitiated) {
-            let folder = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("HDMI Captain", isDirectory: true)
+            let folder = MediaLibrary.screenshotFolder
             let message: String
             do {
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 guard let data = FrameSnapshot.pngData(from: frame) else { throw CocoaError(.fileWriteUnknown) }
                 let url = FrameSnapshot.fileURL(in: folder)
                 try data.write(to: url)
-                message = "Saved \(url.lastPathComponent)"
+                message = await MediaLibrary.savedMessage(for: url)
             } catch {
                 message = "Couldn't save screenshot: \(error.localizedDescription)"
             }

@@ -167,14 +167,13 @@ final class DeviceSession {
             onMessage?("Nothing live to record")
             return
         }
-        let folder = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("HDMI Captain", isDirectory: true)
+        let folder = MediaLibrary.videoFolder
         recordingSize = (info.format.width, info.format.height)
         recorder.start(
             url: Recorder.fileURL(in: folder),
             settings: Recorder.Settings(codec: recordingCodec()),
             frameRate: info.frameRate,
-            includeAudio: activeAudioID != nil
+            includeAudio: info.audioDeviceName != nil
         )
     }
 
@@ -216,16 +215,18 @@ final class DeviceSession {
             onMessage?("Turn on Keep Recent Footage first (Pro menu)")
             return
         }
-        let folder = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("HDMI Captain", isDirectory: true)
-        let url = RollingRecorder.fileURL(in: folder)
+        let url = RollingRecorder.fileURL(in: MediaLibrary.videoFolder)
         onMessage?("Saving…")
         Task {
             do {
                 try await recent.save(last: seconds, to: url)
                 let duration = try await AVURLAsset(url: url).load(.duration).seconds
                 lastRecordingURL = url
+                #if os(macOS)
                 onMessage?("Saved last \(Self.describe(duration))")
+                #else
+                onMessage?("\(await MediaLibrary.savedMessage(for: url)): last \(Self.describe(duration))")
+                #endif
             } catch {
                 onMessage?("Couldn't save: \(error.localizedDescription)")
             }
@@ -322,7 +323,8 @@ final class DeviceSession {
         case let .connecting(name):
             state = .connecting(name)
         case let .live(info):
-            recent.configure(frameRate: info.frameRate, includeAudio: activeAudioID != nil)
+            // Audio actually captured (on iPad the engine picks the card's route itself).
+            recent.configure(frameRate: info.frameRate, includeAudio: info.audioDeviceName != nil)
             // A new mode mid-recording would corrupt the track; close the file instead.
             if let size = recordingSize, size != (info.format.width, info.format.height) {
                 stopRecording(reason: "Recording stopped: the video mode changed")
@@ -347,7 +349,7 @@ final class DeviceSession {
         case let .finished(url):
             recordingSince = nil
             lastRecordingURL = url
-            onMessage?("Saved \(url.lastPathComponent)")
+            Task { onMessage?(await MediaLibrary.savedMessage(for: url)) }
         case .idle:
             recordingSince = nil
         case let .failed(message):
