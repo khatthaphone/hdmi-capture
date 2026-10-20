@@ -1,0 +1,8 @@
+// Defaults to ad-hoc "Sign to Run Locally" (macOS re-asks for camera access after each rebuild).
+// For a stable signature, put your identity in Config/Local.xcconfig (gitignored), e.g.:
+//   CODE_SIGN_IDENTITY = Apple Development: you@example.com (TEAMID)
+//   DEVELOPMENT_TEAM = TEAMID
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =
+#include? "Local.xcconfig"

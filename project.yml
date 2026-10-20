@@ -1,0 +1,48 @@
+name: HDMICaptain
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/Signing.xcconfig
+  Release: Config/Signing.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  CaptureCore:
+    path: Packages/CaptureCore
+targets:
+  HDMICaptain:
+    type: application
+    platform: macOS
+    sources: [Apps/macOS/Sources]
+    dependencies:
+      - package: CaptureCore
+    info:
+      path: Apps/macOS/Info.plist
+      properties:
+        CFBundleDisplayName: HDMI Captain
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.utilities
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        NSCameraUsageDescription: HDMI Captain shows the video from your HDMI capture device.
+        NSMicrophoneUsageDescription: HDMI Captain plays the audio from your HDMI capture device.
+    entitlements:
+      path: Apps/macOS/HDMICaptain.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.device.camera: true
+        com.apple.security.device.audio-input: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.hdmicaptain
+        PRODUCT_NAME: HDMI Captain
+        ENABLE_HARDENED_RUNTIME: YES
+    scheme:
+      testTargets:
+        - package: CaptureCore/CaptureCoreTests
