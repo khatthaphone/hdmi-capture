@@ -21,6 +21,7 @@ struct ContentView: View {
     @Environment(ViewerModel.self) private var viewer
     @Environment(AppModel.self) private var app
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -88,6 +89,10 @@ struct ContentView: View {
         .animation(showsControls ? .easeOut(duration: 0.15) : .easeIn(duration: 0.3), value: showsControls)
         .ignoresSafeArea()
         .frame(minWidth: 320, minHeight: 180)
+        #if os(iOS)
+        // Nothing to draw in the background; capture stays configured and resumes instantly.
+        .onChange(of: scenePhase) { _, phase in viewer.renderer?.setVisible(phase != .background) }
+        #endif
         #if os(macOS)
         .background(WindowConfigurator(prefs: app.prefs, aspect: viewer.aspect) { viewer.window = $0 })
         #endif

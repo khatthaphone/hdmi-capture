@@ -7,6 +7,7 @@ struct HDMICaptainApp: App {
     @State private var store = EntitlementStore()
 
     init() {
+        ExternalDisplayFeed.app = _app.wrappedValue
         #if DEBUG
         QASnapshot.install(app: _app.wrappedValue)
         #endif
