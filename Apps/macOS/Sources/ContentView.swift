@@ -10,7 +10,12 @@ struct ContentView: View {
         ZStack {
             Color.black
             if let renderer = viewer.renderer {
-                MetalPreview(renderer: renderer, autoHidesWindowButtons: !app.prefs.cleanMode) { viewer.toggleFullScreen() }
+                MetalPreview(
+                    renderer: renderer,
+                    autoHidesWindowButtons: !app.prefs.cleanMode,
+                    keepsChromeVisible: showsControls,
+                    onPointer: { viewer.pointerMoved(fromBottom: $0, height: $1) }
+                ) { viewer.toggleFullScreen() }
             }
             if !app.prefs.guides.isEmpty, let source = viewer.sourceSize, viewer.phase == .live || viewer.testPattern != nil {
                 GuidesOverlay(guides: app.prefs.guides, source: source, scale: viewer.preset.scale)
@@ -43,7 +48,7 @@ struct ContentView: View {
             if let toast = viewer.toast {
                 Banner(text: toast, symbol: "checkmark.circle.fill")
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .padding(.bottom, 20)
+                    .padding(.bottom, showsControls ? 66 : 20)
                     .allowsHitTesting(false)
                     .transition(.opacity)
             }
@@ -51,9 +56,17 @@ struct ContentView: View {
                 StatsOverlay()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     .padding(12)
+                    .padding(.bottom, showsControls ? 50 : 0)
                     .allowsHitTesting(false)
             }
+            if showsControls {
+                ControlBar()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 14)
+                    .transition(.opacity.combined(with: .offset(y: 8)))
+            }
         }
+        .animation(showsControls ? .easeOut(duration: 0.15) : .easeIn(duration: 0.3), value: showsControls)
         .ignoresSafeArea()
         .frame(minWidth: 320, minHeight: 180)
         .background(WindowConfigurator(prefs: app.prefs, aspect: viewer.aspect) { viewer.window = $0 })
@@ -71,6 +84,10 @@ struct ContentView: View {
             openWindow(id: action)
         }
         #endif
+    }
+
+    private var showsControls: Bool {
+        app.prefs.showControlsOnHover && viewer.controlsVisible
     }
 
     private enum Overlay: Equatable {

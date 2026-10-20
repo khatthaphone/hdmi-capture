@@ -192,6 +192,7 @@ private struct WindowSettingsPage: View {
                 Toggle("Float on top", isOn: $app.prefs.floatOnTop)
                 Toggle("Show on all Spaces", isOn: $app.prefs.allSpaces)
                 Toggle("Clean mode (hide window buttons)", isOn: $app.prefs.cleanMode)
+                Toggle("Show controls when the pointer nears the bottom edge", isOn: $app.prefs.showControlsOnHover)
                 Toggle("Show stats", isOn: $app.prefs.showStats)
             }
             Section {

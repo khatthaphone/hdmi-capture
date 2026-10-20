@@ -144,7 +144,7 @@ Data flow: `DeviceCatalog` → selected device → `CaptureEngine` (session queu
 
 ## 11. Feature expansion (from competitor research)
 
-Priority order. Details and acceptance criteria are in `docs/tasks/031`–`046`.
+Priority order. Details and acceptance criteria are in `docs/tasks/031`–`048`.
 
 1. Audio pipeline: delay (0–500 ms), L/R swap, mono fix, output routing, meters (031)
 2. Signal status: no-signal/HDCP detection, hold last frame, requested vs actual mode (032)
@@ -156,3 +156,4 @@ Priority order. Details and acceptance criteria are in `docs/tasks/031`–`046`.
 8. Console profiles (037)
 9. Virtual camera (Pro, 026), replay buffer (Pro, 038), direct streaming (Pro, 046)
 10. Monitoring: test patterns and guides (039), scopes (040), LUTs (041)
+11. Hover control bar near the bottom edge: input/profiles, volume, screenshot, Save Recent, Go Live, Record, view options (047; custom glyphs 048). It is a window overlay only and never part of recordings or streams.

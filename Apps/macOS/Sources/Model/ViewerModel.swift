@@ -51,6 +51,16 @@ final class ViewerModel {
     private(set) var toast: String?
     /// More than a couple of dropped frames per second (often shared USB 2.0 bandwidth).
     private(set) var isDroppingFrames = false
+    /// The hover control bar is showing (cursor near the bottom edge, over the bar, or in one of its menus).
+    private(set) var controlsVisible = false
+    /// QA: keep the control bar on screen.
+    var controlsPinned = false {
+        didSet { updateControls() }
+    }
+    /// The cursor is over the control bar itself.
+    var controlsHovered = false {
+        didSet { if controlsHovered != oldValue { updateControls() } }
+    }
 
     /// A generated test pattern shown instead of the live picture.
     var testPattern: TestPattern? {
@@ -66,6 +76,10 @@ final class ViewerModel {
     @ObservationIgnored private var lastStatsSample: CFTimeInterval = 0
     @ObservationIgnored private var lastSample: (stats: CaptureStats, presented: UInt64, time: CFTimeInterval)?
     @ObservationIgnored private var keyObserver: NSObjectProtocol?
+    @ObservationIgnored private var pointerNearBottom = false
+    @ObservationIgnored private var menuOpen = false
+    @ObservationIgnored private var hideControlsTask: Task<Void, Never>?
+    @ObservationIgnored private var menuObservers: [NSObjectProtocol] = []
 
     init(app: AppModel, source: Source) {
         self.app = app
@@ -77,6 +91,17 @@ final class ViewerModel {
     func activate() {
         app.register(self)
         sync()
+        if menuObservers.isEmpty {
+            // A menu opened from the control bar runs its own event loop; keep the bar up until it closes.
+            menuObservers = [NSMenu.didBeginTrackingNotification, NSMenu.didEndTrackingNotification].map { name in
+                NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated {
+                        self?.menuOpen = name == NSMenu.didBeginTrackingNotification
+                        self?.updateControls()
+                    }
+                }
+            }
+        }
         guard timer == nil else { return }
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -91,6 +116,8 @@ final class ViewerModel {
     func deactivate() {
         timer?.invalidate()
         timer = nil
+        menuObservers.forEach(NotificationCenter.default.removeObserver)
+        menuObservers = []
         if let renderer, let attachedID { app.sessions[attachedID]?.detach(renderer) }
         attachedID = nil
         app.unregister(self)
@@ -240,6 +267,32 @@ final class ViewerModel {
             return
         }
         session.toggleRecording()
+    }
+
+    /// Pointer position from the video view: distance from the bottom edge, or nil when it left the view.
+    func pointerMoved(fromBottom: CGFloat?, height: CGFloat) {
+        let near = fromBottom.map { $0 <= max(110, height * 0.25) } ?? false
+        guard near != pointerNearBottom else { return }
+        pointerNearBottom = near
+        updateControls()
+    }
+
+    /// Shows the bar while something holds it; hides it 2 s after the last reason goes away.
+    /// An open menu only keeps an already visible bar up (menu-bar menus must not summon it).
+    private func updateControls() {
+        let hold = pointerNearBottom || controlsHovered || controlsPinned || (controlsVisible && menuOpen)
+        if hold {
+            hideControlsTask?.cancel()
+            hideControlsTask = nil
+            if !controlsVisible { controlsVisible = true }
+        } else if controlsVisible, hideControlsTask == nil {
+            hideControlsTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled, let self else { return }
+                self.hideControlsTask = nil
+                self.controlsVisible = false
+            }
+        }
     }
 
     func showToast(_ message: String) {

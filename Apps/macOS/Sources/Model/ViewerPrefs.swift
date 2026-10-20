@@ -21,6 +21,8 @@ struct ViewerPrefs: Codable, Equatable {
     var recentEnabled = false
     var recentMinutes = 15
     var stream = StreamSettings()
+    /// Floating control bar when the cursor nears the bottom edge of a viewer window.
+    var showControlsOnHover = true
 
     init() {}
 
@@ -42,5 +44,6 @@ struct ViewerPrefs: Codable, Equatable {
         recentEnabled = try c.decodeIfPresent(Bool.self, forKey: .recentEnabled) ?? d.recentEnabled
         recentMinutes = try c.decodeIfPresent(Int.self, forKey: .recentMinutes) ?? d.recentMinutes
         stream = try c.decodeIfPresent(StreamSettings.self, forKey: .stream) ?? d.stream
+        showControlsOnHover = try c.decodeIfPresent(Bool.self, forKey: .showControlsOnHover) ?? d.showControlsOnHover
     }
 }

@@ -11,6 +11,12 @@ final class MetalLayerView: NSView {
     var onClick: (() -> Void)?
     /// Fade the window buttons with the cursor (off in clean mode, where they stay hidden).
     var autoHidesWindowButtons = true
+    /// Pointer distance from the bottom edge (nil when it leaves the view) and the view height.
+    var onPointer: ((CGFloat?, CGFloat) -> Void)?
+    /// While true (control bar showing) the cursor and window buttons don't auto-hide.
+    var keepsChromeVisible = false {
+        didSet { if keepsChromeVisible != oldValue { scheduleCursorHide() } }
+    }
     private var hideCursor: DispatchWorkItem?
     private var occlusionObserver: NSObjectProtocol?
     private var trackingArea: NSTrackingArea?
@@ -82,15 +88,23 @@ final class MetalLayerView: NSView {
     override func mouseMoved(with event: NSEvent) {
         setWindowButtonsVisible(true)
         scheduleCursorHide()
+        reportPointer(event)
     }
 
     override func mouseEntered(with event: NSEvent) {
         setWindowButtonsVisible(true)
         scheduleCursorHide()
+        reportPointer(event)
     }
 
     override func mouseExited(with event: NSEvent) {
         hideCursor?.cancel()
+        onPointer?(nil, bounds.height)
+    }
+
+    private func reportPointer(_ event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        onPointer?(isFlipped ? bounds.height - point.y : point.y, bounds.height)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -115,6 +129,7 @@ final class MetalLayerView: NSView {
 
     private func scheduleCursorHide() {
         hideCursor?.cancel()
+        guard !keepsChromeVisible else { return }
         let work = DispatchWorkItem { [weak self] in
             NSCursor.setHiddenUntilMouseMoves(true)
             self?.setWindowButtonsVisible(false)
@@ -127,7 +142,9 @@ final class MetalLayerView: NSView {
 struct MetalPreview: NSViewRepresentable {
     let renderer: MetalRenderer
     var autoHidesWindowButtons = true
+    var keepsChromeVisible = false
     var onClick: (() -> Void)?
+    var onPointer: ((CGFloat?, CGFloat) -> Void)?
     let onDoubleClick: () -> Void
 
     func makeNSView(context: Context) -> MetalLayerView {
@@ -135,6 +152,8 @@ struct MetalPreview: NSViewRepresentable {
         view.onDoubleClick = onDoubleClick
         view.onClick = onClick
         view.autoHidesWindowButtons = autoHidesWindowButtons
+        view.keepsChromeVisible = keepsChromeVisible
+        view.onPointer = onPointer
         return view
     }
 
@@ -142,5 +161,7 @@ struct MetalPreview: NSViewRepresentable {
         view.onDoubleClick = onDoubleClick
         view.onClick = onClick
         view.autoHidesWindowButtons = autoHidesWindowButtons
+        view.keepsChromeVisible = keepsChromeVisible
+        view.onPointer = onPointer
     }
 }

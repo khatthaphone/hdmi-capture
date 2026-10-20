@@ -329,6 +329,8 @@ final class AppModel {
             viewer.testPattern = TestPattern(rawValue: name)
         }
         #if DEBUG
+        // `-qaPinControls YES` keeps the hover control bar on screen (combine with record3s etc.).
+        if UserDefaults.standard.bool(forKey: "qaPinControls") { viewer.controlsPinned = true }
         guard let action = UserDefaults.standard.string(forKey: "qaAction") else { return }
         Task {
             try? await Task.sleep(for: .seconds(1.5))
