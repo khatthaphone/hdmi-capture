@@ -22,7 +22,7 @@ extension ProFeature {
     }
 
     /// Pro features that are built so far; the rest show "coming soon" once unlocked.
-    static let available: Set<ProFeature> = [.recording]
+    static let available: Set<ProFeature> = [.recording, .replayBuffer]
 }
 
 /// One-time upgrade sheet. Never shown unless the user picks a Pro feature or opens it.
@@ -115,6 +115,17 @@ struct ProSettingsView: View {
                 ForEach(ProFeature.allCases, id: \.self) { feature in
                     Label(feature.title, systemImage: feature.symbol)
                 }
+            }
+            Section("Instant replay") {
+                Toggle("Keep the last moments in memory", isOn: Binding(
+                    get: { app.prefs.replayEnabled && store.isUnlocked(.replayBuffer) },
+                    set: { on in if !on || store.gate(.replayBuffer) { app.prefs.replayEnabled = on } }
+                ))
+                Picker("Length", selection: $app.prefs.replaySeconds) {
+                    ForEach([15.0, 30, 60, 120], id: \.self) { Text("\(Int($0)) seconds").tag($0) }
+                }
+                Text("Save with ⇧⌘R. Uses about 2 MB per second at 1080p60.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Recording") {
                 Picker("Codec", selection: $app.prefs.recordingCodec) {

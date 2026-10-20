@@ -47,6 +47,7 @@ final class DeviceSession {
     @ObservationIgnored let engine = CaptureEngine()
     @ObservationIgnored let signalMonitor = SignalMonitor()
     @ObservationIgnored let recorder = Recorder()
+    @ObservationIgnored let replay = ReplayBuffer()
     @ObservationIgnored private let store: PresetStore
     @ObservationIgnored private var runningConfig: CaptureEngine.Config?
     @ObservationIgnored private var recordingSize: (width: Int, height: Int)?
@@ -65,6 +66,8 @@ final class DeviceSession {
         engine.addSink(signalMonitor)
         engine.addSink(recorder)
         engine.addAudioSink(recorder)
+        engine.addSink(replay)
+        engine.addAudioSink(replay)
         engine.stateHandler = { [weak self] state in
             MainActor.assumeIsolated { self?.apply(state) }
         }
@@ -191,6 +194,33 @@ final class DeviceSession {
         }
     }
 
+    // MARK: Instant replay (Pro — callers go through EntitlementStore.gate)
+
+    func configureReplay(enabled: Bool, seconds: Double) {
+        replay.duration = seconds
+        if replay.isEnabled != enabled { replay.isEnabled = enabled }
+    }
+
+    func saveReplay() {
+        guard replay.isEnabled else {
+            onMessage?("Turn on Instant Replay first (Pro menu)")
+            return
+        }
+        let folder = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("HDMI Captain", isDirectory: true)
+        let url = ReplayBuffer.fileURL(in: folder)
+        let seconds = Int(replay.bufferedSeconds.rounded())
+        Task {
+            do {
+                try await replay.save(to: url)
+                lastRecordingURL = url
+                onMessage?("Saved \(seconds) s replay")
+            } catch {
+                onMessage?("Replay not saved: \(error.localizedDescription)")
+            }
+        }
+    }
+
     // MARK: Profiles
 
     func applyProfile(_ profile: Profile) {
@@ -267,6 +297,7 @@ final class DeviceSession {
         case let .connecting(name):
             state = .connecting(name)
         case let .live(info):
+            replay.setFrameRate(info.frameRate)
             // A new mode mid-recording would corrupt the track; close the file instead.
             if let size = recordingSize, size != (info.format.width, info.format.height) {
                 stopRecording(reason: "Recording stopped: the video mode changed")

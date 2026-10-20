@@ -282,6 +282,13 @@ struct ProCommands: Commands {
             let recording = app.currentViewer?.session?.isRecording ?? false
             item(.recording, recording ? "Stop Recording" : "Start Recording", key: "r", modifiers: .command)
             Button("Show Recordings in Finder") { app.showRecordingsInFinder() }
+            Toggle(isOn: Binding(
+                get: { app.prefs.replayEnabled && store.isUnlocked(.replayBuffer) },
+                set: { on in if !on || store.gate(.replayBuffer) { app.prefs.replayEnabled = on } }
+            )) {
+                Label("Instant Replay Buffer (\(Int(app.prefs.replaySeconds)) s)",
+                      systemImage: store.isUnlocked(.replayBuffer) ? "gobackward" : "lock.fill")
+            }
             item(.replayBuffer, "Save Instant Replay", key: "r", modifiers: [.command, .shift])
             item(.streaming, "Go Live…", key: "l", modifiers: [.command, .shift])
             item(.virtualCamera, "Virtual Camera", key: nil, modifiers: [])
@@ -300,6 +307,7 @@ struct ProCommands: Commands {
             guard store.gate(feature) else { return }
             switch feature {
             case .recording: app.currentViewer?.toggleRecording()
+            case .replayBuffer: app.currentViewer?.session?.saveReplay()
             default: break
             }
         } label: {

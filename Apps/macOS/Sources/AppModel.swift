@@ -30,6 +30,9 @@ final class AppModel {
             if prefs.menuBarOnly != oldValue.menuBarOnly || prefs.showMenuBarItem != oldValue.showMenuBarItem {
                 applyActivationPolicy()
             }
+            if prefs.replayEnabled != oldValue.replayEnabled || prefs.replaySeconds != oldValue.replaySeconds {
+                sessions.values.forEach { $0.configureReplay(enabled: prefs.replayEnabled, seconds: prefs.replaySeconds) }
+            }
         }
     }
 
@@ -247,6 +250,7 @@ final class AppModel {
         session.onNeedsReconcile = { [weak self] in self?.reconcile() }
         session.onMessage = { [weak self] message in self?.broadcast(message, about: device.id) }
         session.recordingCodec = { [weak self] in self?.prefs.recordingCodec ?? .hevc }
+        session.configureReplay(enabled: prefs.replayEnabled, seconds: prefs.replaySeconds)
         return session
     }
 
