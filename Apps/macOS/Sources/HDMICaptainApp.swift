@@ -43,6 +43,13 @@ struct HDMICaptainApp: App {
         .defaultSize(width: 960, height: 540)
         .windowStyle(.hiddenTitleBar)
 
+        Window("Multi-View", id: "grid") {
+            MultiViewGrid()
+                .environment(app)
+                .environment(store)
+        }
+        .defaultSize(width: 1280, height: 720)
+
         MenuBarExtra("HDMI Captain", systemImage: "rectangle.inset.filled.on.rectangle", isInserted: $app.prefs.showMenuBarItem) {
             MenuBarPanel()
                 .environment(app)
@@ -112,6 +119,8 @@ private struct CardWindowMenu: View {
             }
         }
         .disabled(app.catalog.videoDevices.isEmpty)
+        Button("Multi-View") { openWindow(id: "grid") }
+            .keyboardShortcut("g", modifiers: [.command, .option])
     }
 }
 

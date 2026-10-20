@@ -7,6 +7,8 @@ import SwiftUI
 final class MetalLayerView: NSView {
     private let renderer: MetalRenderer
     var onDoubleClick: (() -> Void)?
+    /// When set, a single click calls this instead of dragging the window (grid tiles).
+    var onClick: (() -> Void)?
     /// Fade the window buttons with the cursor (off in clean mode, where they stay hidden).
     var autoHidesWindowButtons = true
     private var hideCursor: DispatchWorkItem?
@@ -94,6 +96,8 @@ final class MetalLayerView: NSView {
     override func mouseDown(with event: NSEvent) {
         if event.clickCount == 2 {
             onDoubleClick?()
+        } else if let onClick {
+            onClick()
         } else {
             window?.performDrag(with: event)
         }
@@ -123,17 +127,20 @@ final class MetalLayerView: NSView {
 struct MetalPreview: NSViewRepresentable {
     let renderer: MetalRenderer
     var autoHidesWindowButtons = true
+    var onClick: (() -> Void)?
     let onDoubleClick: () -> Void
 
     func makeNSView(context: Context) -> MetalLayerView {
         let view = MetalLayerView(renderer: renderer)
         view.onDoubleClick = onDoubleClick
+        view.onClick = onClick
         view.autoHidesWindowButtons = autoHidesWindowButtons
         return view
     }
 
     func updateNSView(_ view: MetalLayerView, context: Context) {
         view.onDoubleClick = onDoubleClick
+        view.onClick = onClick
         view.autoHidesWindowButtons = autoHidesWindowButtons
     }
 }

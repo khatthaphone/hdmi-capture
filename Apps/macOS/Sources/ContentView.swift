@@ -59,6 +59,11 @@ struct ContentView: View {
             try? await Task.sleep(for: .seconds(2))
             app.catalog.videoDevices.forEach { openWindow(id: "card", value: $0.id) }
         }
+        .task {
+            guard viewer.source == .automatic, UserDefaults.standard.string(forKey: "qaAction") == "grid" else { return }
+            try? await Task.sleep(for: .seconds(2))
+            openWindow(id: "grid")
+        }
         #endif
     }
 

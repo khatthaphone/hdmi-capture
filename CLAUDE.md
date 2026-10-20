@@ -20,7 +20,7 @@ Native HDMI-capture viewer for macOS (iPadOS/Android/Windows later; mini-OBS lat
 ## Testing without hardware
 
 - `open "<app>" --args -testPattern smpteBars|fullBars|grid|grayRamp` starts on a generated pattern.
-- DEBUG builds: `--args -qaAction screenshot|copy|actualPixels|size50|record3s|openCards` (record3s needs a live device; openCards opens a window per card) runs the action 1.5 s after launch.
+- DEBUG builds: `--args -qaAction screenshot|copy|actualPixels|size50|record3s|openCards|grid` (record3s needs a live device; openCards opens a window per card; grid opens Multi-View) runs the action 1.5 s after launch.
 - Window screenshot: get the window id via `CGWindowListCopyWindowInfo` (owner "HDMI Captain", layer 0), then run `screencapture -o -x -l <id> out.png`.
 - `make test-app` runs hosted tests: StoreKit, against `Apps/macOS/HDMICaptain.storekit`.
 

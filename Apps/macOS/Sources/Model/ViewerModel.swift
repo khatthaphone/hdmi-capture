@@ -47,6 +47,8 @@ final class ViewerModel {
     private(set) var hasFrame = false
     /// Short confirmation shown at the bottom of the view.
     private(set) var toast: String?
+    /// More than a couple of dropped frames per second (often shared USB 2.0 bandwidth).
+    private(set) var isDroppingFrames = false
 
     /// A generated test pattern shown instead of the live picture.
     var testPattern: TestPattern? {
@@ -283,8 +285,11 @@ final class ViewerModel {
         let current = session.currentStats()
         let presented = renderer?.presentedFrames ?? 0
         defer { lastSample = (current, presented, now) }
-        guard app.prefs.showStats, let last = lastSample, now > last.time else { return }
+        guard let last = lastSample, now > last.time else { return }
         let dt = now - last.time
+        let dropping = Double(current.framesDropped &- last.stats.framesDropped) / dt > 2
+        if dropping != isDroppingFrames { isDroppingFrames = dropping }
+        guard app.prefs.showStats else { return }
         stats = Stats(
             inputFPS: Double(current.framesReceived &- last.stats.framesReceived) / dt,
             renderFPS: Double(presented &- last.presented) / dt,
