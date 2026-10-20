@@ -54,9 +54,11 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
     private let sessionQueue = DispatchQueue(label: "hdmicaptain.session")
     private let videoQueue = DispatchQueue(label: "hdmicaptain.video", qos: .userInteractive)
     private let videoOutput = AVCaptureVideoDataOutput()
-    #if os(macOS)
-    private let audioPreview = AVCaptureAudioPreviewOutput()
-    #endif
+    private let audioQueue = DispatchQueue(label: "hdmicaptain.audio", qos: .userInteractive)
+    private let audioOutput = AVCaptureAudioDataOutput()
+
+    /// HDMI audio playback (delay, channel mapping, output device, meters).
+    public let audio = AudioPipeline()
 
     // Session-queue state.
     private var desired: Config?
@@ -65,7 +67,6 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
     private var restartAttempt = 0
     private var activity: NSObjectProtocol?
     private var watchdog: DispatchSourceTimer?
-    private var volume: Float = 1
 
     // Shared with the video queue.
     private let lock = NSLock()
@@ -85,6 +86,10 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
             kCVPixelBufferMetalCompatibilityKey as String: true,
         ]
         videoOutput.setSampleBufferDelegate(self, queue: videoQueue)
+        #if os(macOS)
+        audioOutput.audioSettings = AudioPipeline.captureSettings
+        #endif
+        audioOutput.setSampleBufferDelegate(self, queue: audioQueue)
 
         let center = NotificationCenter.default
         center.addObserver(self, selector: #selector(runtimeError(_:)), name: AVCaptureSession.runtimeErrorNotification, object: session)
@@ -131,15 +136,6 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
         }
     }
 
-    public func setVolume(_ value: Float) {
-        sessionQueue.async { [self] in
-            volume = value
-            #if os(macOS)
-            audioPreview.volume = value
-            #endif
-        }
-    }
-
     public func currentStats() -> CaptureStats {
         lock.withLock { stats }
     }
@@ -177,19 +173,22 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
         }
 
         var audioName: String?
-        #if os(macOS)
         if let audioID = config.audioDeviceID, let audioDevice = AVCaptureDevice(uniqueID: audioID),
            let input = try? AVCaptureDeviceInput(device: audioDevice), session.canAddInput(input) {
             session.addInput(input)
             audioName = audioDevice.localizedName
-            if !session.outputs.contains(audioPreview), session.canAddOutput(audioPreview) {
-                session.addOutput(audioPreview)
+            if !session.outputs.contains(audioOutput), session.canAddOutput(audioOutput) {
+                session.addOutput(audioOutput)
             }
-            audioPreview.volume = volume
-        } else if config.audioDeviceID != nil {
-            Self.log.error("Audio device unavailable; continuing with video only")
+            let description = audioDevice.activeFormat.formatDescription
+            let channels = CMAudioFormatDescriptionGetStreamBasicDescription(description).map { Int($0.pointee.mChannelsPerFrame) } ?? 2
+            audio.start(sourceChannels: channels)
+        } else {
+            if config.audioDeviceID != nil {
+                Self.log.error("Audio device unavailable; continuing with video only")
+            }
+            audio.stop()
         }
-        #endif
 
         // Holding the device lock through startRunning stops the session from resetting
         // activeFormat back to its preset (macOS behaviour).
@@ -237,6 +236,7 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
 
     private func teardown() {
         lock.withLock { pendingLive = nil }
+        audio.stop()
         watchdog?.cancel()
         watchdog = nil
         if session.isRunning { session.stopRunning() }
@@ -339,8 +339,12 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
     }
 }
 
-extension CaptureEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
+extension CaptureEngine: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        if output === audioOutput {
+            audio.enqueue(sampleBuffer)
+            return
+        }
         let (targets, becameLive): ([FrameSink], LiveInfo?) = lock.withLock {
             stats.framesReceived += 1
             stats.lastFrameTime = CACurrentMediaTime()

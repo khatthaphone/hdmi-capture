@@ -85,7 +85,7 @@ private struct StatsOverlay: View {
                     Text("frames \(Int(size.width))×\(Int(size.height))")
                 }
                 Text("in \(model.stats.inputFPS, specifier: "%.1f") fps · out \(model.stats.renderFPS, specifier: "%.1f") fps · dropped \(model.stats.dropped)")
-                Text("audio: \(info.audioDeviceName ?? "none")\(model.preset.muted ? " (muted)" : "")")
+                Text("audio: \(info.audioDeviceName ?? "none")\(model.preset.muted ? " (muted)" : "") · delay \(model.preset.audioDelayMs) ms")
             }
             .font(.system(size: 11, design: .monospaced))
             .foregroundStyle(.white)

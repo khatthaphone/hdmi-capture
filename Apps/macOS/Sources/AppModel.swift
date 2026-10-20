@@ -86,6 +86,15 @@ final class AppModel {
         FormatSelector.options(from: formats)
     }
 
+    /// Polled by meters; reading doesn't trigger SwiftUI observation.
+    func audioLevels() -> AudioLevels {
+        engine.audio.currentLevels()
+    }
+
+    func outputDevices() -> [AudioOutputDevice] {
+        AudioDevices.outputDevices()
+    }
+
     init() {
         prefs = Self.loadPrefs()
         catalog = DeviceCatalog(provider: AVDeviceProvider(), includeNonExternalCameras: Self.loadPrefs().includeNonExternalCameras)
@@ -213,7 +222,13 @@ final class AppModel {
 
     private func applyOutputSettings() {
         renderer?.setOptions(RenderOptions(scale: preset.scale, filter: preset.filter, colorRange: preset.colorRange))
-        engine.setVolume(preset.muted ? 0 : preset.volume)
+        engine.audio.update(AudioPipeline.Settings(
+            delayMs: preset.audioDelayMs,
+            channelMode: preset.channelMode,
+            volume: preset.volume,
+            muted: preset.muted,
+            outputDeviceUID: preset.outputDeviceUID
+        ))
     }
 
     private func apply(_ state: CaptureState) {

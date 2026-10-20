@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
+    @State private var outputDevices: [AudioOutputDevice] = []
 
     var body: some View {
         @Bindable var model = model
@@ -47,8 +48,24 @@ struct SettingsView: View {
             .disabled(model.selectedVideoID == nil)
 
             Section("Sound") {
+                Picker("Output", selection: $model.preset.outputDeviceUID) {
+                    Text("System default").tag(String?.none)
+                    Divider()
+                    ForEach(outputDevices) { Text($0.name).tag(Optional($0.id)) }
+                }
                 Slider(value: $model.preset.volume, in: 0...1) { Text("Volume") }
                 Toggle("Mute", isOn: $model.preset.muted)
+                LabeledContent("Level") { LevelMeter() }
+                Slider(
+                    value: Binding(get: { Double(model.preset.audioDelayMs) }, set: { model.preset.audioDelayMs = Int($0) }),
+                    in: 0...500, step: 10
+                ) {
+                    Text("Audio delay \(model.preset.audioDelayMs) ms").monospacedDigit()
+                }
+                .help("Delay the sound to line it up with the picture.")
+                Picker("Channels", selection: $model.preset.channelMode) {
+                    ForEach(ChannelMode.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
             }
             .disabled(model.selectedVideoID == nil)
 
@@ -61,6 +78,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear { outputDevices = model.outputDevices() }
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -80,5 +98,53 @@ extension ScaleMode {
         case .stretch: "Stretch"
         case .integer: "Integer (pixel-perfect)"
         }
+    }
+}
+
+extension ChannelMode {
+    var title: String {
+        switch self {
+        case .auto: "Automatic"
+        case .normal: "Stereo"
+        case .swap: "Swap left and right"
+        case .leftToBoth: "Left to both"
+        case .rightToBoth: "Right to both"
+        case .mono: "Mono mix"
+        }
+    }
+}
+
+/// Two horizontal peak/RMS bars, polled at 20 Hz.
+struct LevelMeter: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.05)) { _ in
+            let levels = model.audioLevels()
+            VStack(spacing: 3) {
+                bar(rms: levels.rms.x, peak: levels.peak.x)
+                bar(rms: levels.rms.y, peak: levels.peak.y)
+            }
+            .frame(width: 180)
+            .help(String(format: "Buffered %.0f ms", levels.bufferedMs))
+        }
+    }
+
+    private func bar(rms: Float, peak: Float) -> some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(.quaternary)
+                Capsule().fill(.green.gradient).frame(width: geo.size.width * CGFloat(Self.scale(rms)))
+                Rectangle().fill(peak > 0.98 ? .red : .primary).frame(width: 2)
+                    .offset(x: geo.size.width * CGFloat(Self.scale(peak)) - 1)
+            }
+        }
+        .frame(height: 5)
+    }
+
+    /// Maps linear amplitude to a 60 dB meter.
+    static func scale(_ value: Float) -> Float {
+        guard value > 0 else { return 0 }
+        return max(0, min(1, (20 * log10(value) + 60) / 60))
     }
 }

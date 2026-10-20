@@ -15,6 +15,10 @@ public struct DevicePreset: Codable, Equatable, Sendable {
     public var scale: ScaleMode = .fit
     public var filter: FilterMode = .linear
     public var colorRange: ColorRange = .auto
+    public var audioDelayMs = 0
+    public var channelMode: ChannelMode = .auto
+    /// Core Audio output device UID; nil = system default.
+    public var outputDeviceUID: String?
 
     public init() {}
 
@@ -29,6 +33,9 @@ public struct DevicePreset: Codable, Equatable, Sendable {
         scale = try c.decodeIfPresent(ScaleMode.self, forKey: .scale) ?? defaults.scale
         filter = try c.decodeIfPresent(FilterMode.self, forKey: .filter) ?? defaults.filter
         colorRange = try c.decodeIfPresent(ColorRange.self, forKey: .colorRange) ?? defaults.colorRange
+        audioDelayMs = try c.decodeIfPresent(Int.self, forKey: .audioDelayMs) ?? defaults.audioDelayMs
+        channelMode = try c.decodeIfPresent(ChannelMode.self, forKey: .channelMode) ?? defaults.channelMode
+        outputDeviceUID = try c.decodeIfPresent(String.self, forKey: .outputDeviceUID)
     }
 }
 
