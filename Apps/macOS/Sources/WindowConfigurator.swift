@@ -25,8 +25,21 @@ struct WindowConfigurator: NSViewRepresentable {
 
     final class Coordinator {
         private var appliedAspect: CGSize?
+        private var fullScreenObserver: NSObjectProtocol?
+        private var last: (prefs: ViewerPrefs, aspect: CGSize?)?
 
         func apply(prefs: ViewerPrefs, aspect: CGSize?, to window: NSWindow) {
+            last = (prefs, aspect)
+            if fullScreenObserver == nil {
+                // Leaving full screen can drop the aspect constraint; put it back.
+                fullScreenObserver = NotificationCenter.default.addObserver(
+                    forName: NSWindow.didExitFullScreenNotification, object: window, queue: .main
+                ) { [weak self, weak window] _ in
+                    guard let self, let window, let last = self.last else { return }
+                    self.appliedAspect = nil
+                    self.apply(prefs: last.prefs, aspect: last.aspect, to: window)
+                }
+            }
             window.backgroundColor = .black
             window.isMovableByWindowBackground = true
             window.level = prefs.floatOnTop ? .floating : .normal

@@ -193,15 +193,22 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
         // Holding the device lock through startRunning stops the session from resetting
         // activeFormat back to its preset (macOS behaviour).
         var locked = false
+        var applied: (format: AVCaptureDevice.Format, duration: CMTime)?
         do {
             try device.lockForConfiguration()
             locked = true
-            apply(config.format, to: device)
+            applied = apply(config.format, to: device)
         } catch {
             Self.log.error("lockForConfiguration failed: \(error.localizedDescription, privacy: .public)")
         }
         session.commitConfiguration()
         session.startRunning()
+        // Some UVC drivers reset format/frame rate when the session starts (seen by Consolation);
+        // verify and re-apply while we still hold the lock.
+        if locked, let applied, device.activeFormat != applied.format || device.activeVideoMinFrameDuration != applied.duration {
+            Self.log.info("Format changed by driver on start; re-applying")
+            apply(config.format, to: device)
+        }
         if locked { device.unlockForConfiguration() }
 
         guard session.isRunning else {
@@ -220,9 +227,11 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
         }
     }
 
-    private func apply(_ preference: FormatPreference, to device: AVCaptureDevice) {
+    /// Returns the chosen format (to verify after start), or nil if nothing was applied.
+    @discardableResult
+    private func apply(_ preference: FormatPreference, to device: AVCaptureDevice) -> (format: AVCaptureDevice.Format, duration: CMTime)? {
         let descriptors = device.formats.map(FormatDescriptor.init)
-        guard let choice = FormatSelector.select(from: descriptors, preference: preference) else { return }
+        guard let choice = FormatSelector.select(from: descriptors, preference: preference) else { return nil }
         let format = device.formats[choice.index]
         device.activeFormat = format
         let ranges = format.videoSupportedFrameRateRanges
@@ -232,6 +241,7 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
         if ranges.contains(where: { duration >= $0.minFrameDuration && duration <= $0.maxFrameDuration }) {
             device.activeVideoMinFrameDuration = duration
         }
+        return (format, duration)
     }
 
     private func teardown() {
