@@ -1,6 +1,6 @@
 # HDMI Captain — Product & Technical Spec
 
-_Status: draft v0.1 · 2026-10-20_
+_Status: draft v0.2 · 2026-10-20 (v0.1 MVP running; feature expansion + pricing added)_
 
 ## 1. Problem
 
@@ -112,6 +112,8 @@ Data flow: `DeviceCatalog` → selected device → `CaptureEngine` (session queu
 | 4 | Mini-OBS: scene schema, Metal compositor (HDMI, webcam, ScreenCaptureKit, image, text, browser, chroma key), audio mixer, RTMP/SRT via HaishinKit, CoreMediaIO **virtual camera** |
 | 5 | Android: Kotlin/Compose, UVC via USB Host + libuvc (Camera2 external where available), UAC audio, RootEncoder streaming |
 | 6 | Windows: WinUI 3 + Media Foundation `MediaCapture`, D3D11 render, MF/FFmpeg-LGPL encode |
+| 7 | Free viewer features from competitor research (§11) |
+| 8 | Pro unlock (StoreKit 2), Pro features, Mac App Store (§10) |
 
 ## 8. Acceptance tests (macOS v1)
 
@@ -125,4 +127,32 @@ Data flow: `DeviceCatalog` → selected device → `CaptureEngine` (session queu
 
 - App name/bundle ID final (`com.<you>.hdmicaptain` placeholder).
 - Apple Developer account availability for signing/notarization.
-- Monetization (free / paid / freemium for streaming features).
+- ~~Monetization~~ → decided, see §10.
+- Direct (non-App-Store) sales of Pro: possible later through a license-key provider implementing the same `EntitlementProviding` protocol.
+
+## 10. Business model
+
+**Free viewer + one-time "HDMI Captain Pro" unlock** (non-consumable in-app purchase, no subscription). Subscriptions are the most common complaint in competitor reviews (`docs/research/competitors.md`).
+
+| Free (forever, no nags, no time limits) | Pro (one-time) |
+|---|---|
+| Everything a viewer needs: capture, audio, all scaling and color options, signal status, window sizes, menu bar, multi-view, latency test, image adjustments, profiles, test patterns, guides, scopes, LUTs, screenshots | Recording · Instant replay buffer · Streaming (RTMP/SRT) · Virtual camera |
+
+- Gating lives in one place: `ProFeature` + `EntitlementStore` (task 042). Free features never check entitlements.
+- StoreKit 2 requires Mac App Store distribution. Developer ID builds are possible later with a license-key provider.
+- Local development uses a `.storekit` configuration file, so no App Store Connect account is needed until submission (task 045).
+
+## 11. Feature expansion (from competitor research)
+
+Priority order. Details and acceptance criteria are in `docs/tasks/031`–`046`.
+
+1. Audio pipeline: delay (0–500 ms), L/R swap, mono fix, output routing, meters (031)
+2. Signal status: no-signal/HDCP detection, hold last frame, requested vs actual mode (032)
+3. Screenshot (free, 015) and recording (Pro, 016)
+4. Window size presets and menu-bar extra (033)
+5. Multi-view: window per card (018) and grid (034)
+6. Built-in latency test using the Mac's own HDMI output (035)
+7. Image adjustments and presets (036)
+8. Console profiles (037)
+9. Virtual camera (Pro, 026), replay buffer (Pro, 038), direct streaming (Pro, 046)
+10. Monitoring: test patterns and guides (039), scopes (040), LUTs (041)
