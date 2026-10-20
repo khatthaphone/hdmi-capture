@@ -72,6 +72,13 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
     private var restartAttempt = 0
     private var activity: NSObjectProtocol?
     private var watchdog: DispatchSourceTimer?
+    /// What the last frame flow looked like, to resume after an interruption.
+    private var lastLive: LiveInfo?
+    #if os(iOS)
+    /// iPadOS took the camera away (background, Split View…); it gives it back by itself,
+    /// so no restarts while this is set.
+    private var interruption: String?
+    #endif
 
     // Shared with the video queue.
     private let lock = NSLock()
@@ -96,11 +103,19 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
         audioOutput.audioSettings = AudioPipeline.captureSettings
         #endif
         audioOutput.setSampleBufferDelegate(self, queue: audioQueue)
+        #if os(iOS)
+        // We route audio ourselves (task 054); don't let capture reset the app's audio session.
+        session.automaticallyConfiguresApplicationAudioSession = false
+        #endif
 
         let center = NotificationCenter.default
         center.addObserver(self, selector: #selector(runtimeError(_:)), name: AVCaptureSession.runtimeErrorNotification, object: session)
         center.addObserver(self, selector: #selector(didStopRunning(_:)), name: AVCaptureSession.didStopRunningNotification, object: session)
         center.addObserver(self, selector: #selector(deviceDisconnected(_:)), name: AVCaptureDevice.wasDisconnectedNotification, object: nil)
+        #if os(iOS)
+        center.addObserver(self, selector: #selector(wasInterrupted(_:)), name: AVCaptureSession.wasInterruptedNotification, object: session)
+        center.addObserver(self, selector: #selector(interruptionEnded(_:)), name: AVCaptureSession.interruptionEndedNotification, object: session)
+        #endif
     }
 
     deinit {
@@ -191,7 +206,14 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
         }
 
         var audioName: String?
-        if let audioID = config.audioDeviceID, let audioDevice = AVCaptureDevice(uniqueID: audioID),
+        #if os(iOS)
+        // iOS has one shared microphone input that may be the built-in mic; card audio needs
+        // AVAudioSession routing first (task 054). Until then the iPad captures video only.
+        let audioDeviceID: String? = nil
+        #else
+        let audioDeviceID = config.audioDeviceID
+        #endif
+        if let audioID = audioDeviceID, let audioDevice = AVCaptureDevice(uniqueID: audioID),
            let input = try? AVCaptureDeviceInput(device: audioDevice), session.canAddInput(input) {
             session.addInput(input)
             audioName = audioDevice.localizedName
@@ -219,6 +241,13 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
         } catch {
             Self.log.error("lockForConfiguration failed: \(error.localizedDescription, privacy: .public)")
         }
+        #if os(iOS)
+        // Keep video running beside other apps (Split View, Slide Over, Stage Manager) where the iPad allows it.
+        if session.isMultitaskingCameraAccessSupported, !session.isMultitaskingCameraAccessEnabled {
+            session.isMultitaskingCameraAccessEnabled = true
+        }
+        Self.log.info("Multitasking camera access supported: \(self.session.isMultitaskingCameraAccessSupported)")
+        #endif
         session.commitConfiguration()
         session.startRunning()
         // Some UVC drivers reset format/frame rate when the session starts (seen by Consolation);
@@ -276,6 +305,12 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
 
     private func scheduleRestart(reason: String) {
         guard desired != nil else { return }
+        #if os(iOS)
+        if let interruption {
+            Self.log.info("Not restarting (\(reason, privacy: .public)): interrupted — \(interruption, privacy: .public)")
+            return
+        }
+        #endif
         restartAttempt += 1
         let delay = min(0.25 * pow(2, Double(restartAttempt - 1)), 4)
         let scheduled = generation
@@ -367,6 +402,51 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
     }
 }
 
+#if os(iOS)
+extension CaptureEngine {
+    @objc private func wasInterrupted(_ note: Notification) {
+        let raw = note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? Int
+        let reason = raw.flatMap(AVCaptureSession.InterruptionReason.init(rawValue:))
+        let text = switch reason {
+        case .videoDeviceNotAvailableInBackground: "Paused while in the background"
+        case .videoDeviceNotAvailableWithMultipleForegroundApps: "Paused beside other apps (not supported on this iPad)"
+        case .videoDeviceInUseByAnotherClient: "Capture card in use by another app"
+        case .videoDeviceNotAvailableDueToSystemPressure: "Paused: iPad is too hot"
+        default: "Capture interrupted"
+        }
+        sessionQueue.async { [self] in
+            Self.log.info("Interrupted (reason \(raw ?? -1)): \(text, privacy: .public)")
+            interruption = text
+            watchdog?.cancel()
+            watchdog = nil
+            emit(.recovering(reason: text))
+        }
+    }
+
+    @objc private func interruptionEnded(_ note: Notification) {
+        sessionQueue.async { [self] in
+            guard interruption != nil else { return }
+            interruption = nil
+            restartAttempt = 0
+            guard desired != nil else { return }
+            if session.isRunning, let lastLive {
+                // The session resumes by itself; the first frame flips us back to live.
+                Self.log.info("Interruption ended; session resumed")
+                lock.withLock {
+                    stats.lastFrameTime = CACurrentMediaTime()
+                    pendingLive = lastLive
+                }
+                emit(.connecting(deviceName: lastLive.deviceName))
+                startWatchdog()
+            } else {
+                Self.log.info("Interruption ended; restarting session")
+                configureAndRun()
+            }
+        }
+    }
+}
+#endif
+
 extension CaptureEngine: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         if output === audioOutput {
@@ -385,6 +465,7 @@ extension CaptureEngine: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapture
         if let becameLive {
             sessionQueue.async { [self] in
                 Self.log.info("First frame received")
+                lastLive = becameLive
                 emit(.live(becameLive))
             }
         }

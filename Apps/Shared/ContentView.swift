@@ -246,13 +246,14 @@ private struct StatsOverlay: View {
         if let info = viewer.liveInfo {
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(info.deviceName)")
-                Text("requested \(info.format.width)×\(info.format.height) \(info.format.fourCC) @ \(info.frameRate, specifier: "%.2f")")
+                // Verbatim: technical values, not locale-formatted ("1.920×1.080" on some iPads).
+                Text(verbatim: "requested \(info.format.width)×\(info.format.height) \(info.format.fourCC) @ \(String(format: "%.2f", info.frameRate))")
                 if let size = viewer.stats.frameSize {
                     let mismatch = Int(size.width) != info.format.width || Int(size.height) != info.format.height
-                    Text("actual \(Int(size.width))×\(Int(size.height))\(mismatch ? "  ⚠︎ differs" : "")")
+                    Text(verbatim: "actual \(Int(size.width))×\(Int(size.height))\(mismatch ? "  ⚠︎ differs" : "")")
                         .foregroundStyle(mismatch ? .orange : .white)
                 }
-                Text("in \(viewer.stats.inputFPS, specifier: "%.1f") fps · out \(viewer.stats.renderFPS, specifier: "%.1f") fps · dropped \(viewer.stats.dropped)")
+                Text(verbatim: String(format: "in %.1f fps · out %.1f fps · dropped %llu", viewer.stats.inputFPS, viewer.stats.renderFPS, viewer.stats.dropped))
                 if let capture = viewer.stats.captureLatency {
                     let display = viewer.stats.displayLatency
                     Text(String(format: "latency: capture %.0f ms · on screen ≈ %@", capture.averageMs,

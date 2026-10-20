@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.example
   deploymentTarget:
     macOS: "14.0"
+    iOS: "17.0"
   createIntermediateGroups: true
 configFiles:
   Debug: Config/Signing.xcconfig
@@ -22,7 +23,7 @@ targets:
   HDMICaptain:
     type: application
     platform: macOS
-    sources: [Apps/macOS/Sources]
+    sources: [Apps/macOS/Sources, Apps/Shared]
     dependencies:
       - package: CaptureCore
       - package: HaishinKit
@@ -79,3 +80,44 @@ targets:
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/HDMI Captain.app/Contents/MacOS/HDMI Captain
         BUNDLE_LOADER: $(TEST_HOST)
         GENERATE_INFOPLIST_FILE: YES
+  HDMICaptain-iPad:
+    type: application
+    platform: iOS
+    sources: [Apps/iPadOS/Sources, Apps/Shared]
+    dependencies:
+      - package: CaptureCore
+    info:
+      path: Apps/iPadOS/Info.plist
+      properties:
+        CFBundleDisplayName: HDMI Captain
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.utilities
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UIRequiresFullScreen: false
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        NSCameraUseExternalDeviceType: true
+        NSCameraUsageDescription: HDMI Captain shows the video from your HDMI capture device.
+        NSMicrophoneUsageDescription: HDMI Captain plays the audio from your HDMI capture device.
+        NSPhotoLibraryAddUsageDescription: HDMI Captain saves screenshots and recordings to your photo library.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.hdmicaptain
+        PRODUCT_NAME: HDMI Captain
+        PRODUCT_MODULE_NAME: HDMICaptain
+        TARGETED_DEVICE_FAMILY: "2"
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: Apple Development
+    scheme:
+      storeKitConfiguration: Apps/macOS/HDMICaptain.storekit
