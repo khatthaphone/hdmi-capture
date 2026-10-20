@@ -1,6 +1,22 @@
 import CaptureCore
 import SwiftUI
 
+/// A viewer (main window, card window, or the iPad's window) and its model's lifecycle.
+struct ViewerRoot: View {
+    @State private var viewer: ViewerModel
+
+    init(app: AppModel, source: ViewerModel.Source) {
+        _viewer = State(initialValue: ViewerModel(app: app, source: source))
+    }
+
+    var body: some View {
+        ContentView()
+            .environment(viewer)
+            .onAppear { viewer.activate() }
+            .onDisappear { viewer.deactivate() }
+    }
+}
+
 struct ContentView: View {
     @Environment(ViewerModel.self) private var viewer
     @Environment(AppModel.self) private var app
@@ -14,6 +30,7 @@ struct ContentView: View {
                     renderer: renderer,
                     autoHidesWindowButtons: !app.prefs.cleanMode,
                     keepsChromeVisible: showsControls,
+                    onClick: tapAction,
                     onPointer: { viewer.pointerMoved(fromBottom: $0, height: $1) }
                 ) { viewer.toggleFullScreen() }
             }
@@ -38,9 +55,11 @@ struct ContentView: View {
                 if let since = viewer.session?.recordingSince, app.prefs.showRecordingIndicator {
                     RecordingIndicator(since: since)
                 }
+                #if os(macOS)
                 if app.streamer.deviceID != nil, app.streamer.deviceID == viewer.deviceID {
                     StreamIndicator(state: app.streamer.state)
                 }
+                #endif
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             .padding(12)
@@ -69,8 +88,10 @@ struct ContentView: View {
         .animation(showsControls ? .easeOut(duration: 0.15) : .easeIn(duration: 0.3), value: showsControls)
         .ignoresSafeArea()
         .frame(minWidth: 320, minHeight: 180)
+        #if os(macOS)
         .background(WindowConfigurator(prefs: app.prefs, aspect: viewer.aspect) { viewer.window = $0 })
-        #if DEBUG
+        #endif
+        #if DEBUG && os(macOS)
         .task {
             // QA: `-qaAction openCards` opens a window per connected card.
             guard viewer.source == .automatic, UserDefaults.standard.string(forKey: "qaAction") == "openCards" else { return }
@@ -83,6 +104,15 @@ struct ContentView: View {
             try? await Task.sleep(for: .seconds(2))
             openWindow(id: action)
         }
+        #endif
+    }
+
+    /// Mac: a click drags the window. iPad: a tap shows or hides the controls.
+    private var tapAction: (() -> Void)? {
+        #if os(macOS)
+        nil
+        #else
+        { viewer.toggleControls() }
         #endif
     }
 
@@ -303,6 +333,7 @@ private struct RecordingIndicator: View {
     }
 }
 
+#if os(macOS)
 private struct StreamIndicator: View {
     let state: Streamer.State
 
@@ -339,3 +370,4 @@ private struct StreamIndicator: View {
         }
     }
 }
+#endif

@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import CaptureCore
 import Observation
 
@@ -38,9 +42,11 @@ final class ViewerModel {
     let source: Source
     @ObservationIgnored unowned let app: AppModel
     @ObservationIgnored let renderer = MetalRenderer()
+    #if os(macOS)
     @ObservationIgnored weak var window: NSWindow? {
         didSet { if window !== oldValue { observeWindow() } }
     }
+    #endif
 
     private(set) var stats = Stats()
     /// Frames stopped arriving briefly while live; the last frame stays on screen.
@@ -77,12 +83,16 @@ final class ViewerModel {
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var lastStatsSample: CFTimeInterval = 0
     @ObservationIgnored private var lastSample: (stats: CaptureStats, presented: UInt64, time: CFTimeInterval)?
-    @ObservationIgnored private var keyObserver: NSObjectProtocol?
-    @ObservationIgnored private var fullScreenObservers: [NSObjectProtocol] = []
     @ObservationIgnored private var pointerNearBottom = false
     @ObservationIgnored private var menuOpen = false
     @ObservationIgnored private var hideControlsTask: Task<Void, Never>?
+    /// iPad: the bar was summoned by a tap (hides after a few idle seconds).
+    @ObservationIgnored private var tappedOpen = false
+    #if os(macOS)
+    @ObservationIgnored private var keyObserver: NSObjectProtocol?
+    @ObservationIgnored private var fullScreenObservers: [NSObjectProtocol] = []
     @ObservationIgnored private var menuObservers: [NSObjectProtocol] = []
+    #endif
 
     init(app: AppModel, source: Source) {
         self.app = app
@@ -94,6 +104,7 @@ final class ViewerModel {
     func activate() {
         app.register(self)
         sync()
+        #if os(macOS)
         if menuObservers.isEmpty {
             // A menu opened from the control bar runs its own event loop; keep the bar up until it closes.
             menuObservers = [NSMenu.didBeginTrackingNotification, NSMenu.didEndTrackingNotification].map { name in
@@ -105,6 +116,10 @@ final class ViewerModel {
                 }
             }
         }
+        #else
+        // One viewer per iPad window: it is always the active one.
+        app.viewerBecameActive(self)
+        #endif
         guard timer == nil else { return }
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -119,8 +134,10 @@ final class ViewerModel {
     func deactivate() {
         timer?.invalidate()
         timer = nil
+        #if os(macOS)
         menuObservers.forEach(NotificationCenter.default.removeObserver)
         menuObservers = []
+        #endif
         if let renderer, let attachedID { app.sessions[attachedID]?.detach(renderer) }
         attachedID = nil
         app.unregister(self)
@@ -202,6 +219,7 @@ final class ViewerModel {
 
     // MARK: Actions
 
+    #if os(macOS)
     func toggleFullScreen() {
         (window ?? NSApp.keyWindow)?.toggleFullScreen(nil)
     }
@@ -225,6 +243,10 @@ final class ViewerModel {
         }
         window.setFrame(NSRect(origin: origin, size: frame.size), display: true, animate: true)
     }
+    #else
+    /// iPad windows are sized by the system (full screen, Split View, Stage Manager).
+    func toggleFullScreen() {}
+    #endif
 
     /// Saves the current source frame at full resolution to ~/Pictures/HDMI Captain.
     func saveScreenshot() {
@@ -254,9 +276,13 @@ final class ViewerModel {
             showToast("Nothing to copy yet")
             return
         }
+        #if os(macOS)
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.writeObjects([NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))])
+        #else
+        UIPasteboard.general.image = UIImage(cgImage: image)
+        #endif
         showToast("Frame copied")
     }
 
@@ -280,10 +306,32 @@ final class ViewerModel {
         updateControls()
     }
 
+    /// iPad: a tap on the picture shows the bar (or hides it); it hides again after 3 s idle.
+    func toggleControls() {
+        hideControlsTask?.cancel()
+        hideControlsTask = nil
+        tappedOpen = !controlsVisible
+        if !tappedOpen { controlsVisible = false }
+        updateControls()
+    }
+
     /// Shows the bar while something holds it; hides it 2 s after the last reason goes away.
     /// An open menu only keeps an already visible bar up (menu-bar menus must not summon it).
     private func updateControls() {
         let hold = pointerNearBottom || controlsHovered || controlsPinned || (controlsVisible && menuOpen)
+        if tappedOpen, !hold {
+            // Shown by a tap: visible now, hidden after 3 s unless something else holds it.
+            hideControlsTask?.cancel()
+            if !controlsVisible { controlsVisible = true }
+            hideControlsTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled, let self else { return }
+                self.hideControlsTask = nil
+                self.tappedOpen = false
+                self.updateControls()
+            }
+            return
+        }
         if hold {
             hideControlsTask?.cancel()
             hideControlsTask = nil
@@ -310,6 +358,7 @@ final class ViewerModel {
 
     // MARK: Private
 
+    #if os(macOS)
     private func observeWindow() {
         if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
         keyObserver = nil
@@ -330,6 +379,7 @@ final class ViewerModel {
             }
         }
     }
+    #endif
 
     /// Detects short dropouts (before the engine's 3 s stall restart) so the UI can show a banner.
     private func checkFrameFlow() {

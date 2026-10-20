@@ -5,7 +5,9 @@ Native HDMI-capture viewer for macOS (iPadOS/Android/Windows later; mini-OBS lat
 ## Layout
 
 - `Packages/CaptureCore/` — Swift package shared by Apple targets: device discovery (`DeviceCatalog`, `AVDeviceProvider`), pure format choice (`FormatSelector`), `CaptureEngine` (AVCaptureSession + always-on recovery), `MetalRenderer` (CAMetalLayer, YCbCr→RGB shader compiled at runtime from source), `Presets`.
-- `Apps/macOS/Sources/` — SwiftUI shell: `AppModel` (policy/orchestration), `MetalLayerView`, `WindowConfigurator`, `SettingsView`, menu commands in `HDMICaptainApp.swift`.
+- `Apps/Shared/` — app layer compiled into both apps: `AppModel` (policy/orchestration), `ViewerModel`, `DeviceSession`, prefs, Pro store, `ContentView`, `ControlBar`, shared menu items. Platform-only code sits inline in `#if os(macOS)` / `#if os(iOS)`.
+- `Apps/macOS/Sources/` — Mac shell: `MetalLayerView` (NSView), `WindowConfigurator`, `SettingsView`, Multi-View, menu-bar extra, streaming, menu commands in `HDMICaptainApp.swift`.
+- `Apps/iPadOS/Sources/` — iPad shell (iPadOS 17+, USB-C iPads): App struct, `MetalLayerView` (UIView) with the same `MetalPreview` API.
 - `tools/device-inventory/` — CLI that lists capture devices/formats; outputs saved in `docs/research/devices/`.
 - `project.yml` — XcodeGen; `HDMICaptain.xcodeproj` is generated and gitignored.
 

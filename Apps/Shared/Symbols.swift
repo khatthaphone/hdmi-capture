@@ -50,3 +50,29 @@ extension ScaleMode {
         }
     }
 }
+
+// Display names shared by Settings and the menus.
+
+extension ScaleMode {
+    var title: String {
+        switch self {
+        case .fit: "Fit"
+        case .fill: "Fill (crop)"
+        case .stretch: "Stretch"
+        case .integer: "Integer (pixel-perfect)"
+        }
+    }
+}
+
+extension ChannelMode {
+    var title: String {
+        switch self {
+        case .auto: "Automatic"
+        case .normal: "Stereo"
+        case .swap: "Swap left and right"
+        case .leftToBoth: "Left to both"
+        case .rightToBoth: "Right to both"
+        case .mono: "Mono mix"
+        }
+    }
+}

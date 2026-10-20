@@ -256,7 +256,7 @@ final class DeviceSession {
         }
         do {
             _ = try CubeLUT(contentsOf: url) // validate before saving
-            preset.lutBookmark = try url.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess])
+            preset.lutBookmark = try url.bookmarkData(options: Self.bookmarkCreation)
             preset.lutName = url.deletingPathExtension().lastPathComponent
         } catch {
             lutError = error.localizedDescription
@@ -264,13 +264,22 @@ final class DeviceSession {
         }
     }
 
+    // Security-scoped bookmarks are a macOS sandbox concept; iOS bookmarks are scoped implicitly.
+    #if os(macOS)
+    private static let bookmarkCreation: URL.BookmarkCreationOptions = [.withSecurityScope, .securityScopeAllowOnlyReadAccess]
+    private static let bookmarkResolution: URL.BookmarkResolutionOptions = .withSecurityScope
+    #else
+    private static let bookmarkCreation: URL.BookmarkCreationOptions = .minimalBookmark
+    private static let bookmarkResolution: URL.BookmarkResolutionOptions = []
+    #endif
+
     private func loadLUT() {
         lut = nil
         lutError = nil
         guard let bookmark = preset.lutBookmark else { return }
         do {
             var stale = false
-            let url = try URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, bookmarkDataIsStale: &stale)
+            let url = try URL(resolvingBookmarkData: bookmark, options: Self.bookmarkResolution, bookmarkDataIsStale: &stale)
             let accessing = url.startAccessingSecurityScopedResource()
             defer { if accessing { url.stopAccessingSecurityScopedResource() } }
             lut = try CubeLUT(contentsOf: url)

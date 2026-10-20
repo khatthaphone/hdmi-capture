@@ -32,16 +32,20 @@ struct ControlBar: View {
             RecordButton(layout: layout)
             if layout != .minimal {
                 SaveRecentButton(layout: layout)
+                #if os(macOS)
                 if ProFeature.shown.contains(.streaming) {
                     BarDivider()
                     GoLiveButton(layout: layout)
                 }
+                #endif
             }
             BarDivider()
             OptionsMenu(layout: layout)
+            #if os(macOS)
             if layout != .minimal {
                 FullScreenButton()
             }
+            #endif
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 5)
@@ -90,6 +94,7 @@ private struct InputChip: View {
                     }
                 }
             }
+            #if os(macOS)
             if !app.catalog.videoDevices.isEmpty {
                 Menu {
                     ForEach(app.catalog.videoDevices) { device in
@@ -99,6 +104,7 @@ private struct InputChip: View {
                     Label("New Window for", systemImage: Symbol.newWindow)
                 }
             }
+            #endif
             if !app.profiles.isEmpty {
                 Section("Profiles") {
                     ForEach(app.profiles) { profile in
@@ -217,6 +223,7 @@ private struct SaveRecentButton: View {
     }
 }
 
+#if os(macOS)
 private struct GoLiveButton: View {
     let layout: ControlBarLayout
     @Environment(ViewerModel.self) private var viewer
@@ -242,6 +249,7 @@ private struct GoLiveButton: View {
         .help(app.streamer.state.isActive ? "Stop Streaming (⇧⌘L)" : "Go Live (⇧⌘L)")
     }
 }
+#endif
 
 private struct RecordButton: View {
     let layout: ControlBarLayout
@@ -294,10 +302,12 @@ private struct OptionsMenu: View {
             if layout == .minimal {
                 Toggle(isOn: $viewer.preset.muted) { Label("Mute", systemImage: Symbol.mute) }
                 Button { viewer.saveScreenshot() } label: { Label("Save Screenshot", systemImage: Symbol.screenshot) }
+                #if os(macOS)
                 Button { viewer.toggleFullScreen() } label: {
                     Label(viewer.isFullScreen ? "Exit Full Screen" : "Full Screen",
                           systemImage: viewer.isFullScreen ? Symbol.exitFullScreen : Symbol.fullScreen)
                 }
+                #endif
                 Divider()
             }
             Picker(selection: $viewer.preset.scale) {
@@ -315,9 +325,11 @@ private struct OptionsMenu: View {
             Menu { GuideItems(app: app) } label: { Label("Guides", systemImage: Symbol.guides) }
             Divider()
             Toggle(isOn: $app.prefs.showStats) { Label("Show Stats", systemImage: Symbol.stats) }
+            #if os(macOS)
             Toggle(isOn: $app.prefs.floatOnTop) { Label("Float on Top", systemImage: Symbol.floatOnTop) }
             Toggle(isOn: $app.prefs.cleanMode) { Label("Clean Mode", systemImage: Symbol.cleanMode) }
             Button { openWindow(id: "scopes") } label: { Label("Show Scopes", systemImage: Symbol.scopes) }
+            #endif
             Divider()
             Button { viewer.copyFrame() } label: { Label("Copy Frame", systemImage: Symbol.copyFrame) }
         } label: {
@@ -328,6 +340,7 @@ private struct OptionsMenu: View {
     }
 }
 
+#if os(macOS)
 private struct FullScreenButton: View {
     @Environment(ViewerModel.self) private var viewer
 
@@ -339,6 +352,7 @@ private struct FullScreenButton: View {
         .help(viewer.isFullScreen ? "Exit Full Screen (⌘F)" : "Full Screen (⌘F)")
     }
 }
+#endif
 
 // MARK: - Building blocks
 

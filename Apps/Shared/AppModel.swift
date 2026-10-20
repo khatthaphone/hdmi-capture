@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import AVFoundation
 import CaptureCore
 import Observation
@@ -27,19 +31,23 @@ final class AppModel {
         didSet {
             savePrefs()
             catalog.includeNonExternalCameras = prefs.includeNonExternalCameras
+            #if os(macOS)
             if prefs.menuBarOnly != oldValue.menuBarOnly || prefs.showMenuBarItem != oldValue.showMenuBarItem {
                 applyActivationPolicy()
             }
+            #endif
             if prefs.recentEnabled != oldValue.recentEnabled || prefs.recentMinutes != oldValue.recentMinutes {
                 sessions.values.forEach { $0.configureRecent(enabled: prefs.recentEnabled, minutes: prefs.recentMinutes) }
             }
         }
     }
 
+    #if os(macOS)
     /// Live streaming (Pro); one stream at a time.
     let streamer = Streamer()
     /// Drives the Go Live sheet.
     var isShowingStreamSetup = false
+    #endif
 
     /// Built-in and user profiles (refreshed after every change).
     private(set) var profiles: [Profile] = []
@@ -138,6 +146,7 @@ final class AppModel {
         return imported.count
     }
 
+    #if os(macOS)
     // MARK: Streaming (Pro — callers go through EntitlementStore.gate)
 
     static let streamKeyAccount = "default"
@@ -164,6 +173,7 @@ final class AppModel {
     func stopStreaming() {
         Task { await streamer.stop() }
     }
+    #endif
 
     // MARK: Actions
 
@@ -180,11 +190,18 @@ final class AppModel {
     }
 
     func openPrivacySettings() {
+        #if os(macOS)
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
             NSWorkspace.shared.open(url)
         }
+        #else
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+        #endif
     }
 
+    #if os(macOS)
     func outputDevices() -> [AudioOutputDevice] {
         AudioDevices.outputDevices()
     }
@@ -208,6 +225,7 @@ final class AppModel {
 
     /// With a menu-bar item the app keeps running (and capturing) after the window closes.
     var keepsRunningWithoutWindow: Bool { prefs.showMenuBarItem }
+    #endif
 
     // MARK: Permissions
 
@@ -302,8 +320,15 @@ final class AppModel {
     // MARK: System events
 
     private func observeSystemEvents() {
+        #if os(macOS)
         let center = NSWorkspace.shared.notificationCenter
-        for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
+        let names = [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification]
+        #else
+        // Coming back to the foreground: make sure every session is still running.
+        let center = NotificationCenter.default
+        let names = [UIApplication.didBecomeActiveNotification]
+        #endif
+        for name in names {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
                     self?.sessions.values.forEach { $0.revalidate() }
@@ -337,8 +362,10 @@ final class AppModel {
             switch action {
             case "screenshot": viewer.saveScreenshot()
             case "copy": viewer.copyFrame()
+            #if os(macOS)
             case "actualPixels": viewer.setWindowSize(scale: 1, actualPixels: true)
             case "size50": viewer.setWindowSize(scale: 0.5)
+            #endif
             case "fullScreen": viewer.toggleFullScreen()
             case "record3s":
                 viewer.toggleRecording()
@@ -351,6 +378,7 @@ final class AppModel {
                 viewer.session?.saveRecent(seconds: 15)
                 try? await Task.sleep(for: .seconds(6))
                 prefs.recentEnabled = false
+            #if os(macOS)
             case "stream10s":
                 // `-qaStreamURL rtmp://127.0.0.1:1935/live/test` (e.g. an `ffmpeg -listen 1` server).
                 guard let url = UserDefaults.standard.string(forKey: "qaStreamURL").flatMap(URL.init(string:)) else { break }
@@ -358,6 +386,7 @@ final class AppModel {
                 startStreaming(urlOverride: url)
                 try? await Task.sleep(for: .seconds(10))
                 stopStreaming()
+            #endif
             default: break
             }
         }
