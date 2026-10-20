@@ -17,6 +17,13 @@ Native HDMI-capture viewer for macOS (iPadOS/Android/Windows later; mini-OBS lat
 - `make inventory` — run device-inventory
 - `/usr/bin/log stream --level debug --predicate 'subsystem == "hdmicaptain"'` — engine logs (in zsh, `log` is a builtin; use the full path)
 
+## Testing without hardware
+
+- `open "<app>" --args -testPattern smpteBars|fullBars|grid|grayRamp` starts on a generated pattern.
+- DEBUG builds: `--args -qaAction screenshot|copy` runs the action 1.5 s after launch.
+- Window screenshot: get the window id via `CGWindowListCopyWindowInfo` (owner "HDMI Captain", layer 0), then run `screencapture -o -x -l <id> out.png`.
+- `make test-app` runs hosted tests: StoreKit, against `Apps/macOS/HDMICaptain.storekit`.
+
 ## Conventions
 
 - Swift 5 language mode (AVFoundation delegate/queue model); `@MainActor @Observable` for UI-facing models.

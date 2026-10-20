@@ -61,6 +61,9 @@ final class AppModel {
     private(set) var signalInterrupted = false
     /// A frame has been shown since the current device was selected.
     private(set) var hasFrame = false
+    /// Short confirmation shown at the bottom of the window.
+    private(set) var toast: String?
+    @ObservationIgnored private var toastTask: Task<Void, Never>?
 
     var preset = DevicePreset() {
         didSet { presetChanged(from: oldValue) }
@@ -145,7 +148,25 @@ final class AppModel {
         if let name = UserDefaults.standard.string(forKey: "testPattern") {
             testPattern = TestPattern(rawValue: name)
         }
+        #if DEBUG
+        runQAAction()
+        #endif
     }
+
+    #if DEBUG
+    /// Unattended checks for development: `-qaAction screenshot` (see CLAUDE.md).
+    private func runQAAction() {
+        guard let action = UserDefaults.standard.string(forKey: "qaAction") else { return }
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            switch action {
+            case "screenshot": saveScreenshot()
+            case "copy": copyFrame()
+            default: break
+            }
+        }
+    }
+    #endif
 
     // MARK: Actions
 
@@ -162,6 +183,50 @@ final class AppModel {
 
     func toggleFullScreen() {
         (window ?? NSApp.keyWindow)?.toggleFullScreen(nil)
+    }
+
+    /// Saves the current source frame at full resolution to ~/Pictures/HDMI Captain.
+    func saveScreenshot() {
+        guard let frame = renderer?.currentFrame else {
+            showToast("Nothing to capture yet")
+            return
+        }
+        Task.detached(priority: .userInitiated) {
+            let folder = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("HDMI Captain", isDirectory: true)
+            let message: String
+            do {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                guard let data = FrameSnapshot.pngData(from: frame) else { throw CocoaError(.fileWriteUnknown) }
+                let url = FrameSnapshot.fileURL(in: folder)
+                try data.write(to: url)
+                message = "Saved \(url.lastPathComponent)"
+            } catch {
+                message = "Couldn't save screenshot: \(error.localizedDescription)"
+            }
+            await MainActor.run { self.showToast(message) }
+        }
+    }
+
+    func copyFrame() {
+        guard let frame = renderer?.currentFrame, let image = FrameSnapshot.cgImage(from: frame) else {
+            showToast("Nothing to copy yet")
+            return
+        }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects([NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))])
+        showToast("Frame copied")
+    }
+
+    func showToast(_ message: String) {
+        toast = message
+        toastTask?.cancel()
+        toastTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
+            self?.toast = nil
+        }
     }
 
     func openPrivacySettings() {

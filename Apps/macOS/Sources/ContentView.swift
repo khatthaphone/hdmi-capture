@@ -27,6 +27,13 @@ struct ContentView: View {
                     .padding(.top, model.prefs.cleanMode ? 12 : 40)
                     .allowsHitTesting(false)
             }
+            if let toast = model.toast {
+                Banner(text: toast, symbol: "checkmark.circle.fill")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 20)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
             if model.prefs.showStats, model.phase == .live {
                 StatsOverlay()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
@@ -63,9 +70,10 @@ struct ContentView: View {
 
 private struct Banner: View {
     let text: String
+    var symbol = "exclamationmark.triangle.fill"
 
     var body: some View {
-        Label(text, systemImage: "exclamationmark.triangle.fill")
+        Label(text, systemImage: symbol)
             .font(.callout.weight(.medium))
             .foregroundStyle(.white)
             .padding(.horizontal, 12)

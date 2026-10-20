@@ -169,6 +169,11 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
         }
     }
 
+    /// What is on screen right now (test pattern or newest live frame).
+    public var currentFrame: CVPixelBuffer? {
+        stateLock.withLock { still ?? latest }
+    }
+
     /// Shows `buffer` instead of live frames until called with nil.
     public func showStill(_ buffer: CVPixelBuffer?) {
         stateLock.withLock { still = buffer }

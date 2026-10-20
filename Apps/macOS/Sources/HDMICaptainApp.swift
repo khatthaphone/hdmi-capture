@@ -48,6 +48,10 @@ struct ViewerCommands: Commands {
         CommandMenu("Video") {
             Button("Toggle Full Screen") { model.toggleFullScreen() }
                 .keyboardShortcut("f")
+            Button("Save Screenshot") { model.saveScreenshot() }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+            Button("Copy Frame") { model.copyFrame() }
+                .keyboardShortcut("c", modifiers: [.command, .option])
             Toggle("Mute", isOn: $model.preset.muted)
                 .keyboardShortcut("m", modifiers: [.command, .shift])
             Divider()
