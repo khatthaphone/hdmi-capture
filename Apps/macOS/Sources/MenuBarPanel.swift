@@ -32,7 +32,7 @@ struct MenuBarPanel: View {
                     Button {
                         session.preset.muted.toggle()
                     } label: {
-                        Image(systemName: session.preset.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                        Image(systemName: session.preset.muted ? Symbol.mute : Symbol.sound)
                             .frame(width: 18)
                     }
                     .buttonStyle(.borderless)

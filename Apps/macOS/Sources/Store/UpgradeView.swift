@@ -5,10 +5,10 @@ import SwiftUI
 extension ProFeature {
     var symbol: String {
         switch self {
-        case .recording: "record.circle"
-        case .replayBuffer: "gobackward"
-        case .streaming: "dot.radiowaves.left.and.right"
-        case .virtualCamera: "web.camera"
+        case .recording: Symbol.record
+        case .replayBuffer: Symbol.saveRecent
+        case .streaming: Symbol.goLive
+        case .virtualCamera: Symbol.virtualCamera
         }
     }
 
@@ -32,7 +32,7 @@ struct UpgradeView: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            Image(systemName: store.isPro ? "checkmark.seal.fill" : "sparkles")
+            Image(systemName: store.isPro ? "checkmark.seal.fill" : Symbol.upgrade)
                 .font(.system(size: 44))
                 .foregroundStyle(store.isPro ? .green : .accentColor)
             Text(store.isPro ? "You have HDMI Captain Pro" : "HDMI Captain Pro")

@@ -89,10 +89,12 @@ private struct InputChip: View {
                 }
             }
             if !app.catalog.videoDevices.isEmpty {
-                Menu("New Window for") {
+                Menu {
                     ForEach(app.catalog.videoDevices) { device in
                         Button(device.name) { openWindow(id: "card", value: device.id) }
                     }
+                } label: {
+                    Label("New Window for", systemImage: Symbol.newWindow)
                 }
             }
             if !app.profiles.isEmpty {
@@ -109,9 +111,9 @@ private struct InputChip: View {
                 }
             }
             Divider()
-            Button("Reconnect") { app.retry() }
+            Button { app.retry() } label: { Label("Reconnect", systemImage: Symbol.reconnect) }
         } label: {
-            BarLabel(symbol: "cable.connector.horizontal", title: title, showsTitle: layout.showsLabels, chevron: true)
+            BarLabel(symbol: Symbol.input, title: title, showsTitle: layout.showsLabels, chevron: true)
         }
         .barMenuStyle()
         .help("Input and profiles")
@@ -134,7 +136,7 @@ private struct SoundControl: View {
             Button {
                 viewer.preset.muted.toggle()
             } label: {
-                BarLabel(symbol: viewer.preset.muted ? "speaker.slash.fill" : "speaker.wave.2.fill", title: nil)
+                BarLabel(symbol: viewer.preset.muted ? Symbol.mute : Symbol.sound, title: nil)
             }
             .buttonStyle(BarButtonStyle())
             .help(viewer.preset.muted ? "Unmute (⇧⌘M)" : "Mute (⇧⌘M)")
@@ -180,7 +182,7 @@ private struct ScreenshotButton: View {
 
     var body: some View {
         Button { viewer.saveScreenshot() } label: {
-            BarLabel(symbol: "camera", title: "Screenshot", showsTitle: layout.showsLabels)
+            BarLabel(symbol: Symbol.screenshot, title: "Screenshot", showsTitle: layout.showsLabels)
         }
         .buttonStyle(BarButtonStyle())
         .help("Save Screenshot (⇧⌘S)")
@@ -195,14 +197,17 @@ private struct SaveRecentButton: View {
 
     var body: some View {
         Menu {
-            Toggle("Keep Recent Footage (\(app.prefs.recentMinutes) min)", isOn: Binding(
+            Toggle(isOn: Binding(
                 get: { app.prefs.recentEnabled && store.isUnlocked(.replayBuffer) },
                 set: { on in if !on || store.gate(.replayBuffer) { app.prefs.recentEnabled = on } }
-            ))
+            )) {
+                Label("Keep Recent Footage (\(app.prefs.recentMinutes) min)",
+                      systemImage: store.isUnlocked(.replayBuffer) ? Symbol.keepRecent : Symbol.locked)
+            }
             Divider()
             SaveRecentItems(app: app, store: store, viewer: viewer)
         } label: {
-            BarLabel(symbol: "gobackward", title: "Save Recent", showsTitle: layout.showsLabels, chevron: true)
+            BarLabel(symbol: Symbol.saveRecent, title: "Save Recent", showsTitle: layout.showsLabels, chevron: true)
                 .proLock(!store.isUnlocked(.replayBuffer))
         }
         .barMenuStyle()
@@ -227,7 +232,7 @@ private struct GoLiveButton: View {
                 app.isShowingStreamSetup = true
             }
         } label: {
-            BarLabel(symbol: "dot.radiowaves.left.and.right", title: streamingHere ? "Live" : "Go Live",
+            BarLabel(symbol: Symbol.goLive, title: streamingHere ? "Live" : "Go Live",
                      showsTitle: layout.showsLabels, tint: streamingHere ? .red : nil)
                 .proLock(!store.isUnlocked(.streaming))
         }
@@ -285,36 +290,36 @@ private struct OptionsMenu: View {
         @Bindable var viewer = viewer
         Menu {
             if layout == .minimal {
-                Toggle(isOn: $viewer.preset.muted) { Label("Mute", systemImage: "speaker.slash") }
-                Button { viewer.saveScreenshot() } label: { Label("Save Screenshot", systemImage: "camera") }
+                Toggle(isOn: $viewer.preset.muted) { Label("Mute", systemImage: Symbol.mute) }
+                Button { viewer.saveScreenshot() } label: { Label("Save Screenshot", systemImage: Symbol.screenshot) }
                 Button { viewer.toggleFullScreen() } label: {
                     Label(viewer.isFullScreen ? "Exit Full Screen" : "Full Screen",
-                          systemImage: viewer.isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                          systemImage: viewer.isFullScreen ? Symbol.exitFullScreen : Symbol.fullScreen)
                 }
                 Divider()
             }
             Picker(selection: $viewer.preset.scale) {
-                ForEach(ScaleMode.allCases, id: \.self) { Text($0.title).tag($0) }
+                ForEach(ScaleMode.allCases, id: \.self) { Label($0.title, systemImage: $0.symbol).tag($0) }
             } label: {
-                Label("Scale", systemImage: "aspectratio")
+                Label("Scale", systemImage: Symbol.scale)
             }
-            Menu { PictureLookItems(viewer: viewer) } label: { Label("Picture Look", systemImage: "camera.filters") }
+            Menu { PictureLookItems(viewer: viewer) } label: { Label("Picture Look", systemImage: Symbol.pictureLook) }
             Toggle(isOn: Binding(
                 get: { viewer.preset.filter == .nearest },
                 set: { viewer.preset.filter = $0 ? .nearest : .linear }
             )) {
-                Label("Sharp Pixels", systemImage: "square.grid.3x3")
+                Label("Sharp Pixels", systemImage: Symbol.sharpPixels)
             }
-            Menu { GuideItems(app: app) } label: { Label("Guides", systemImage: "squareshape.split.3x3") }
+            Menu { GuideItems(app: app) } label: { Label("Guides", systemImage: Symbol.guides) }
             Divider()
-            Toggle(isOn: $app.prefs.showStats) { Label("Show Stats", systemImage: "chart.bar.xaxis") }
-            Toggle(isOn: $app.prefs.floatOnTop) { Label("Float on Top", systemImage: "pin") }
-            Toggle(isOn: $app.prefs.cleanMode) { Label("Clean Mode", systemImage: "rectangle.dashed") }
-            Button { openWindow(id: "scopes") } label: { Label("Show Scopes", systemImage: "waveform.path.ecg") }
+            Toggle(isOn: $app.prefs.showStats) { Label("Show Stats", systemImage: Symbol.stats) }
+            Toggle(isOn: $app.prefs.floatOnTop) { Label("Float on Top", systemImage: Symbol.floatOnTop) }
+            Toggle(isOn: $app.prefs.cleanMode) { Label("Clean Mode", systemImage: Symbol.cleanMode) }
+            Button { openWindow(id: "scopes") } label: { Label("Show Scopes", systemImage: Symbol.scopes) }
             Divider()
-            Button { viewer.copyFrame() } label: { Label("Copy Frame", systemImage: "doc.on.doc") }
+            Button { viewer.copyFrame() } label: { Label("Copy Frame", systemImage: Symbol.copyFrame) }
         } label: {
-            BarLabel(symbol: "ellipsis.circle", title: nil)
+            BarLabel(symbol: Symbol.options, title: nil)
         }
         .barMenuStyle()
         .help("View options")
@@ -326,7 +331,7 @@ private struct FullScreenButton: View {
 
     var body: some View {
         Button { viewer.toggleFullScreen() } label: {
-            BarLabel(symbol: viewer.isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right", title: nil)
+            BarLabel(symbol: viewer.isFullScreen ? Symbol.exitFullScreen : Symbol.fullScreen, title: nil)
         }
         .buttonStyle(BarButtonStyle())
         .help(viewer.isFullScreen ? "Exit Full Screen (⌘F)" : "Full Screen (⌘F)")
@@ -406,7 +411,7 @@ private extension View {
     func proLock(_ locked: Bool) -> some View {
         overlay(alignment: .topTrailing) {
             if locked {
-                Image(systemName: "lock.fill")
+                Image(systemName: Symbol.locked)
                     .font(.system(size: 7, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(2)

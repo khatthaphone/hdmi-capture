@@ -69,17 +69,17 @@ struct HDMICaptainApp: App {
         Settings {
             TabView {
                 SettingsView(page: .input)
-                    .tabItem { Label("Input", systemImage: "cable.connector") }
+                    .tabItem { Label("Input", systemImage: Symbol.input) }
                 SettingsView(page: .picture)
-                    .tabItem { Label("Picture", systemImage: "camera.filters") }
+                    .tabItem { Label("Picture", systemImage: Symbol.pictureLook) }
                 SettingsView(page: .sound)
-                    .tabItem { Label("Sound", systemImage: "speaker.wave.2") }
+                    .tabItem { Label("Sound", systemImage: Symbol.sound) }
                 SettingsView(page: .window)
                     .tabItem { Label("Window", systemImage: "macwindow") }
                 ProfilesSettingsView()
-                    .tabItem { Label("Profiles", systemImage: "person.crop.rectangle.stack") }
+                    .tabItem { Label("Profiles", systemImage: Symbol.profiles) }
                 ProSettingsView()
-                    .tabItem { Label("Pro", systemImage: "sparkles") }
+                    .tabItem { Label("Pro", systemImage: Symbol.upgrade) }
             }
             .environment(app)
             .environment(store)
@@ -130,13 +130,15 @@ private struct CardWindowMenu: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Menu("New Window for") {
+        Menu {
             ForEach(app.catalog.videoDevices) { device in
                 Button(device.name) { openWindow(id: "card", value: device.id) }
             }
+        } label: {
+            Label("New Window for", systemImage: Symbol.newWindow)
         }
         .disabled(app.catalog.videoDevices.isEmpty)
-        Button("Multi-View") { openWindow(id: "grid") }
+        Button { openWindow(id: "grid") } label: { Label("Multi-View", systemImage: Symbol.multiView) }
             .keyboardShortcut("g", modifiers: [.command, .option])
     }
 }
@@ -177,7 +179,7 @@ private struct VideoMenuItems: View {
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        Menu("Profiles") {
+        Menu {
             ForEach(Array(app.profiles.enumerated()), id: \.element.id) { index, profile in
                 let toggle = Toggle(isOn: Binding(
                     get: { viewer.preset.profileID == profile.id },
@@ -200,40 +202,46 @@ private struct VideoMenuItems: View {
             }
             .disabled(viewer.session == nil)
             Button("Manage Profiles…") { openSettings() }
+        } label: {
+            Label("Profiles", systemImage: Symbol.profiles)
         }
         .disabled(viewer.session == nil)
-        Button("Toggle Full Screen") { viewer.toggleFullScreen() }
+        Button { viewer.toggleFullScreen() } label: { Label("Toggle Full Screen", systemImage: Symbol.fullScreen) }
             .keyboardShortcut("f")
-        Button("Save Screenshot") { viewer.saveScreenshot() }
+        Button { viewer.saveScreenshot() } label: { Label("Save Screenshot", systemImage: Symbol.screenshot) }
             .keyboardShortcut("s", modifiers: [.command, .shift])
-        Button("Copy Frame") { viewer.copyFrame() }
+        Button { viewer.copyFrame() } label: { Label("Copy Frame", systemImage: Symbol.copyFrame) }
             .keyboardShortcut("c", modifiers: [.command, .option])
-        Toggle("Mute", isOn: $viewer.preset.muted)
+        Toggle(isOn: $viewer.preset.muted) { Label("Mute", systemImage: Symbol.mute) }
             .keyboardShortcut("m", modifiers: [.command, .shift])
         Divider()
         ForEach(Array(ScaleMode.allCases.enumerated()), id: \.element) { index, mode in
-            Toggle(mode.title, isOn: Binding(
+            Toggle(isOn: Binding(
                 get: { viewer.preset.scale == mode },
                 set: { _ in viewer.preset.scale = mode }
-            ))
+            )) {
+                Label(mode.title, systemImage: mode.symbol)
+            }
             .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")))
         }
-        Menu("Picture Look") { PictureLookItems(viewer: viewer) }
-        Toggle("Sharp Pixels", isOn: Binding(
+        Menu { PictureLookItems(viewer: viewer) } label: { Label("Picture Look", systemImage: Symbol.pictureLook) }
+        Toggle(isOn: Binding(
             get: { viewer.preset.filter == .nearest },
             set: { viewer.preset.filter = $0 ? .nearest : .linear }
-        ))
+        )) {
+            Label("Sharp Pixels", systemImage: Symbol.sharpPixels)
+        }
         Divider()
-        Toggle("Float on Top", isOn: $app.prefs.floatOnTop)
+        Toggle(isOn: $app.prefs.floatOnTop) { Label("Float on Top", systemImage: Symbol.floatOnTop) }
             .keyboardShortcut("t")
-        Toggle("Show on All Spaces", isOn: $app.prefs.allSpaces)
-        Toggle("Clean Mode", isOn: $app.prefs.cleanMode)
+        Toggle(isOn: $app.prefs.allSpaces) { Label("Show on All Spaces", systemImage: Symbol.allSpaces) }
+        Toggle(isOn: $app.prefs.cleanMode) { Label("Clean Mode", systemImage: Symbol.cleanMode) }
             .keyboardShortcut("b")
-        Toggle("Lock Aspect Ratio", isOn: $app.prefs.lockAspect)
-        Toggle("Show Stats", isOn: $app.prefs.showStats)
+        Toggle(isOn: $app.prefs.lockAspect) { Label("Lock Aspect Ratio", systemImage: Symbol.lockAspect) }
+        Toggle(isOn: $app.prefs.showStats) { Label("Show Stats", systemImage: Symbol.stats) }
             .keyboardShortcut("i")
         Divider()
-        Menu("Test Pattern") {
+        Menu {
             Toggle("Off (live picture)", isOn: Binding(get: { viewer.testPattern == nil }, set: { _ in viewer.testPattern = nil }))
             Divider()
             ForEach(TestPattern.allCases, id: \.self) { pattern in
@@ -242,22 +250,26 @@ private struct VideoMenuItems: View {
                     set: { viewer.testPattern = $0 ? pattern : nil }
                 ))
             }
+        } label: {
+            Label("Test Pattern", systemImage: Symbol.testPattern)
         }
-        Button("Show Scopes") { openWindow(id: "scopes") }
+        Button { openWindow(id: "scopes") } label: { Label("Show Scopes", systemImage: Symbol.scopes) }
             .keyboardShortcut("s", modifiers: [.command, .option])
-        Menu("Guides") { GuideItems(app: app) }
+        Menu { GuideItems(app: app) } label: { Label("Guides", systemImage: Symbol.guides) }
         Divider()
         if viewer.source == .automatic {
-            Menu("Video Input") {
+            Menu {
                 ForEach(app.catalog.videoDevices) { device in
                     Toggle(device.name, isOn: Binding(
                         get: { app.mainDeviceID == device.id },
                         set: { _ in app.selectVideo(device.id) }
                     ))
                 }
+            } label: {
+                Label("Video Input", systemImage: Symbol.input)
             }
         }
-        Button("Reconnect") { app.retry() }
+        Button { app.retry() } label: { Label("Reconnect", systemImage: Symbol.reconnect) }
             .keyboardShortcut("r", modifiers: [.command, .option])
     }
 }
@@ -304,14 +316,14 @@ struct ProCommands: Commands {
         CommandMenu("Pro") {
             let recording = app.currentViewer?.session?.isRecording ?? false
             item(.recording, recording ? "Stop Recording" : "Start Recording", key: "r", modifiers: .command)
-            Button("Show Recordings in Finder") { app.showRecordingsInFinder() }
+            Button { app.showRecordingsInFinder() } label: { Label("Show Recordings in Finder", systemImage: Symbol.showRecordings) }
             Divider()
             Toggle(isOn: Binding(
                 get: { app.prefs.recentEnabled && store.isUnlocked(.replayBuffer) },
                 set: { on in if !on || store.gate(.replayBuffer) { app.prefs.recentEnabled = on } }
             )) {
                 Label("Keep Recent Footage (\(app.prefs.recentMinutes) min)",
-                      systemImage: store.isUnlocked(.replayBuffer) ? "clock.arrow.circlepath" : "lock.fill")
+                      systemImage: store.isUnlocked(.replayBuffer) ? Symbol.keepRecent : Symbol.locked)
             }
             SaveRecentMenu(app: app, store: store)
             Divider()
@@ -338,7 +350,7 @@ struct ProCommands: Commands {
             }
         } label: {
             Label(unlocked && !built ? "\(title) (coming soon)" : title,
-                  systemImage: unlocked ? feature.symbol : "lock.fill")
+                  systemImage: unlocked ? feature.symbol : Symbol.locked)
         }
         .disabled(unlocked && !built)
         if let key {
@@ -358,7 +370,7 @@ private struct SaveRecentMenu: View {
         Menu {
             SaveRecentItems(app: app, store: store, viewer: app.currentViewer, shortcuts: true)
         } label: {
-            Label("Save Recent", systemImage: store.isUnlocked(.replayBuffer) ? "gobackward" : "lock.fill")
+            Label("Save Recent", systemImage: store.isUnlocked(.replayBuffer) ? Symbol.saveRecent : Symbol.locked)
         }
     }
 }
