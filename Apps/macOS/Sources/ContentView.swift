@@ -8,7 +8,11 @@ struct ContentView: View {
         ZStack {
             Color.black
             if let renderer = model.renderer {
-                MetalPreview(renderer: renderer) { model.toggleFullScreen() }
+                MetalPreview(renderer: renderer, autoHidesWindowButtons: !model.prefs.cleanMode) { model.toggleFullScreen() }
+            }
+            if !model.prefs.guides.isEmpty, let source = model.sourceSize, model.phase == .live || model.testPattern != nil {
+                GuidesOverlay(guides: model.prefs.guides, source: source, scale: model.preset.scale)
+                    .allowsHitTesting(false)
             }
             switch overlay {
             case .none:
@@ -43,6 +47,7 @@ struct ContentView: View {
     /// Prefer keeping the last picture on screen with a small banner; cover it only when
     /// there is nothing meaningful to show.
     private var overlay: Overlay {
+        if model.testPattern != nil { return .none }
         switch model.phase {
         case .live:
             if model.signal.isNoSignal { return .noSignal }
@@ -165,6 +170,52 @@ private struct StatsOverlay: View {
             .foregroundStyle(.white)
             .padding(8)
             .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
+        }
+    }
+}
+
+/// Thirds, center cross, safe areas and aspect masks over the visible video rect.
+private struct GuidesOverlay: View {
+    let guides: GuideSettings
+    let source: CGSize
+    let scale: ScaleMode
+
+    var body: some View {
+        Canvas { context, size in
+            let video = RenderGeometry.compute(source: source, drawable: size, mode: scale).viewport
+            let line = Color.white.opacity(guides.opacity)
+            func stroke(_ path: Path, dash: [CGFloat] = []) {
+                context.stroke(path, with: .color(.black.opacity(guides.opacity * 0.6)), style: StrokeStyle(lineWidth: 3, dash: dash))
+                context.stroke(path, with: .color(line), style: StrokeStyle(lineWidth: 1, dash: dash))
+            }
+            if let mask = guides.mask {
+                let visible = GuideSettings.maskRect(mask, in: video)
+                var outside = Path(video)
+                outside.addRect(visible)
+                context.fill(outside, with: .color(.black.opacity(0.5 + guides.opacity * 0.4)), style: FillStyle(eoFill: true))
+                stroke(Path(visible))
+            }
+            if guides.thirds {
+                var path = Path()
+                for i in 1...2 {
+                    let x = video.minX + video.width * CGFloat(i) / 3
+                    let y = video.minY + video.height * CGFloat(i) / 3
+                    path.move(to: CGPoint(x: x, y: video.minY)); path.addLine(to: CGPoint(x: x, y: video.maxY))
+                    path.move(to: CGPoint(x: video.minX, y: y)); path.addLine(to: CGPoint(x: video.maxX, y: y))
+                }
+                stroke(path)
+            }
+            if guides.center {
+                let arm = min(video.width, video.height) * 0.04
+                var path = Path()
+                path.move(to: CGPoint(x: video.midX - arm, y: video.midY)); path.addLine(to: CGPoint(x: video.midX + arm, y: video.midY))
+                path.move(to: CGPoint(x: video.midX, y: video.midY - arm)); path.addLine(to: CGPoint(x: video.midX, y: video.midY + arm))
+                stroke(path)
+            }
+            if guides.safeAreas {
+                stroke(Path(video.insetBy(dx: video.width * 0.05, dy: video.height * 0.05)), dash: [6, 4])  // action safe 90 %
+                stroke(Path(video.insetBy(dx: video.width * 0.10, dy: video.height * 0.10)), dash: [2, 3])  // title safe 80 %
+            }
         }
     }
 }

@@ -40,18 +40,14 @@ struct WindowConfigurator: NSViewRepresentable {
             }
             window.collectionBehavior = behavior
 
+            // QuickTime-style: the video fills the whole window under a transparent title bar,
+            // so the content area has exactly the source's aspect ratio.
             let isFullScreen = window.styleMask.contains(.fullScreen)
-            if !isFullScreen {
-                window.titlebarAppearsTransparent = prefs.cleanMode
-                window.titleVisibility = prefs.cleanMode ? .hidden : .visible
-                if prefs.cleanMode {
-                    window.styleMask.insert(.fullSizeContentView)
-                } else {
-                    window.styleMask.remove(.fullSizeContentView)
-                }
-                for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
-                    window.standardWindowButton(button)?.isHidden = prefs.cleanMode
-                }
+            window.styleMask.insert(.fullSizeContentView)
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+                window.standardWindowButton(button)?.isHidden = prefs.cleanMode
             }
 
             guard !isFullScreen else { return }

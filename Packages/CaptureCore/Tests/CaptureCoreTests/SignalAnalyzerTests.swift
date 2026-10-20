@@ -38,6 +38,14 @@ struct SignalAnalyzerTests {
         #expect(try classify(buffer) == .picture)
     }
 
+    @Test func thinTextOnBlackIsPicture() throws {
+        // A dark terminal: black with a few 1-px light strokes.
+        let buffer = makeYCbCrBuffer(width: 1280, height: 720) { x, y in
+            (y % 24 == 12 && x % 9 < 5 && x < 900) ? (200, 128, 128) : (16, 128, 128)
+        }
+        #expect(try classify(buffer) == .picture)
+    }
+
     @Test func unsupportedFormatReturnsNil() {
         var buffer: CVPixelBuffer?
         CVPixelBufferCreate(nil, 16, 16, kCVPixelFormatType_32BGRA, nil, &buffer)

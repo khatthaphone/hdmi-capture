@@ -7,6 +7,8 @@ import SwiftUI
 final class MetalLayerView: NSView {
     private let renderer: MetalRenderer
     var onDoubleClick: (() -> Void)?
+    /// Fade the window buttons with the cursor (off in clean mode, where they stay hidden).
+    var autoHidesWindowButtons = true
     private var hideCursor: DispatchWorkItem?
     private var occlusionObserver: NSObjectProtocol?
     private var trackingArea: NSTrackingArea?
@@ -76,10 +78,12 @@ final class MetalLayerView: NSView {
     }
 
     override func mouseMoved(with event: NSEvent) {
+        setWindowButtonsVisible(true)
         scheduleCursorHide()
     }
 
     override func mouseEntered(with event: NSEvent) {
+        setWindowButtonsVisible(true)
         scheduleCursorHide()
     }
 
@@ -95,9 +99,22 @@ final class MetalLayerView: NSView {
         }
     }
 
+    private func setWindowButtonsVisible(_ visible: Bool) {
+        guard autoHidesWindowButtons, let window, !window.styleMask.contains(.fullScreen) else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = visible ? 0.15 : 0.4
+            for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+                window.standardWindowButton(type)?.animator().alphaValue = visible ? 1 : 0
+            }
+        }
+    }
+
     private func scheduleCursorHide() {
         hideCursor?.cancel()
-        let work = DispatchWorkItem { NSCursor.setHiddenUntilMouseMoves(true) }
+        let work = DispatchWorkItem { [weak self] in
+            NSCursor.setHiddenUntilMouseMoves(true)
+            self?.setWindowButtonsVisible(false)
+        }
         hideCursor = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
     }
@@ -105,15 +122,18 @@ final class MetalLayerView: NSView {
 
 struct MetalPreview: NSViewRepresentable {
     let renderer: MetalRenderer
+    var autoHidesWindowButtons = true
     let onDoubleClick: () -> Void
 
     func makeNSView(context: Context) -> MetalLayerView {
         let view = MetalLayerView(renderer: renderer)
         view.onDoubleClick = onDoubleClick
+        view.autoHidesWindowButtons = autoHidesWindowButtons
         return view
     }
 
     func updateNSView(_ view: MetalLayerView, context: Context) {
         view.onDoubleClick = onDoubleClick
+        view.autoHidesWindowButtons = autoHidesWindowButtons
     }
 }

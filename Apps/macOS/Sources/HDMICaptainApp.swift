@@ -18,6 +18,7 @@ struct HDMICaptainApp: App {
                 }
         }
         .defaultSize(width: 1280, height: 720)
+        .windowStyle(.hiddenTitleBar)
         .commands {
             ViewerCommands(model: model)
             ProCommands(store: store)
@@ -70,6 +71,30 @@ struct ViewerCommands: Commands {
             Toggle("Lock Aspect Ratio", isOn: $model.prefs.lockAspect)
             Toggle("Show Stats", isOn: $model.prefs.showStats)
                 .keyboardShortcut("i")
+            Divider()
+            Menu("Test Pattern") {
+                Toggle("Off (live picture)", isOn: Binding(get: { model.testPattern == nil }, set: { _ in model.testPattern = nil }))
+                Divider()
+                ForEach(TestPattern.allCases, id: \.self) { pattern in
+                    Toggle(pattern.title, isOn: Binding(
+                        get: { model.testPattern == pattern },
+                        set: { model.testPattern = $0 ? pattern : nil }
+                    ))
+                }
+            }
+            Menu("Guides") {
+                Toggle("Rule of Thirds", isOn: $model.prefs.guides.thirds)
+                Toggle("Center Cross", isOn: $model.prefs.guides.center)
+                Toggle("Safe Areas (90 % / 80 %)", isOn: $model.prefs.guides.safeAreas)
+                Divider()
+                Toggle("No Aspect Mask", isOn: Binding(get: { model.prefs.guides.mask == nil }, set: { _ in model.prefs.guides.mask = nil }))
+                ForEach(GuideSettings.Mask.allCases, id: \.self) { mask in
+                    Toggle("Mask \(mask.rawValue)", isOn: Binding(
+                        get: { model.prefs.guides.mask == mask },
+                        set: { model.prefs.guides.mask = $0 ? mask : nil }
+                    ))
+                }
+            }
             Divider()
             Menu("Video Input") {
                 ForEach(model.catalog.videoDevices) { device in

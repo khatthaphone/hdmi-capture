@@ -76,6 +76,17 @@ struct SettingsView: View {
                 Toggle("Clean mode (hide title bar)", isOn: $model.prefs.cleanMode)
                 Toggle("Show stats", isOn: $model.prefs.showStats)
             }
+
+            Section("Guides") {
+                Toggle("Rule of thirds", isOn: $model.prefs.guides.thirds)
+                Toggle("Center cross", isOn: $model.prefs.guides.center)
+                Toggle("Safe areas", isOn: $model.prefs.guides.safeAreas)
+                Picker("Aspect mask", selection: $model.prefs.guides.mask) {
+                    Text("None").tag(GuideSettings.Mask?.none)
+                    ForEach(GuideSettings.Mask.allCases, id: \.self) { Text($0.rawValue).tag(Optional($0)) }
+                }
+                Slider(value: $model.prefs.guides.opacity, in: 0.2...1) { Text("Opacity") }
+            }
         }
         .formStyle(.grouped)
         .onAppear { outputDevices = model.outputDevices() }

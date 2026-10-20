@@ -11,6 +11,7 @@ struct ViewerPrefs: Codable, Equatable {
     var lockAspect = true
     var showStats = false
     var includeNonExternalCameras = false
+    var guides = GuideSettings()
 
     init() {}
 
@@ -23,6 +24,7 @@ struct ViewerPrefs: Codable, Equatable {
         lockAspect = try c.decodeIfPresent(Bool.self, forKey: .lockAspect) ?? d.lockAspect
         showStats = try c.decodeIfPresent(Bool.self, forKey: .showStats) ?? d.showStats
         includeNonExternalCameras = try c.decodeIfPresent(Bool.self, forKey: .includeNonExternalCameras) ?? d.includeNonExternalCameras
+        guides = try c.decodeIfPresent(GuideSettings.self, forKey: .guides) ?? d.guides
     }
 }
 
@@ -86,9 +88,29 @@ final class AppModel {
     @ObservationIgnored private var timers: [Timer] = []
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
 
-    var aspect: CGSize? {
-        liveInfo.map { CGSize(width: $0.format.width, height: $0.format.height) }
+    /// A generated test pattern shown instead of the live picture.
+    var testPattern: TestPattern? {
+        didSet {
+            guard testPattern != oldValue else { return }
+            renderer?.showStill(testPattern.flatMap(patternBuffer))
+        }
     }
+    @ObservationIgnored private var patternCache: [TestPattern: CVPixelBuffer] = [:]
+
+    private func patternBuffer(_ pattern: TestPattern) -> CVPixelBuffer? {
+        if let cached = patternCache[pattern] { return cached }
+        let buffer = pattern.makePixelBuffer()
+        patternCache[pattern] = buffer
+        return buffer
+    }
+
+    /// Pixel size of what is on screen (test pattern or live source).
+    var sourceSize: CGSize? {
+        if testPattern != nil { return CGSize(width: 1920, height: 1080) }
+        return liveInfo.map { CGSize(width: $0.format.width, height: $0.format.height) }
+    }
+
+    var aspect: CGSize? { sourceSize }
 
     var formatOptions: [FormatPreference] {
         FormatSelector.options(from: formats)
@@ -119,6 +141,10 @@ final class AppModel {
         startStatsTimer()
         if renderer == nil { phase = .failed("Metal is not available on this Mac.") }
         Task { await requestPermissions() }
+        // QA hook: `-testPattern grid` starts on a pattern (handy for screenshots without hardware).
+        if let name = UserDefaults.standard.string(forKey: "testPattern") {
+            testPattern = TestPattern(rawValue: name)
+        }
     }
 
     // MARK: Actions

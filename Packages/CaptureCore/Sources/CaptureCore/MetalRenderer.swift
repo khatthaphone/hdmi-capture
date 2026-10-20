@@ -85,6 +85,8 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
     private let drawLock = NSLock()
     private var layer: CAMetalLayer?
     private var latest: CVPixelBuffer?
+    /// A still (e.g. test pattern) shown instead of live frames while set.
+    private var still: CVPixelBuffer?
     private var options = RenderOptions()
     private var isVisible = true
     private var presented: UInt64 = 0
@@ -163,8 +165,14 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
     /// Redraw the newest frame, e.g. after a resize or option change.
     public func redraw() {
         redrawQueue.async { [self] in
-            if let frame = stateLock.withLock({ latest }) { draw(frame) }
+            if let frame = stateLock.withLock({ still ?? latest }) { draw(frame) }
         }
+    }
+
+    /// Shows `buffer` instead of live frames until called with nil.
+    public func showStill(_ buffer: CVPixelBuffer?) {
+        stateLock.withLock { still = buffer }
+        redraw()
     }
 
     public func clear() {
@@ -177,7 +185,7 @@ public final class MetalRenderer: FrameSink, @unchecked Sendable {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let visible = stateLock.withLock {
             latest = pixelBuffer
-            return isVisible
+            return isVisible && still == nil
         }
         if visible { draw(pixelBuffer) }
     }
