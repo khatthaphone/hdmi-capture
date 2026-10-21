@@ -8,6 +8,8 @@ import SwiftUI
 struct ControlBar: View {
     @Environment(ViewerModel.self) private var viewer
 
+    @Environment(\.colorSchemeContrast) private var contrast
+
     var body: some View {
         // Widest layout that fits: labels → icons only → essentials.
         ViewThatFits(in: .horizontal) {
@@ -51,9 +53,10 @@ struct ControlBar: View {
         .padding(.vertical, 5)
         .fixedSize()
         .background {
-            // See-through: a light blur with a faint tint, so the picture shows behind the bar.
+            // See-through, but dark enough that white labels stay readable over bright video;
+            // Increase Contrast makes it solid.
             Capsule()
-                .fill(.black.opacity(0.18))
+                .fill(.black.opacity(contrast == .increased ? 0.88 : 0.4))
                 .background(.ultraThinMaterial.opacity(0.6), in: Capsule())
         }
         .overlay(Capsule().strokeBorder(.white.opacity(0.14), lineWidth: 1))
@@ -121,13 +124,15 @@ private struct InputChip: View {
             Divider()
             Button { app.retry() } label: { Label("Reconnect", systemImage: Symbol.reconnect) }
         } label: {
-            BarLabel(symbol: Symbol.input, title: title, showsTitle: layout.showsLabels, chevron: true)
+            BarLabel(symbol: viewer.testPattern != nil ? Symbol.testPattern : Symbol.input, title: title,
+                     showsTitle: layout.showsLabels, chevron: true)
         }
         .barMenuStyle()
         .help("Input and profiles")
     }
 
     private var title: String {
+        if viewer.testPattern != nil { return "Test Pattern" }
         let name = viewer.session?.deviceName ?? "No Input"
         // Long USB names ("UGREEN HDMI Capture Device") crowd the bar.
         return name.count > 22 ? String(name.prefix(20)) + "…" : name
@@ -285,7 +290,12 @@ private struct RecordButton: View {
             .proLock(!store.isUnlocked(.recording))
         }
         .buttonStyle(.plain)
-        .help(since != nil ? "Stop Recording (⌘R)" : "Record (⌘R)")
+        // The test pattern isn't recordable; say so instead of failing after the click.
+        .disabled(viewer.testPattern != nil && since == nil)
+        .opacity(viewer.testPattern != nil && since == nil ? 0.45 : 1)
+        .help(viewer.testPattern != nil ? "Switch to the live input to record"
+              : since != nil ? "Stop Recording (⌘R)" : "Record (⌘R)")
+        .accessibilityLabel(since != nil ? "Stop recording" : "Record")
     }
 }
 

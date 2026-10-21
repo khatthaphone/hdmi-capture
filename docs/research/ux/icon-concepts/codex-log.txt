@@ -262,3 +262,252 @@ codex
 The four concepts are rendering now. Once they finish, I’ll inspect the outputs for legibility and copy only the final PNGs into `docs/research/ux/icon-concepts/`.
 codex
 Rendering is still in progress; there’s no failure reported. I’m keeping the four generations separate so each concept remains visually distinct rather than becoming a four-up sheet.
+exec
+/bin/zsh -lc "find /Users/khatthaphone/.codex/generated_images -type f -name '*.png' -mmin -30 -print0 | xargs -0 ls -lt" in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 94ms:
+-rw-r--r--@ 1 khatthaphone  staff  1892030 Oct 21 03:19 /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-faf06608-9711-41cc-ab6f-744c52a4fbab.png
+-rw-r--r--@ 1 khatthaphone  staff  1843587 Oct 21 03:18 /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-f37bb193-0d35-4c65-b891-88eb09be74ee.png
+-rw-r--r--@ 1 khatthaphone  staff  1995842 Oct 21 03:15 /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-d9cd26be-6872-4da8-9ecd-3b0b1867a681.png
+-rw-r--r--@ 1 khatthaphone  staff  2269212 Oct 21 03:11 /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-cfc44f79-d2e2-4c06-8996-204496d21f2e.png
+
+exec
+/bin/zsh -lc "sips -g pixelWidth -g pixelHeight /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/*.png && if [ -d docs/research/ux/icon-concepts ]; then ls -la docs/research/ux/icon-concepts; else echo 'destination directory does not exist'; fi" in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 54ms:
+/Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-cfc44f79-d2e2-4c06-8996-204496d21f2e.png
+  pixelWidth: 1254
+  pixelHeight: 1254
+/Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-d9cd26be-6872-4da8-9ecd-3b0b1867a681.png
+  pixelWidth: 1254
+  pixelHeight: 1254
+/Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-f37bb193-0d35-4c65-b891-88eb09be74ee.png
+  pixelWidth: 1254
+  pixelHeight: 1254
+/Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-faf06608-9711-41cc-ab6f-744c52a4fbab.png
+  pixelWidth: 1254
+  pixelHeight: 1254
+total 40
+drwxr-xr-x@ 3 khatthaphone  staff     96 Oct 21 03:08 .
+drwxr-xr-x@ 5 khatthaphone  staff    160 Oct 21 03:18 ..
+-rw-r--r--@ 1 khatthaphone  staff  18877 Oct 21 03:19 codex-log.txt
+
+codex
+All four renders meet the requested visual directions. The generator returned 1254px masters, so I’m copying them to the exact requested filenames and resampling only those copies to the required 1024×1024 dimensions.
+apply patch
+patch: completed
+/tmp/hdmi-captain-imagegen-placeholder
+diff --git a//tmp/hdmi-captain-imagegen-placeholder b//tmp/hdmi-captain-imagegen-placeholder
+new file mode 100644
+index 0000000000000000000000000000000000000000..8b137891791fe96927ad78e64b0aad7bded08bdc
+--- /dev/null
++++ b//tmp/hdmi-captain-imagegen-placeholder
+@@ -0,0 +1 @@
++
+
+diff --git a//tmp/hdmi-captain-imagegen-placeholder b//tmp/hdmi-captain-imagegen-placeholder
+new file mode 100644
+index 0000000000000000000000000000000000000000..8b137891791fe96927ad78e64b0aad7bded08bdc
+--- /dev/null
++++ b//tmp/hdmi-captain-imagegen-placeholder
+@@ -0,0 +1 @@
++
+
+apply patch
+patch: completed
+/tmp/hdmi-captain-imagegen-placeholder
+exec
+/bin/zsh -lc 'cp /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-cfc44f79-d2e2-4c06-8996-204496d21f2e.png docs/research/ux/icon-concepts/concept-a.png
+cp /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-d9cd26be-6872-4da8-9ecd-3b0b1867a681.png docs/research/ux/icon-concepts/concept-b.png
+cp /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-f37bb193-0d35-4c65-b891-88eb09be74ee.png docs/research/ux/icon-concepts/concept-c.png
+cp /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-faf06608-9711-41cc-ab6f-744c52a4fbab.png docs/research/ux/icon-concepts/concept-d.png
+sips -z 1024 1024 docs/research/ux/icon-concepts/concept-a.png docs/research/ux/icon-concepts/concept-b.png docs/research/ux/icon-concepts/concept-c.png docs/research/ux/icon-concepts/concept-d.png' in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 331ms:
+/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-a.png
+  /Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-a.png
+/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-b.png
+  /Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-b.png
+/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-c.png
+  /Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-c.png
+/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-d.png
+  /Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-d.png
+
+exec
+/bin/zsh -lc 'sips -g pixelWidth -g pixelHeight -g format docs/research/ux/icon-concepts/concept-{a,b,c,d}.png
+git status --short -- docs/research/ux/icon-concepts' in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 33ms:
+/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-a.png
+  pixelWidth: 1024
+  pixelHeight: 1024
+  format: png
+/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-b.png
+  pixelWidth: 1024
+  pixelHeight: 1024
+  format: png
+/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-c.png
+  pixelWidth: 1024
+  pixelHeight: 1024
+  format: png
+/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-d.png
+  pixelWidth: 1024
+  pixelHeight: 1024
+  format: png
+ M docs/research/ux/icon-concepts/codex-log.txt
+?? docs/research/ux/icon-concepts/concept-a.png
+?? docs/research/ux/icon-concepts/concept-b.png
+?? docs/research/ux/icon-concepts/concept-c.png
+?? docs/research/ux/icon-concepts/concept-d.png
+
+exec
+/bin/zsh -lc "git diff -- docs/research/ux/icon-concepts/codex-log.txt | sed -n '1,240p'
+git diff --stat -- docs/research/ux/icon-concepts/codex-log.txt" in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 0ms:
+diff --git a/docs/research/ux/icon-concepts/codex-log.txt b/docs/research/ux/icon-concepts/codex-log.txt
+index ff5e0de..df21c86 100644
+--- a/docs/research/ux/icon-concepts/codex-log.txt
++++ b/docs/research/ux/icon-concepts/codex-log.txt
+@@ -262,3 +262,97 @@ codex
+ The four concepts are rendering now. Once they finish, I’ll inspect the outputs for legibility and copy only the final PNGs into `docs/research/ux/icon-concepts/`.
+ codex
+ Rendering is still in progress; there’s no failure reported. I’m keeping the four generations separate so each concept remains visually distinct rather than becoming a four-up sheet.
++exec
++/bin/zsh -lc "find /Users/khatthaphone/.codex/generated_images -type f -name '*.png' -mmin -30 -print0 | xargs -0 ls -lt" in /Users/khatthaphone/Projects/hdmi-captain
++ succeeded in 94ms:
++-rw-r--r--@ 1 khatthaphone  staff  1892030 Oct 21 03:19 /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-faf06608-9711-41cc-ab6f-744c52a4fbab.png
++-rw-r--r--@ 1 khatthaphone  staff  1843587 Oct 21 03:18 /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-f37bb193-0d35-4c65-b891-88eb09be74ee.png
++-rw-r--r--@ 1 khatthaphone  staff  1995842 Oct 21 03:15 /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-d9cd26be-6872-4da8-9ecd-3b0b1867a681.png
++-rw-r--r--@ 1 khatthaphone  staff  2269212 Oct 21 03:11 /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-cfc44f79-d2e2-4c06-8996-204496d21f2e.png
++
++exec
++/bin/zsh -lc "sips -g pixelWidth -g pixelHeight /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/*.png && if [ -d docs/research/ux/icon-concepts ]; then ls -la docs/research/ux/icon-concepts; else echo 'destination directory does not exist'; fi" in /Users/khatthaphone/Projects/hdmi-captain
++ succeeded in 54ms:
++/Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-cfc44f79-d2e2-4c06-8996-204496d21f2e.png
++  pixelWidth: 1254
++  pixelHeight: 1254
++/Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-d9cd26be-6872-4da8-9ecd-3b0b1867a681.png
++  pixelWidth: 1254
++  pixelHeight: 1254
++/Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-f37bb193-0d35-4c65-b891-88eb09be74ee.png
++  pixelWidth: 1254
++  pixelHeight: 1254
++/Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-faf06608-9711-41cc-ab6f-744c52a4fbab.png
++  pixelWidth: 1254
++  pixelHeight: 1254
++total 40
++drwxr-xr-x@ 3 khatthaphone  staff     96 Oct 21 03:08 .
++drwxr-xr-x@ 5 khatthaphone  staff    160 Oct 21 03:18 ..
++-rw-r--r--@ 1 khatthaphone  staff  18877 Oct 21 03:19 codex-log.txt
++
++codex
++All four renders meet the requested visual directions. The generator returned 1254px masters, so I’m copying them to the exact requested filenames and resampling only those copies to the required 1024×1024 dimensions.
++apply patch
++patch: completed
++/tmp/hdmi-captain-imagegen-placeholder
++diff --git a//tmp/hdmi-captain-imagegen-placeholder b//tmp/hdmi-captain-imagegen-placeholder
++new file mode 100644
++index 0000000000000000000000000000000000000000..8b137891791fe96927ad78e64b0aad7bded08bdc
++--- /dev/null
+++++ b//tmp/hdmi-captain-imagegen-placeholder
++@@ -0,0 +1 @@
+++
++
++diff --git a//tmp/hdmi-captain-imagegen-placeholder b//tmp/hdmi-captain-imagegen-placeholder
++new file mode 100644
++index 0000000000000000000000000000000000000000..8b137891791fe96927ad78e64b0aad7bded08bdc
++--- /dev/null
+++++ b//tmp/hdmi-captain-imagegen-placeholder
++@@ -0,0 +1 @@
+++
++
++apply patch
++patch: completed
++/tmp/hdmi-captain-imagegen-placeholder
++exec
++/bin/zsh -lc 'cp /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-cfc44f79-d2e2-4c06-8996-204496d21f2e.png docs/research/ux/icon-concepts/concept-a.png
++cp /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-d9cd26be-6872-4da8-9ecd-3b0b1867a681.png docs/research/ux/icon-concepts/concept-b.png
++cp /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-f37bb193-0d35-4c65-b891-88eb09be74ee.png docs/research/ux/icon-concepts/concept-c.png
++cp /Users/khatthaphone/.codex/generated_images/01a15aee-59e6-7ab3-b6a6-8deb0c5ac77a/exec-faf06608-9711-41cc-ab6f-744c52a4fbab.png docs/research/ux/icon-concepts/concept-d.png
++sips -z 1024 1024 docs/research/ux/icon-concepts/concept-a.png docs/research/ux/icon-concepts/concept-b.png docs/research/ux/icon-concepts/concept-c.png docs/research/ux/icon-concepts/concept-d.png' in /Users/khatthaphone/Projects/hdmi-captain
++ succeeded in 331ms:
++/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-a.png
++  /Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-a.png
++/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-b.png
++  /Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-b.png
++/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-c.png
++  /Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-c.png
++/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-d.png
++  /Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-d.png
++
++exec
++/bin/zsh -lc 'sips -g pixelWidth -g pixelHeight -g format docs/research/ux/icon-concepts/concept-{a,b,c,d}.png
++git status --short -- docs/research/ux/icon-concepts' in /Users/khatthaphone/Projects/hdmi-captain
++ succeeded in 33ms:
++/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-a.png
++  pixelWidth: 1024
++  pixelHeight: 1024
++  format: png
++/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-b.png
++  pixelWidth: 1024
++  pixelHeight: 1024
++  format: png
++/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-c.png
++  pixelWidth: 1024
++  pixelHeight: 1024
++  format: png
++/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-d.png
++  pixelWidth: 1024
++  pixelHeight: 1024
++  format: png
++ M docs/research/ux/icon-concepts/codex-log.txt
++?? docs/research/ux/icon-concepts/concept-a.png
++?? docs/research/ux/icon-concepts/concept-b.png
++?? docs/research/ux/icon-concepts/concept-c.png
++?? docs/research/ux/icon-concepts/concept-d.png
++
+ docs/research/ux/icon-concepts/codex-log.txt | 94 ++++++++++++++++++++++++++++
+ 1 file changed, 94 insertions(+)
+
+exec
+/bin/zsh -lc 'git status --short -- docs/research/ux/icon-concepts/codex-log.txt
+git diff --cached --stat -- docs/research/ux/icon-concepts/codex-log.txt
+git diff --cached -- docs/research/ux/icon-concepts/codex-log.txt | tail -40' in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 0ms:
+ M docs/research/ux/icon-concepts/codex-log.txt
+
+exec
+/bin/zsh -lc 'git show HEAD:docs/research/ux/icon-concepts/codex-log.txt | tail -24' in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 0ms:
+
+## Prompting best practices
+- Structure prompt as scene/backdrop -> subject -> details -> constraints.
+- Include intended use (ad, UI mock, infographic) to set the mode and polish level.
+- Use camera/composition language for photorealism.
+- Only use SVG/vector stand-ins when the user explicitly asked for vector output or a non-image placeholder.
+- Quote exact text and specify typography + placement.
+- For tricky words, spell them letter-by-letter and require verbatim rendering.
+- For multi-image inputs, reference images by index and describe how they should be used.
+- For edits, repeat invariants every iteration to reduce drift.
+- Iterate with single-change follow-ups.
+- If the prompt is generic, add only the extra detail that will materially help.
+- If the prompt is already detailed, normalize it instead of expanding it.
+- For CLI fallback only, see `references/cli.md` and `references/image-api.md` for model, `quality`, `input_fidelity`, masks, output format, and output-path guidance.
+- For transparent images, ask built-in `image_gen` for actual transparency and preserve its alpha.
+
+More principles shared by both modes: `references/prompting.md`.
+Copy/paste specs shared by both modes: `references/sample-prompts.md`.
+
+
+codex
+The four concepts are rendering now. Once they finish, I’ll inspect the outputs for legibility and copy only the final PNGs into `docs/research/ux/icon-concepts/`.
+codex
+Rendering is still in progress; there’s no failure reported. I’m keeping the four generations separate so each concept remains visually distinct rather than becoming a four-up sheet.
+
+codex
+- [Concept A](/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-a.png) — HDMI connector fused with a gold ship’s helm on deep navy.
+- [Concept B](/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-b.png) — Captain’s peaked cap integrated with a glowing teal monitor.
+- [Concept C](/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-c.png) — Nautical wheel framing a live screen with an amber status dot.
+- [Concept D](/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-d.png) — HDMI capture-card port broadcasting a bright amber live signal.
+tokens used
+44,803
+- [Concept A](/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-a.png) — HDMI connector fused with a gold ship’s helm on deep navy.
+- [Concept B](/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-b.png) — Captain’s peaked cap integrated with a glowing teal monitor.
+- [Concept C](/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-c.png) — Nautical wheel framing a live screen with an amber status dot.
+- [Concept D](/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/icon-concepts/concept-d.png) — HDMI capture-card port broadcasting a bright amber live signal.

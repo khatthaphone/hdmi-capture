@@ -162,7 +162,7 @@ final class AppModel {
     /// Starts streaming the card in the active window with the saved settings and Keychain key.
     func startStreaming(urlOverride: URL? = nil) {
         guard let viewer = currentViewer, let session = viewer.session, let info = session.liveInfo, session.state == .live else {
-            currentViewer?.showToast("Nothing live to stream")
+            currentViewer?.showToast("Connect a capture card to go live", .warning)
             return
         }
         let key = StreamKeyStore.key(for: Self.streamKeyAccount) ?? ""
@@ -174,7 +174,7 @@ final class AppModel {
         Task {
             await streamer.start(device: session, url: url, settings: settings,
                                  sourceSize: CGSize(width: info.format.width, height: info.format.height), frameRate: info.frameRate)
-            if case let .failed(message) = streamer.state { viewer.showToast("Couldn't go live: \(message)") }
+            if case let .failed(message) = streamer.state { viewer.showToast("Couldn't go live: \(message)", .error) }
         }
     }
 
@@ -308,7 +308,7 @@ final class AppModel {
     private func makeSession(for device: CaptureDeviceInfo) -> DeviceSession {
         let session = DeviceSession(device: device, store: store)
         session.onNeedsReconcile = { [weak self] in self?.reconcile() }
-        session.onMessage = { [weak self] message in self?.broadcast(message, about: device.id) }
+        session.onMessage = { [weak self] message, kind in self?.broadcast(message, kind, about: device.id) }
         session.recordingCodec = { [weak self] in self?.prefs.recordingCodec ?? .hevc }
         session.configureRecent(enabled: prefs.recentEnabled, minutes: prefs.recentMinutes)
         return session
@@ -320,9 +320,9 @@ final class AppModel {
         }
     }
 
-    private func broadcast(_ message: String, about deviceID: String) {
+    private func broadcast(_ message: String, _ kind: Feedback.Kind, about deviceID: String) {
         let targets = viewers.compactMap(\.viewer).filter { $0.deviceID == deviceID }
-        (targets.isEmpty ? [currentViewer].compactMap { $0 } : targets).forEach { $0.showToast(message) }
+        (targets.isEmpty ? [currentViewer].compactMap { $0 } : targets).forEach { $0.showToast(message, kind) }
     }
 
     // MARK: System events

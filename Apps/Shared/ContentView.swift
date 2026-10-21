@@ -53,8 +53,9 @@ struct ContentView: View {
                     .allowsHitTesting(false)
             }
             VStack(alignment: .trailing, spacing: 6) {
-                if let since = viewer.session?.recordingSince, app.prefs.showRecordingIndicator {
-                    RecordingIndicator(since: since)
+                // Always visible while recording; the pref only hides the timer, never the red dot.
+                if let since = viewer.session?.recordingSince {
+                    RecordingIndicator(since: since, showsTimer: app.prefs.showRecordingIndicator)
                 }
                 #if os(macOS)
                 if app.streamer.deviceID != nil, app.streamer.deviceID == viewer.deviceID {
@@ -66,7 +67,7 @@ struct ContentView: View {
             .padding(12)
             .allowsHitTesting(false)
             if let toast = viewer.toast {
-                Banner(text: toast, symbol: "checkmark.circle.fill")
+                ToastView(feedback: toast)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .padding(.bottom, showsControls ? 66 : 20)
                     .allowsHitTesting(false)
@@ -140,10 +141,40 @@ struct ContentView: View {
             if viewer.signalInterrupted { return .banner("Signal interrupted") }
             return .none
         case let .recovering(reason) where viewer.hasFrame:
-            return .banner("\(reason) — reconnecting…")
+            return .banner(StatusCopy.recoveringBanner(reason))
         default:
             return .full
         }
+    }
+}
+
+/// Bottom feedback: icon and tint follow the kind, so an error never looks like a success.
+private struct ToastView: View {
+    let feedback: Feedback
+
+    var body: some View {
+        HStack(spacing: 8) {
+            switch feedback.kind {
+            case .progress:
+                ProgressView().controlSize(.small).tint(.white)
+            case .success:
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            case .info:
+                Image(systemName: "info.circle.fill").foregroundStyle(.white.opacity(0.85))
+            case .warning:
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
+            case .error:
+                Image(systemName: "xmark.octagon.fill").foregroundStyle(.red)
+            }
+            Text(feedback.text)
+        }
+        .font(.callout.weight(.medium))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.black.opacity(0.75), in: Capsule())
+        .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -158,94 +189,6 @@ private struct Banner: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(.black.opacity(0.7), in: Capsule())
-    }
-}
-
-private struct NoSignalOverlay: View {
-    @Environment(ViewerModel.self) private var viewer
-    @Environment(AppModel.self) private var app
-
-    var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "rectangle.slash").font(.system(size: 40))
-            Text("No signal").font(.title2)
-            Text(hint)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: 420)
-        }
-        .foregroundStyle(.white)
-        .multilineTextAlignment(.center)
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.black.opacity(0.55))
-        .allowsHitTesting(false)
-    }
-
-    private var hint: String {
-        switch viewer.signal {
-        case .black:
-            "The capture card sends a black picture. Check that the source is on and outputting video. Sources that use HDCP (PlayStation, Apple TV, streaming apps) can't be captured — turn HDCP off in the source's settings."
-        default:
-            "The capture card is showing its own screen. Check the HDMI cable and that the source is on."
-        }
-    }
-}
-
-private struct StatusOverlay: View {
-    @Environment(ViewerModel.self) private var viewer
-    @Environment(AppModel.self) private var app
-
-    var body: some View {
-        VStack(spacing: 12) {
-            content
-        }
-        .foregroundStyle(.white)
-        .multilineTextAlignment(.center)
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.black.opacity(0.65))
-    }
-
-    @ViewBuilder private var content: some View {
-        switch viewer.phase {
-        case .permissionNeeded:
-            Label("Camera access needed", systemImage: "video.badge.ellipsis").font(.title2)
-            Text("HDMI capture devices appear to macOS as cameras.").foregroundStyle(.secondary)
-        case .permissionDenied:
-            Label("Camera access is off", systemImage: "video.slash").font(.title2)
-            Text("Allow HDMI Captain under Privacy & Security → Camera, then try again.").foregroundStyle(.secondary)
-            HStack {
-                Button("Open Privacy Settings") { app.openPrivacySettings() }
-                Button("Try Again") { app.retry() }
-            }
-        case .scanning:
-            ProgressView().controlSize(.large).tint(.white)
-            Text("Scanning for hardware").font(.title2)
-            Text("Connect an HDMI capture device.").foregroundStyle(.secondary)
-        case let .waiting(name):
-            Image(systemName: "cable.connector.slash").font(.system(size: 36))
-            Text("\(name) is not connected").font(.title2)
-            Text("The picture comes back as soon as it's plugged in.").foregroundStyle(.secondary)
-        case let .connecting(name):
-            ProgressView().controlSize(.large).tint(.white)
-            Text("Connecting to \(name)").font(.title2)
-        case let .recovering(reason):
-            ProgressView().controlSize(.large).tint(.white)
-            Text(reason).font(.title2)
-            Text("Reconnecting automatically…").foregroundStyle(.secondary)
-        case let .paused(reason):
-            PauseIllustration(reason: reason)
-                .padding(.bottom, 8)
-            Label("Paused", systemImage: "pause.fill").font(.largeTitle.bold())
-            Text(reason.message).font(.title3)
-            Text(reason.hint).foregroundStyle(.secondary)
-        case let .failed(message):
-            Label("Can't show video", systemImage: "exclamationmark.triangle").font(.title2)
-            Text(message).foregroundStyle(.secondary)
-            Button("Try Again") { app.retry() }
-        case .live:
-            EmptyView()
-        }
     }
 }
 
@@ -328,15 +271,18 @@ private struct GuidesOverlay: View {
 
 private struct RecordingIndicator: View {
     let since: Date
+    var showsTimer = true
 
     var body: some View {
         TimelineView(.periodic(from: since, by: 1)) { context in
             let elapsed = Int(context.date.timeIntervalSince(since))
             HStack(spacing: 6) {
                 Circle().fill(.red).frame(width: 8, height: 8)
-                Text(String(format: "REC %d:%02d:%02d", elapsed / 3600, elapsed / 60 % 60, elapsed % 60))
+                Text(showsTimer ? String(format: "REC %d:%02d:%02d", elapsed / 3600, elapsed / 60 % 60, elapsed % 60) : "REC")
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Recording")
             .foregroundStyle(.white)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)

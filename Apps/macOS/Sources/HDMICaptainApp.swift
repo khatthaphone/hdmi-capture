@@ -190,7 +190,7 @@ private struct VideoMenuItems: View {
             Button("Save Current as Profile") {
                 if let session = viewer.session {
                     let profile = app.saveProfile(from: session)
-                    viewer.showToast("Saved profile \(profile.name)")
+                    viewer.showToast("Profile “\(profile.name)” saved")
                 }
             }
             .disabled(viewer.session == nil)

@@ -42,7 +42,7 @@ final class DeviceSession {
     /// Asks the app to re-resolve devices (format or audio input changed).
     @ObservationIgnored var onNeedsReconcile: (() -> Void)?
     /// Short user-facing messages for whichever views show this card.
-    @ObservationIgnored var onMessage: ((String) -> Void)?
+    @ObservationIgnored var onMessage: ((String, Feedback.Kind) -> Void)?
     /// Recording codec, read when a recording starts.
     @ObservationIgnored var recordingCodec: () -> Recorder.Codec = { .hevc }
 
@@ -166,7 +166,7 @@ final class DeviceSession {
 
     func startRecording() {
         guard state == .live, let info = liveInfo else {
-            onMessage?("Nothing live to record")
+            onMessage?("Connect a capture card to record", .warning)
             return
         }
         let folder = MediaLibrary.videoFolder
@@ -182,7 +182,7 @@ final class DeviceSession {
     func stopRecording(reason: String? = nil) {
         guard isRecording else { return }
         recordingSize = nil
-        if let reason { onMessage?(reason) }
+        if let reason { onMessage?(reason, .warning) }
         recorder.stop()
     }
 
@@ -214,23 +214,19 @@ final class DeviceSession {
     /// Saves the last `seconds` (nil = everything kept) to Movies/HDMI Captain.
     func saveRecent(seconds: Double?) {
         guard recent.isEnabled else {
-            onMessage?("Turn on Keep Recent Footage first (Pro menu)")
+            onMessage?("Turn on Keep Recent in the Save Recent menu first", .warning)
             return
         }
         let url = RollingRecorder.fileURL(in: MediaLibrary.videoFolder)
-        onMessage?("Saving…")
+        onMessage?("Saving…", .progress)
         Task {
             do {
                 try await recent.save(last: seconds, to: url)
                 let duration = try await AVURLAsset(url: url).load(.duration).seconds
                 lastRecordingURL = url
-                #if os(macOS)
-                onMessage?("Saved last \(Self.describe(duration))")
-                #else
-                onMessage?("\(await MediaLibrary.savedMessage(for: url)): last \(Self.describe(duration))")
-                #endif
+                onMessage?("Saved the last \(Self.describe(duration))\(await MediaLibrary.destinationSuffix(for: url))", .success)
             } catch {
-                onMessage?("Couldn't save: \(error.localizedDescription)")
+                onMessage?("Couldn't save: \(error.localizedDescription)", .error)
             }
         }
     }
@@ -247,7 +243,7 @@ final class DeviceSession {
         profile.settings.apply(to: &updated)
         updated.profileID = profile.id
         preset = updated
-        onMessage?("Profile: \(profile.name)")
+        onMessage?("Profile: \(profile.name)", .info)
     }
 
     // MARK: LUT
@@ -265,7 +261,7 @@ final class DeviceSession {
             preset.lutName = url.deletingPathExtension().lastPathComponent
         } catch {
             lutError = error.localizedDescription
-            onMessage?("Can't use this LUT: \(error.localizedDescription)")
+            onMessage?("Can't use this LUT: \(error.localizedDescription)", .error)
         }
     }
 
@@ -351,12 +347,12 @@ final class DeviceSession {
         case let .finished(url):
             recordingSince = nil
             lastRecordingURL = url
-            Task { onMessage?(await MediaLibrary.savedMessage(for: url)) }
+            Task { onMessage?("Recording saved\(await MediaLibrary.destinationSuffix(for: url))", .success) }
         case .idle:
             recordingSince = nil
         case let .failed(message):
             recordingSince = nil
-            onMessage?("Recording failed: \(message)")
+            onMessage?("Recording failed: \(message)", .error)
         }
     }
 }

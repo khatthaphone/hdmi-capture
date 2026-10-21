@@ -85,7 +85,7 @@ final class QASoak {
         if Double(now - started) / 60 >= Double(minutes) {
             timer?.invalidate()
             timer = nil
-            app.currentViewer?.showToast("Soak test finished")
+            app.currentViewer?.showToast("Soak test finished", .info)
         }
     }
 

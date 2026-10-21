@@ -159,7 +159,7 @@ struct ProSettingsSections: View {
                 Picker("Codec", selection: $app.prefs.recordingCodec) {
                     ForEach(Recorder.Codec.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
-                Toggle("Show recording indicator", isOn: $app.prefs.showRecordingIndicator)
+                Toggle("Show recording timer", isOn: $app.prefs.showRecordingIndicator)
                 #if os(macOS)
                 Button("Show Recordings in Finder") { app.showRecordingsInFinder() }
                 #endif

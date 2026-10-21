@@ -115,7 +115,7 @@ private struct SettingsForm: View {
             Section("Display") {
                 Toggle("Show controls on tap", isOn: $app.prefs.showControlsOnHover)
                 Toggle("Show stats", isOn: $app.prefs.showStats)
-                Toggle("Show recording indicator", isOn: $app.prefs.showRecordingIndicator)
+                Toggle("Show recording timer", isOn: $app.prefs.showRecordingIndicator)
             }
 
             Section("Guides") {

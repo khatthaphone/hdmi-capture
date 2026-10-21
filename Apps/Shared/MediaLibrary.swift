@@ -23,12 +23,13 @@ enum MediaLibrary {
         #endif
     }
 
-    /// Short confirmation for a file just saved at `url`.
-    static func savedMessage(for url: URL) async -> String {
+    /// Where a just-saved file can be found, as a suffix for "Screenshot saved…" ("" on the Mac,
+    /// where it's always the Pictures/Movies folder). On iPad this also adds the copy to Photos.
+    static func destinationSuffix(for url: URL) async -> String {
         #if os(macOS)
-        return "Saved \(url.lastPathComponent)"
+        return ""
         #else
-        return await addToPhotos(url) ? "Saved to Photos" : "Saved to Files › HDMI Captain"
+        return await addToPhotos(url) ? " to Photos" : " to Files › HDMI Captain"
         #endif
     }
 

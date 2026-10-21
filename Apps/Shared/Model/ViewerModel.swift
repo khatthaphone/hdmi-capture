@@ -5,6 +5,34 @@ import UIKit
 #endif
 import CaptureCore
 import Observation
+import SwiftUI
+
+/// A short message at the bottom of a viewer. The kind sets its icon, tint and how long it stays.
+struct Feedback: Equatable {
+    enum Kind: Equatable {
+        /// Something finished (saved, copied).
+        case success
+        /// Neutral information (profile applied).
+        case info
+        /// Work in progress; stays until replaced.
+        case progress
+        /// The action couldn't run; says what to do instead.
+        case warning
+        /// Something failed.
+        case error
+    }
+
+    let text: String
+    let kind: Kind
+
+    var duration: Duration {
+        switch kind {
+        case .success, .info: .seconds(2.5)
+        case .progress: .seconds(30)
+        case .warning, .error: .seconds(5)
+        }
+    }
+}
 
 /// One place video is shown: the main window, a per-card window, or a grid tile.
 /// Owns its renderer and view state; the capture itself lives in the shared `DeviceSession`.
@@ -56,7 +84,7 @@ final class ViewerModel {
     /// A frame has been shown since the current device was attached.
     private(set) var hasFrame = false
     /// Short confirmation shown at the bottom of the view.
-    private(set) var toast: String?
+    private(set) var toast: Feedback?
     /// More than a couple of dropped frames per second (often shared USB 2.0 bandwidth).
     private(set) var isDroppingFrames = false
     /// The window is in native full screen.
@@ -258,7 +286,7 @@ final class ViewerModel {
         if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
             let fit = min(1, visible.width / size.width, visible.height / size.height)
             size = NSSize(width: (size.width * fit).rounded(), height: (size.height * fit).rounded())
-            if fit < 1 { showToast("Limited to screen size") }
+            if fit < 1 { showToast("Limited to the screen size", .info) }
         }
         let frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
         var origin = NSPoint(x: window.frame.midX - frame.width / 2, y: window.frame.midY - frame.height / 2)
@@ -276,28 +304,28 @@ final class ViewerModel {
     /// Saves the current source frame at full resolution to ~/Pictures/HDMI Captain.
     func saveScreenshot() {
         guard let frame = renderer?.currentFrame else {
-            showToast("Nothing to capture yet")
+            showToast("No picture to capture yet", .warning)
             return
         }
         Task.detached(priority: .userInitiated) {
             let folder = MediaLibrary.screenshotFolder
-            let message: String
+            let message: String, kind: Feedback.Kind
             do {
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 guard let data = FrameSnapshot.pngData(from: frame) else { throw CocoaError(.fileWriteUnknown) }
                 let url = FrameSnapshot.fileURL(in: folder)
                 try data.write(to: url)
-                message = await MediaLibrary.savedMessage(for: url)
+                (message, kind) = ("Screenshot saved\(await MediaLibrary.destinationSuffix(for: url))", .success)
             } catch {
-                message = "Couldn't save screenshot: \(error.localizedDescription)"
+                (message, kind) = ("Couldn't save the screenshot: \(error.localizedDescription)", .error)
             }
-            await MainActor.run { self.showToast(message) }
+            await MainActor.run { self.showToast(message, kind) }
         }
     }
 
     func copyFrame() {
         guard let frame = renderer?.currentFrame, let image = FrameSnapshot.cgImage(from: frame) else {
-            showToast("Nothing to copy yet")
+            showToast("No picture to copy yet", .warning)
             return
         }
         #if os(macOS)
@@ -312,11 +340,11 @@ final class ViewerModel {
 
     func toggleRecording() {
         guard testPattern == nil else {
-            showToast("Turn off the test pattern to record")
+            showToast("Switch to the live input to record", .warning)
             return
         }
         guard let session else {
-            showToast("Nothing live to record")
+            showToast("Connect a capture card to record", .warning)
             return
         }
         session.toggleRecording()
@@ -370,11 +398,14 @@ final class ViewerModel {
         }
     }
 
-    func showToast(_ message: String) {
-        toast = message
+    func showToast(_ message: String, _ kind: Feedback.Kind = .success) {
+        let feedback = Feedback(text: message, kind: kind)
+        toast = feedback
+        // VoiceOver users don't see toasts; read them out.
+        AccessibilityNotification.Announcement(message).post()
         toastTask?.cancel()
         toastTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2.5))
+            try? await Task.sleep(for: feedback.duration)
             guard !Task.isCancelled else { return }
             self?.toast = nil
         }
