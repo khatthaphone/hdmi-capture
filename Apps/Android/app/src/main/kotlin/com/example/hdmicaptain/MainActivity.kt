@@ -34,6 +34,8 @@ import com.example.hdmicaptain.billing.ProStore
 import com.example.hdmicaptain.capture.ViewerPhase
 import com.example.hdmicaptain.model.DevicePreset
 import com.example.hdmicaptain.model.FormatPreference
+import com.example.hdmicaptain.model.Profile
+import com.example.hdmicaptain.model.ProfileSettings
 import com.example.hdmicaptain.model.TestPattern
 import com.example.hdmicaptain.settings.LicensesScreen
 import com.example.hdmicaptain.settings.SettingsActions
@@ -224,8 +226,10 @@ class MainActivity : ComponentActivity() {
         val diagnostics by model.showDiagnostics.collectAsState()
         val isPro by pro.isPro.collectAsState()
         val recent by model.recent.collectAsState()
+        val userProfiles by graph.prefs.userProfiles.collectAsState(initial = emptyList())
         SettingsScreen(
-            SettingsState(cards.map { it.key to it.name }, card?.key, formats, preset, diagnostics, BuildConfig.VERSION_NAME, isPro, recent.first, recent.second),
+            SettingsState(cards.map { it.key to it.name }, card?.key, formats, preset, diagnostics, BuildConfig.VERSION_NAME, isPro, recent.first, recent.second,
+                Profile.builtIns + userProfiles),
             object : SettingsActions {
                 override fun selectCard(key: String) { graph.controller.select(key) }
                 override fun setFormat(format: FormatPreference) = model.updatePreset(model.preset.value.copy(format = format))
@@ -234,6 +238,14 @@ class MainActivity : ComponentActivity() {
                 override fun chooseLut() = lutPicker.launch(arrayOf("*/*"))
                 override fun setRecent(enabled: Boolean, minutes: Int) = model.setRecent(enabled, minutes)
                 override fun showUpgrade() = pro.requestUpgrade()
+                override fun applyProfile(profile: Profile) = model.updatePreset(profile.settings.applyTo(model.preset.value))
+                override fun saveProfile(name: String) {
+                    val profile = Profile(java.util.UUID.randomUUID().toString(), name, ProfileSettings(model.preset.value))
+                    lifecycleScope.launch { graph.prefs.setUserProfiles(userProfiles + profile) }
+                }
+                override fun deleteProfile(profile: Profile) {
+                    lifecycleScope.launch { graph.prefs.setUserProfiles(userProfiles.filter { it.id != profile.id }) }
+                }
                 override fun showLicenses() {
                     showLicenses = true
                 }

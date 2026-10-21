@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.hdmicaptain.model.DevicePreset
 import com.example.hdmicaptain.model.GuideSettings
+import com.example.hdmicaptain.model.Profile
 import kotlinx.serialization.json.Json
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -58,6 +59,13 @@ class PrefsStore(context: Context) {
         store.edit { it[GUIDES] = Json.encodeToString(GuideSettings.serializer(), guides) }
     }
 
+    /** User profiles (built-ins come from Profile.builtIns). */
+    val userProfiles: Flow<List<Profile>> = store.data.map { Profile.decode(it[PROFILES]) }
+
+    suspend fun setUserProfiles(profiles: List<Profile>) {
+        store.edit { it[PROFILES] = Profile.encode(profiles) }
+    }
+
     suspend fun setLastCard(key: String) {
         store.edit { it[LAST_CARD] = key }
     }
@@ -74,6 +82,7 @@ class PrefsStore(context: Context) {
         val SHOW_DIAGNOSTICS = booleanPreferencesKey("showDiagnostics")
         val LAST_CARD = stringPreferencesKey("lastCardKey")
         val GUIDES = stringPreferencesKey("guides")
+        val PROFILES = stringPreferencesKey("userProfiles")
         val RECENT_ENABLED = booleanPreferencesKey("recentEnabled")
         val RECENT_MINUTES = androidx.datastore.preferences.core.intPreferencesKey("recentMinutes")
     }

@@ -13,7 +13,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -43,6 +45,9 @@ import com.example.hdmicaptain.model.DevicePreset
 import com.example.hdmicaptain.model.FilterMode
 import com.example.hdmicaptain.model.FormatPreference
 import com.example.hdmicaptain.model.ImageAdjustments
+import com.example.hdmicaptain.model.LookPreset
+import com.example.hdmicaptain.model.Profile
+import com.example.hdmicaptain.model.ProfileSettings
 import com.example.hdmicaptain.model.ScaleMode
 import kotlin.math.roundToInt
 
@@ -57,6 +62,7 @@ data class SettingsState(
     val isPro: Boolean = false,
     val recentEnabled: Boolean = false,
     val recentMinutes: Int = 15,
+    val profiles: List<Profile> = Profile.builtIns,
 )
 
 interface SettingsActions {
@@ -68,6 +74,9 @@ interface SettingsActions {
     /** Opens the system file picker for a .cube file. */
     fun chooseLut()
     fun setRecent(enabled: Boolean, minutes: Int)
+    fun applyProfile(profile: Profile)
+    fun saveProfile(name: String)
+    fun deleteProfile(profile: Profile)
     fun showUpgrade()
 }
 
@@ -109,6 +118,7 @@ private fun LazyListScope.settingsContent(state: SettingsState, actions: Setting
         Choice("Format", formatTitle(p.format), formats.map(::formatTitle)) { actions.setFormat(formats[it]) }
     }
     footer("Automatic picks the smoothest 16:9 mode the card and this USB port can carry.")
+    item { ProfileRow(state, actions) }
 
     section("Picture")
     item { Choice("Scale", scaleTitle(p.scale), ScaleMode.entries.map(::scaleTitle)) { actions.update(p.copy(scale = ScaleMode.entries[it])) } }
@@ -117,6 +127,10 @@ private fun LazyListScope.settingsContent(state: SettingsState, actions: Setting
 
     section("Look")
     val a = p.adjustments
+    item {
+        val looks = LookPreset.entries
+        Choice("Preset", LookPreset.of(a)?.title ?: "Custom", looks.map { it.title }) { actions.update(p.copy(adjustments = looks[it].values)) }
+    }
     item { SliderRow("Brightness", a.brightness.toFloat(), -0.5f..0.5f, signed(a.brightness)) { actions.update(p.copy(adjustments = a.copy(brightness = it.toDouble()))) } }
     item { SliderRow("Contrast", a.contrast.toFloat(), 0.5f..1.5f, "%.2f".format(a.contrast)) { actions.update(p.copy(adjustments = a.copy(contrast = it.toDouble()))) } }
     item { SliderRow("Saturation", a.saturation.toFloat(), 0f..2f, "%.2f".format(a.saturation)) { actions.update(p.copy(adjustments = a.copy(saturation = it.toDouble()))) } }
@@ -172,6 +186,32 @@ private fun LazyListScope.settingsContent(state: SettingsState, actions: Setting
     item { Row(Modifier.fillMaxWidth().padding(vertical = 12.dp)) { Text("Version", Modifier.weight(1f)); Text(state.appVersion) } }
     item { Text("Open-source licenses", Modifier.fillMaxWidth().clickable(onClick = actions::showLicenses).padding(vertical = 12.dp)) }
     item { Box(Modifier.padding(bottom = 32.dp)) }
+}
+
+/** Profiles: apply one, or save the current settings as a new one (Apple ProfilesSettingsView). */
+@Composable
+private fun ProfileRow(state: SettingsState, actions: SettingsActions) {
+    var naming by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("") }
+    val current = state.profiles.firstOrNull { ProfileSettings(state.preset) == it.settings }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f)) {
+            Choice("Profile", current?.name ?: "Custom", state.profiles.map { it.name }) { actions.applyProfile(state.profiles[it]) }
+        }
+        TextButton(onClick = { name = ""; naming = true }) { Text("Save as…") }
+        if (current != null && !current.isBuiltIn) TextButton(onClick = { actions.deleteProfile(current) }) { Text("Delete") }
+    }
+    if (naming) {
+        AlertDialog(
+            onDismissRequest = { naming = false },
+            title = { Text("Save as Profile") },
+            text = { OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true) },
+            confirmButton = {
+                TextButton(onClick = { actions.saveProfile(name.trim()); naming = false }, enabled = name.isNotBlank()) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { naming = false }) { Text("Cancel") } },
+        )
+    }
 }
 
 private fun LazyListScope.section(title: String) = item {
