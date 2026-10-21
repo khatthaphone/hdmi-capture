@@ -336,6 +336,9 @@ final class DeviceSession {
             if reason == "Device disconnected" { stopRecording(reason: "Recording saved: the capture card was disconnected") }
             state = .recovering(reason)
         case let .paused(reason):
+            // iPadOS won't encode in the background (or without the camera); finish the file now
+            // rather than letting the writer fail mid-stream.
+            stopRecording(reason: "Recording saved: capture paused (\(reason == .background ? "app in the background" : "camera unavailable"))")
             state = .paused(reason)
         case let .failed(message):
             stopRecording()

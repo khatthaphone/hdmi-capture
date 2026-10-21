@@ -403,6 +403,11 @@ final class AppModel {
                 viewer.toggleRecording()
                 try? await Task.sleep(for: .seconds(3))
                 viewer.toggleRecording()
+            case "record20s":
+                // iPad QA: record across a trip to the background (see task 021).
+                viewer.toggleRecording()
+                try? await Task.sleep(for: .seconds(20))
+                viewer.toggleRecording()
             case "recent15":
                 // Keep Recent on for ~25 s, save the last 15 s, then turn it back off.
                 prefs.recentEnabled = true
