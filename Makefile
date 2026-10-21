@@ -1,7 +1,7 @@
 DERIVED := .build/xcode
 APP := $(DERIVED)/Build/Products/Debug/HDMI Captain.app
 
-.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad ipad-snapshot ipad-soak inventory logs clean
+.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad ipad-snapshot ipad-soak android-build android-test android-run inventory logs clean
 
 IOS_SIM ?= iPad Pro 11-inch (M5)
 IPAD_APP_SIM := $(DERIVED)/Build/Products/Debug-iphonesimulator/HDMI Captain.app
@@ -63,6 +63,24 @@ ipad-soak:
 	@mkdir -p $(SNAP_DIR)
 	for f in qa-soak.csv qa-formats.txt qa-events.csv; do xcrun devicectl device copy from --device $(IPAD_ID) --domain-type appDataContainer --domain-identifier com.example.hdmicaptain --source Documents/$$f --destination $(SNAP_DIR)/$$f -q || true; done
 	@cat $(SNAP_DIR)/qa-soak.csv
+
+# Android (Apps/Android). JDK 21 from Android Studio; the system JDK is too new for AGP.
+# ANDROID_ARGS are intent extras, e.g. ANDROID_ARGS="--es testPattern smpteBars".
+# GRADLE can point at a local Gradle when the wrapper can't download its distribution.
+ANDROID_DIR := Apps/Android
+ANDROID_ENV := JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$(HOME)/Library/Android/sdk"
+GRADLE ?= ./gradlew
+ANDROID_ARGS ?=
+
+android-build:
+	cd $(ANDROID_DIR) && $(ANDROID_ENV) $(GRADLE) assembleDebug
+
+android-test:
+	cd $(ANDROID_DIR) && $(ANDROID_ENV) $(GRADLE) test
+
+android-run: android-build
+	adb install -r $(ANDROID_DIR)/app/build/outputs/apk/debug/app-debug.apk
+	adb shell am start -S -n com.example.hdmicaptain/.MainActivity $(ANDROID_ARGS)
 
 inventory:
 	cd tools/device-inventory && swift run -q device-inventory

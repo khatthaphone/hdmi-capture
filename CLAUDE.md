@@ -9,6 +9,7 @@ Native HDMI-capture viewer for macOS (iPadOS/Android/Windows later; mini-OBS lat
 - Targets: `HDMICaptain` (Mac, App Store), `HDMICaptain-Direct` (same Mac app + Sparkle, `DIRECT_DISTRIBUTION`, for the notarized DMG; build it with its own `-derivedDataPath .build/xcode-direct` because the product name is the same), `HDMICaptain-iPad`. Release tooling: `tools/release/`, `docs/release.md`.
 - `Apps/macOS/Sources/` — Mac shell: `MetalLayerView` (NSView), `WindowConfigurator`, `SettingsView`, Multi-View, menu-bar extra, streaming, menu commands in `HDMICaptainApp.swift`.
 - `Apps/iPadOS/Sources/` — iPad shell (iPadOS 17+, USB-C iPads): App struct, `MetalLayerView` (UIView) with the same `MetalPreview` API.
+- `Apps/Android/` — Android app (spec §12, plan tasks 069–085): Gradle, AGP 9 + Kotlin 2.4 + Compose, compileSdk 37 / targetSdk 36 / minSdk 29, NDK 28.2. Modules `app`, `feature:{viewer,settings}`, `core:model` (pure JVM: ports of CaptureCore's platform-free logic), `core:{capture,render,audio,billing}`. `core:render` is native (CMake, GLES 3); libraries must stay 16 KB page aligned.
 - `tools/device-inventory/` — CLI that lists capture devices/formats; outputs saved in `docs/research/devices/`.
 - `project.yml` — XcodeGen; `HDMICaptain.xcodeproj` is generated and gitignored.
 
@@ -18,6 +19,7 @@ Native HDMI-capture viewer for macOS (iPadOS/Android/Windows later; mini-OBS lat
 - `make run` — build and open the app
 - `make test` — `swift test` in CaptureCore (Swift Testing)
 - `make build-ios-core` / `make test-ios-core` — CaptureCore for iOS (device build / iPad simulator tests; `IOS_SIM=` picks the simulator). Use `#if os(macOS)` for macOS-only APIs and `#if !targetEnvironment(simulator)` for device-only ones (e.g. `addPresentedHandler`)
+- `make android-build` / `make android-test` / `make android-run ANDROID_ARGS="--es testPattern smpteBars"` — Android (JDK 21 from Android Studio's JBR; the system JDK 26 is too new). If the Gradle wrapper can't download its distribution, pass `GRADLE=/path/to/gradle-9.8.2/bin/gradle`. Check 16 KB alignment with `zipalign -c -P 16 -v 4 <apk>`. Debug on a phone over wireless adb (`adb pair`/`adb connect`), because the card holds the USB-C port
 - `make inventory` — run device-inventory
 - `/usr/bin/log stream --level debug --predicate 'subsystem == "hdmicaptain"'` — engine logs (in zsh, `log` is a builtin; use the full path)
 
