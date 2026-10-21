@@ -35,6 +35,7 @@ import com.example.hdmicaptain.capture.ViewerPhase
 import com.example.hdmicaptain.model.DevicePreset
 import com.example.hdmicaptain.model.FormatPreference
 import com.example.hdmicaptain.model.TestPattern
+import com.example.hdmicaptain.settings.LicensesScreen
 import com.example.hdmicaptain.settings.SettingsActions
 import com.example.hdmicaptain.settings.SettingsScreen
 import com.example.hdmicaptain.settings.SettingsState
@@ -60,6 +61,7 @@ class MainActivity : ComponentActivity() {
     private var permission by mutableStateOf<PermissionPhase?>(null)
     private var inPip by mutableStateOf(false)
     private var showSettings by mutableStateOf(false)
+    private var showLicenses by mutableStateOf(false)
     private var captureStarted = false
 
     // UVC cards need CAMERA (Android 9+) before the USB grant; RECORD_AUDIO for the card's sound.
@@ -123,6 +125,7 @@ class MainActivity : ComponentActivity() {
                 androidx.compose.runtime.LaunchedEffect(isPro) { model.isPro = isPro }
                 ViewerScreen(model, host, permission, inPictureInPicture = inPip, isPro = isPro)
                 if (showSettings) Settings(onDone = { showSettings = false })
+                if (showLicenses) LicensesScreen(assets, onDone = { showLicenses = false })
                 val upgrade by pro.upgradeRequest.collectAsState()
                 upgrade?.let { request ->
                     val price by pro.price.collectAsState()
@@ -231,7 +234,9 @@ class MainActivity : ComponentActivity() {
                 override fun chooseLut() = lutPicker.launch(arrayOf("*/*"))
                 override fun setRecent(enabled: Boolean, minutes: Int) = model.setRecent(enabled, minutes)
                 override fun showUpgrade() = pro.requestUpgrade()
-                override fun showLicenses() = model.show(Feedback("Licenses: libusb (LGPL-2.1), libuvc (BSD), libjpeg-turbo (BSD/IJG), Oboe (Apache-2.0)"))
+                override fun showLicenses() {
+                    showLicenses = true
+                }
             },
             onDone,
         )
