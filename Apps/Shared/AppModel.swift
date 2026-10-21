@@ -51,6 +51,8 @@ final class AppModel {
     let streamer = Streamer()
     /// Drives the Go Live sheet.
     var isShowingStreamSetup = false
+    /// Video › Latency Test… (task 035).
+    var isShowingLatencyTest = false
     #endif
 
     #if os(iOS)

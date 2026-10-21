@@ -34,6 +34,9 @@ struct HDMICaptainApp: App {
                 .sheet(isPresented: $app.isShowingStreamSetup) {
                     StreamSetupView().environment(app)
                 }
+                .sheet(isPresented: $app.isShowingLatencyTest) {
+                    LatencyTestSheet().environment(app)
+                }
         }
         .defaultSize(width: 1280, height: 720)
         .windowStyle(.hiddenTitleBar)
@@ -255,6 +258,7 @@ private struct VideoMenuItems: View {
         }
         Button { openWindow(id: "scopes") } label: { Label("Show Scopes", systemImage: Symbol.scopes) }
             .keyboardShortcut("s", modifiers: [.command, .option])
+        Button { app.isShowingLatencyTest = true } label: { Label("Latency Test…", systemImage: "stopwatch") }
         Menu { GuideItems(app: app) } label: { Label("Guides", systemImage: Symbol.guides) }
         Divider()
         if viewer.source == .automatic {
