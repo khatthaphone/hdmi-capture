@@ -44,7 +44,7 @@ class ViewerScreensTest {
         override fun setVolume(volume: Float) = Unit
         override fun screenshot() { calls += "screenshot" }
         override fun record() { calls += "record" }
-        override fun saveRecent() { calls += "recent" }
+        override fun saveRecent(seconds: Int?) { calls += "recent" }
         override fun setScale(mode: ScaleMode) { calls += "scale:$mode" }
         override fun setSharpPixels(on: Boolean) = Unit
         override fun setShowDiagnostics(on: Boolean) = Unit

@@ -8,7 +8,10 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -46,7 +49,7 @@ import kotlinx.coroutines.delay
 /** App-level actions the viewer can't do itself (Pro sheet, settings, PiP, system settings). */
 interface ViewerHost : StatusActions {
     fun record()
-    fun saveRecent()
+    fun saveRecent(seconds: Int?)
     fun pictureInPicture()
     fun openSettings()
 }
@@ -78,6 +81,7 @@ fun ViewerScreen(
     val guides by model.guides.collectAsState()
     val sourceSize by model.sourceSize.collectAsState()
     val testPattern = pattern != null
+    val recordingSince by model.recordingSince.collectAsState()
     var showHelp by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -89,7 +93,7 @@ fun ViewerScreen(
             override fun setVolume(volume: Float) = model.setVolume(volume)
             override fun screenshot() = model.saveScreenshot()
             override fun record() = host.record()
-            override fun saveRecent() = host.saveRecent()
+            override fun saveRecent(seconds: Int?) = host.saveRecent(seconds)
             override fun setScale(mode: ScaleMode) = model.setScale(mode)
             override fun setSharpPixels(on: Boolean) = model.setSharpPixels(on)
             override fun setShowDiagnostics(on: Boolean) = model.setShowDiagnostics(on)
@@ -142,6 +146,10 @@ fun ViewerScreen(
             Diagnostics(model, phase, Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp))
         }
 
+        recordingSince?.let { since ->
+            RecordingPill(since, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(12.dp))
+        }
+
         feedback?.let {
             Text(
                 it.text,
@@ -172,12 +180,31 @@ fun ViewerScreen(
                 testPattern = pattern,
                 guides = guides,
                 isPro = isPro,
-                isRecording = false,
+                isRecording = recordingSince != null,
                 actions = actions,
             )
         }
     }
     if (showHelp) HelpSheet(onDismiss = { showHelp = false })
+}
+
+/** REC dot + elapsed time while recording (UI only; never in the recording). */
+@Composable
+private fun RecordingPill(sinceNanos: Long, modifier: Modifier = Modifier) {
+    var seconds by remember { mutableStateOf(0L) }
+    LaunchedEffect(sinceNanos) {
+        while (true) {
+            seconds = (System.nanoTime() - sinceNanos) / 1_000_000_000
+            delay(500)
+        }
+    }
+    Row(
+        modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 4.dp).testTag("rec"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(10.dp).background(Color(0xFFFF453A), CircleShape))
+        Text("  REC %d:%02d".format(seconds / 60, seconds % 60), color = Color.White, style = MaterialTheme.typography.labelMedium)
+    }
 }
 
 /** Keyboard shortcuts, the Mac set with Ctrl for ⌘ (spec §5.6, §12.7). */

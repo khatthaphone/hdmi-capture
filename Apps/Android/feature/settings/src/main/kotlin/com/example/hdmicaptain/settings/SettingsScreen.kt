@@ -54,6 +54,9 @@ data class SettingsState(
     val preset: DevicePreset,
     val showDiagnostics: Boolean,
     val appVersion: String,
+    val isPro: Boolean = false,
+    val recentEnabled: Boolean = false,
+    val recentMinutes: Int = 15,
 )
 
 interface SettingsActions {
@@ -64,6 +67,8 @@ interface SettingsActions {
     fun showLicenses()
     /** Opens the system file picker for a .cube file. */
     fun chooseLut()
+    fun setRecent(enabled: Boolean, minutes: Int)
+    fun showUpgrade()
 }
 
 /**
@@ -145,6 +150,23 @@ private fun LazyListScope.settingsContent(state: SettingsState, actions: Setting
 
     section("Display")
     item { SwitchRow("Show diagnostics", state.showDiagnostics, actions::setShowDiagnostics) }
+
+    section("Pro")
+    if (state.isPro) {
+        item { SwitchRow("Keep Recent Footage", state.recentEnabled) { actions.setRecent(it, state.recentMinutes) } }
+        item {
+            val choices = listOf(5, 15, 30, 60)
+            Choice("Keep", "${state.recentMinutes} min", choices.map { "$it min" }) { actions.setRecent(state.recentEnabled, choices[it]) }
+        }
+        footer("Keeps the last minutes on this device so you can save a moment after it happened (about 1 GB per 15 minutes at 1080p60).")
+    } else {
+        item {
+            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Recording and Save Recent", Modifier.weight(1f))
+                TextButton(onClick = actions::showUpgrade) { Text("Upgrade…") }
+            }
+        }
+    }
 
     section("About")
     item { Row(Modifier.fillMaxWidth().padding(vertical = 12.dp)) { Text("Version", Modifier.weight(1f)); Text(state.appVersion) } }

@@ -88,10 +88,10 @@ class MainActivity : ComponentActivity() {
         override fun retry() { graph.controller.retry() }
         override fun showHelp() = Unit  // handled inside ViewerScreen
         override fun record() {
-            if (pro.gate(ProFeature.Recording)) model.show(Feedback("Recording isn't available on Android yet"))
+            if (pro.gate(ProFeature.Recording)) model.toggleRecording()
         }
-        override fun saveRecent() {
-            if (pro.gate(ProFeature.ReplayBuffer)) model.show(Feedback("Save Recent isn't available on Android yet"))
+        override fun saveRecent(seconds: Int?) {
+            if (pro.gate(ProFeature.ReplayBuffer)) model.saveRecent(seconds)
         }
         override fun pictureInPicture() = enterPip()
         override fun openSettings() {
@@ -120,6 +120,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             HdmiCaptainTheme {
                 val isPro by pro.isPro.collectAsState()
+                androidx.compose.runtime.LaunchedEffect(isPro) { model.isPro = isPro }
                 ViewerScreen(model, host, permission, inPictureInPicture = inPip, isPro = isPro)
                 if (showSettings) Settings(onDone = { showSettings = false })
                 val upgrade by pro.upgradeRequest.collectAsState()
@@ -218,14 +219,18 @@ class MainActivity : ComponentActivity() {
         val card by graph.controller.currentCard.collectAsState()
         val formats by graph.controller.formatOptions.collectAsState()
         val diagnostics by model.showDiagnostics.collectAsState()
+        val isPro by pro.isPro.collectAsState()
+        val recent by model.recent.collectAsState()
         SettingsScreen(
-            SettingsState(cards.map { it.key to it.name }, card?.key, formats, preset, diagnostics, BuildConfig.VERSION_NAME),
+            SettingsState(cards.map { it.key to it.name }, card?.key, formats, preset, diagnostics, BuildConfig.VERSION_NAME, isPro, recent.first, recent.second),
             object : SettingsActions {
                 override fun selectCard(key: String) { graph.controller.select(key) }
                 override fun setFormat(format: FormatPreference) = model.updatePreset(model.preset.value.copy(format = format))
                 override fun update(preset: DevicePreset) = model.updatePreset(preset)
                 override fun setShowDiagnostics(on: Boolean) = model.setShowDiagnostics(on)
                 override fun chooseLut() = lutPicker.launch(arrayOf("*/*"))
+                override fun setRecent(enabled: Boolean, minutes: Int) = model.setRecent(enabled, minutes)
+                override fun showUpgrade() = pro.requestUpgrade()
                 override fun showLicenses() = model.show(Feedback("Licenses: libusb (LGPL-2.1), libuvc (BSD), libjpeg-turbo (BSD/IJG), Oboe (Apache-2.0)"))
             },
             onDone,

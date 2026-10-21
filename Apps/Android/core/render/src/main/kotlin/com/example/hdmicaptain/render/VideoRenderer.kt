@@ -51,6 +51,12 @@ class VideoRenderer {
         )
     }
 
+    /**
+     * A video encoder's input surface (MediaCodec): each new frame is drawn into it clean and at
+     * source size, stamped with its arrival time. Null removes encoder [id].
+     */
+    fun setEncoder(id: Int, surface: Surface?) = nativeSetEncoder(handle, id, surface)
+
     /** Native frame ring for a capture source (UvcSource); valid until [release]. */
     val ringHandle: Long get() = nativeRing(handle)
 
@@ -88,6 +94,7 @@ class VideoRenderer {
         @JvmStatic external fun nativeRing(handle: Long): Long
         @JvmStatic external fun nativeSetLook(handle: Long, adjust: FloatArray, lut: FloatArray?, lutSize: Int, intensity: Float, domain: FloatArray?)
         @JvmStatic external fun nativeSignal(handle: Long, out: DoubleArray)
+        @JvmStatic external fun nativeSetEncoder(handle: Long, id: Int, surface: Surface?)
         @JvmStatic external fun nativeStats(handle: Long, out: LongArray)
         @JvmStatic external fun nativeScreenshot(handle: Long, size: IntArray): ByteArray?
     }

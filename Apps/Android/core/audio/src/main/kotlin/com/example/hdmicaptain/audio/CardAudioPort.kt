@@ -15,6 +15,16 @@ class CardAudioPort(private val context: Context) {
 
     val levels: CardAudio.Levels? get() = audio?.levels()
 
+    /** Recording tap (see CardAudio.setTap); survives the card's audio restarting. */
+    var tapEnabled = false
+        set(value) {
+            field = value
+            audio?.setTap(value)
+        }
+
+    /** Captured frames for the encoders; 0 when there is no card audio. */
+    fun readTap(out: FloatArray): Int = audio?.readTap(out) ?: 0
+
     fun start(cardName: String) {
         stop()
         val cardAudio = CardAudio(context)
@@ -27,6 +37,7 @@ class CardAudioPort(private val context: Context) {
         try {
             cardAudio.start(input)
             cardAudio.apply(settings)
+            cardAudio.setTap(tapEnabled)
             audio = cardAudio
             Log.i(TAG, "audio from ${input.productName} (id ${input.id}, rates ${input.sampleRates.toList()}, channels ${input.channelCounts.toList()})")
         } catch (e: Exception) {

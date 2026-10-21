@@ -38,6 +38,9 @@ public:
     void setVolume(float volume) { volume_ = volume; }
     void setMuted(bool muted) { muted_ = muted; }
     AudioLevels levels();
+    // Recording tap: captured audio (after channel fixes, before delay/volume) for the encoders.
+    void setTapEnabled(bool on);
+    int readTap(float *out, int frames) { return tap_.read(out, frames); }
 
     oboe::DataCallbackResult onAudioReady(oboe::AudioStream *stream, void *audioData, int32_t frames) override;
     void onErrorAfterClose(oboe::AudioStream *stream, oboe::Result error) override;
@@ -52,6 +55,8 @@ private:
     int inputDeviceId_ = 0;
 
     AudioRing ring_{kSampleRate};  // 1 s
+    AudioRing tap_{kSampleRate * 2};  // 2 s for the recorder thread
+    std::atomic<bool> tapEnabled_{false};
     DriftController drift_;
     std::vector<float> inScratch_;
     std::vector<float> outScratch_;

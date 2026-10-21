@@ -41,6 +41,7 @@ dependencies {
     implementation(project(":core:audio"))
     implementation(project(":core:billing"))
     implementation(project(":core:prefs"))
+    implementation(project(":core:record"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

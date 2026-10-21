@@ -122,6 +122,16 @@ void CardAudio::captured(const float *samples, int frames) {
     }
     chunkFrames_.store(frames, std::memory_order_relaxed);
     ring_.write(s, frames);
+    if (tapEnabled_.load(std::memory_order_relaxed)) tap_.write(s, frames);
+}
+
+void CardAudio::setTapEnabled(bool on) {
+    if (!on) {
+        tapEnabled_ = false;
+        return;
+    }
+    tap_.discard(tap_.available());  // start fresh: no stale audio before the recording
+    tapEnabled_ = true;
 }
 
 void CardAudio::render(float *out, int frames) {

@@ -16,6 +16,9 @@ private val Context.store by preferencesDataStore(name = "settings")
 data class AppPrefs(
     val showDiagnostics: Boolean = false,
     val lastCardKey: String? = null,
+    /** Pro Save Recent: keep the last [recentMinutes] on disk. */
+    val recentEnabled: Boolean = false,
+    val recentMinutes: Int = 15,
 )
 
 /**
@@ -26,13 +29,25 @@ class PrefsStore(context: Context) {
     private val store = context.applicationContext.store
 
     val app: Flow<AppPrefs> = store.data.map { p ->
-        AppPrefs(showDiagnostics = p[SHOW_DIAGNOSTICS] ?: false, lastCardKey = p[LAST_CARD])
+        AppPrefs(
+            showDiagnostics = p[SHOW_DIAGNOSTICS] ?: false,
+            lastCardKey = p[LAST_CARD],
+            recentEnabled = p[RECENT_ENABLED] ?: false,
+            recentMinutes = p[RECENT_MINUTES] ?: 15,
+        )
     }
 
     suspend fun appPrefs(): AppPrefs = app.first()
 
     suspend fun setShowDiagnostics(on: Boolean) {
         store.edit { it[SHOW_DIAGNOSTICS] = on }
+    }
+
+    suspend fun setRecent(enabled: Boolean, minutes: Int) {
+        store.edit {
+            it[RECENT_ENABLED] = enabled
+            it[RECENT_MINUTES] = minutes
+        }
     }
 
     suspend fun setLastCard(key: String) {
@@ -50,5 +65,7 @@ class PrefsStore(context: Context) {
     private companion object {
         val SHOW_DIAGNOSTICS = booleanPreferencesKey("showDiagnostics")
         val LAST_CARD = stringPreferencesKey("lastCardKey")
+        val RECENT_ENABLED = booleanPreferencesKey("recentEnabled")
+        val RECENT_MINUTES = androidx.datastore.preferences.core.intPreferencesKey("recentMinutes")
     }
 }

@@ -54,7 +54,8 @@ interface ControlBarActions {
     fun setVolume(volume: Float)
     fun screenshot()
     fun record()
-    fun saveRecent()
+    /** Save Recent: [seconds] of the buffer, null = everything (without Pro this opens the upgrade sheet). */
+    fun saveRecent(seconds: Int?)
     fun setScale(mode: ScaleMode)
     fun setSharpPixels(on: Boolean)
     fun setShowDiagnostics(on: Boolean)
@@ -109,7 +110,7 @@ fun ControlBar(
                 )
             }
             BarButton(Icons.Outlined.PhotoCamera, "Screenshot", actions::screenshot)
-            BarButton(if (isPro) Icons.Outlined.History else Icons.Outlined.Lock, "Save Recent", actions::saveRecent)
+            SaveRecentMenu(isPro, actions)
             BarButton(
                 if (isPro) Icons.Outlined.FiberManualRecord else Icons.Outlined.Lock,
                 if (isRecording) "Stop Recording" else "Record",
@@ -125,6 +126,26 @@ fun ControlBar(
 @Composable
 private fun BarButton(icon: ImageVector, label: String, onClick: () -> Unit, tint: Color = Color.White) {
     IconButton(onClick = onClick) { Icon(icon, contentDescription = label, tint = tint) }
+}
+
+/** Spans as on Apple (MenuItems.swift). */
+private val recentSpans = listOf(
+    "Last 15 Seconds" to 15, "Last 30 Seconds" to 30, "Last 1 Minute" to 60, "Last 5 Minutes" to 300,
+    "Last 15 Minutes" to 900, "Last 30 Minutes" to 1800, "Last 60 Minutes" to 3600,
+)
+
+@Composable
+private fun SaveRecentMenu(isPro: Boolean, actions: ControlBarActions) {
+    var open by remember { mutableStateOf(false) }
+    IconButton(onClick = { if (isPro) open = true else actions.saveRecent(null); actions.poke() }) {
+        Icon(if (isPro) Icons.Outlined.History else Icons.Outlined.Lock, contentDescription = "Save Recent")
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        recentSpans.forEach { (title, seconds) ->
+            DropdownMenuItem(text = { Text(title) }, onClick = { open = false; actions.saveRecent(seconds) })
+        }
+        DropdownMenuItem(text = { Text("Everything") }, onClick = { open = false; actions.saveRecent(null) })
+    }
 }
 
 @Composable

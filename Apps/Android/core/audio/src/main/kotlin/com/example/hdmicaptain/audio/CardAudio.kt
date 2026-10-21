@@ -44,6 +44,12 @@ class CardAudio(context: Context) {
     fun apply(settings: AudioSettings) =
         nativeSettings(handle, settings.delayMs.coerceIn(0, 500), settings.channelMode.ordinal, settings.volume, settings.muted)
 
+    /** Recording tap on/off; when on, [readTap] returns captured 48 kHz stereo frames. */
+    fun setTap(on: Boolean) = nativeSetTap(handle, on)
+
+    /** Fills [out] (interleaved stereo) with captured frames; returns how many frames. */
+    fun readTap(out: FloatArray): Int = nativeReadTap(handle, out)
+
     fun levels(): Levels {
         val v = FloatArray(7)
         nativeLevels(handle, v)
@@ -66,5 +72,7 @@ class CardAudio(context: Context) {
         @JvmStatic external fun nativeStop(handle: Long)
         @JvmStatic external fun nativeSettings(handle: Long, delayMs: Int, channelMode: Int, volume: Float, muted: Boolean)
         @JvmStatic external fun nativeLevels(handle: Long, out: FloatArray)
+        @JvmStatic external fun nativeSetTap(handle: Long, on: Boolean)
+        @JvmStatic external fun nativeReadTap(handle: Long, out: FloatArray): Int
     }
 }

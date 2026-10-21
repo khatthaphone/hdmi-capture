@@ -24,4 +24,5 @@ include(
     ":core:audio",
     ":core:billing",
     ":core:prefs",
+    ":core:record",
 )

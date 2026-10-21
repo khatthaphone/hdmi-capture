@@ -8,6 +8,10 @@ import com.example.hdmicaptain.capture.ViewerPhase
 import com.example.hdmicaptain.model.AudioSettings
 import com.example.hdmicaptain.model.CubeLUT
 import com.example.hdmicaptain.model.GuideSettings
+import com.example.hdmicaptain.model.LiveInfo
+import com.example.hdmicaptain.record.AudioFanOut
+import com.example.hdmicaptain.record.FileRecorder
+import com.example.hdmicaptain.record.RollingRecorder
 import com.example.hdmicaptain.model.SignalAnalyzer
 import com.example.hdmicaptain.model.SignalContent
 import com.example.hdmicaptain.model.SignalDebouncer
@@ -84,6 +88,27 @@ class ViewerModel(
     private val _sourceSize = MutableStateFlow(0 to 0)
     val sourceSize: StateFlow<Pair<Int, Int>> = _sourceSize.asStateFlow()
 
+    private val _recordingSince = MutableStateFlow<Long?>(null)
+    /** System.nanoTime() when recording started; null when not recording. */
+    val recordingSince: StateFlow<Long?> = _recordingSince.asStateFlow()
+
+    private val _recent = MutableStateFlow(false to 15)
+    /** Save Recent setting: (on, minutes). */
+    val recent: StateFlow<Pair<Boolean, Int>> = _recent.asStateFlow()
+
+    /** Pro unlocked (the app sets it from ProStore); Save Recent only runs for Pro. */
+    var isPro = false
+        set(value) {
+            field = value
+            scope.launch { updateRolling() }
+        }
+
+    private val fanOut = AudioFanOut(audio::readTap)
+    private var recorder: FileRecorder? = null
+    private var rolling: RollingRecorder? = null
+    private var rollingMode: LiveInfo? = null
+    private val io = Dispatchers.IO.limitedParallelism(1)
+
     private var lut: CubeLUT? = null
     private var lutUri: String? = null
 
@@ -95,6 +120,16 @@ class ViewerModel(
         pokeControls()
         scope.launch { _showDiagnostics.value = prefs.appPrefs().showDiagnostics }
         scope.launch { watchSignal() }
+        scope.launch {
+            prefs.appPrefs().let { _recent.value = it.recentEnabled to it.recentMinutes }
+            // Outputs follow the picture: a lost card ends the recording cleanly; Save Recent follows the mode.
+            phase.collect { p ->
+                if (p !is ViewerPhase.Live && recorder != null) {
+                    stopRecording("Recording saved: the capture card was disconnected")
+                }
+                updateRolling()
+            }
+        }
         // A card came (back): restore its picture and sound settings.
         scope.launch {
             controller.currentCard.collect { card ->
@@ -113,10 +148,97 @@ class ViewerModel(
         if (formatChanged) controller.applyFormat(next.format)
     }
 
+    /** Record / Stop Recording (the app checks Pro first). */
+    fun toggleRecording() {
+        if (recorder != null) {
+            scope.launch { stopRecording("Recording saved to Photos") }
+            return
+        }
+        val live = phase.value as? ViewerPhase.Live
+        when {
+            _testPattern.value != null -> show(Feedback("Switch to the live input to record"))
+            live == null -> show(Feedback("Connect a capture card to record"))
+            else -> scope.launch {
+                val started = withContext(io) {
+                    runCatching {
+                        audio.tapEnabled = true
+                        FileRecorder(context, live.info.width, live.info.height, live.info.frameRate.toInt(), fanOut.open()) { renderer.setEncoder(RECORD_ID, it) }
+                    }
+                }
+                started.onSuccess {
+                    recorder = it
+                    _recordingSince.value = it.startedAtNanos
+                }.onFailure { show(Feedback("Couldn't start recording: ${it.message}", isError = true)) }
+            }
+        }
+    }
+
+    private suspend fun stopRecording(message: String) {
+        val active = recorder ?: return
+        recorder = null
+        _recordingSince.value = null
+        val uri = withContext(io) { runCatching { active.stop() }.getOrNull() }
+        releaseTapIfIdle()
+        show(if (uri != null) Feedback(message) else Feedback("Couldn't save the recording", isError = true))
+    }
+
+    /** Settings › Keep Recent Footage. */
+    fun setRecent(enabled: Boolean, minutes: Int) {
+        _recent.value = enabled to minutes
+        scope.launch {
+            prefs.setRecent(enabled, minutes)
+            updateRolling()
+        }
+    }
+
+    /** Saves the last [seconds] (null = everything kept). */
+    fun saveRecent(seconds: Int?) {
+        val active = rolling ?: return show(Feedback("Turn on Keep Recent Footage in Settings first"))
+        show(Feedback("Saving recent footage…"))
+        scope.launch {
+            val uri = withContext(io) { runCatching { active.save(seconds) }.getOrNull() }
+            show(if (uri != null) Feedback("Recent footage saved to Photos") else Feedback("Couldn't save recent footage", isError = true))
+        }
+    }
+
+    /** Seconds Save Recent holds right now. */
+    val recentBufferedSeconds: Double get() = rolling?.bufferedSeconds ?: 0.0
+
+    /** Runs the rolling recorder while it's on, Pro and live, restarting it when the mode changes. */
+    private suspend fun updateRolling() {
+        val live = (phase.value as? ViewerPhase.Live)?.info
+        val (enabled, minutes) = _recent.value
+        val want = if (enabled && isPro && live != null && _testPattern.value == null) live else null
+        if (want == rollingMode && rolling?.let { it.keepSeconds == minutes * 60 } != false) return
+        val old = rolling
+        rolling = null
+        rollingMode = null
+        withContext(io) { old?.stop() }
+        if (want != null) {
+            rolling = withContext(io) {
+                runCatching {
+                    audio.tapEnabled = true
+                    RollingRecorder(context, java.io.File(context.cacheDir, "recent"), want.width, want.height, want.frameRate.toInt(),
+                        fanOut.open(), { renderer.setEncoder(RECENT_ID, it) }, keepSeconds = minutes * 60)
+                }.getOrNull()
+            }
+            rollingMode = want
+        }
+        releaseTapIfIdle()
+    }
+
+    private fun releaseTapIfIdle() {
+        if (recorder == null && rolling == null) {
+            fanOut.stop()
+            audio.tapEnabled = false
+        }
+    }
+
     /** Show a generated pattern instead of the card (null = back to the live input). */
     fun setTestPattern(pattern: TestPattern?) {
         _testPattern.value = pattern
         if (pattern != null) renderer.startTestPattern(pattern) else renderer.stopSource()
+        scope.launch { updateRolling() }
         pokeControls()
     }
 
@@ -219,6 +341,11 @@ class ViewerModel(
             }
         }
         renderer.setLook(next.adjustments, lut, next.lutIntensity)
+    }
+
+    private companion object {
+        const val RECORD_ID = 1
+        const val RECENT_ID = 2
     }
 
     /** Saves the clean frame (no UI) to Pictures/HDMI Captain. */

@@ -4,7 +4,10 @@
 #include <GLES3/gl3.h>
 #include <android/native_window.h>
 
+#include <EGL/eglext.h>
+
 #include <atomic>
+#include <map>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -73,6 +76,9 @@ public:
     void startTestPattern(Pattern pattern, int width, int height, int fps);
     void stopSource();
     void setLook(Look look);
+    // A video encoder's input surface (MediaCodec): every new frame is drawn into it at source size,
+    // clean (no UI, no look), stamped with its arrival time. nullptr removes it. Blocks until applied.
+    void setEncoder(int id, ANativeWindow *window);
     SignalSample signal();
     RenderStats stats();
     // Blocks until the render thread has read the current frame; empty if none yet.
@@ -87,6 +93,8 @@ private:
     void convert(const Frame &frame);
     void present(int64_t arrivalNs);
     void sampleSignal(const Frame &frame);
+    void applyEncoderChanges(std::vector<std::pair<int, ANativeWindow *>> changes);
+    void encode(int64_t timestampNs);
     void uploadLook(const Look &look);
     void wake();
 
@@ -102,6 +110,8 @@ private:
     ANativeWindow *pendingWindow_ = nullptr;
     bool optionsChanged_ = false;
     RenderOptions options_;
+    std::vector<std::pair<int, ANativeWindow *>> pendingEncoders_;
+    bool encodersChanged_ = false;
     bool lookChanged_ = false;
     Look look_;
     SignalSample signal_;
@@ -125,6 +135,12 @@ private:
     GLuint rgbFramebuffer_ = 0;
     GLuint vao_ = 0;
     GLuint lutTexture_ = 0;
+    struct Encoder {
+        ANativeWindow *window = nullptr;
+        EGLSurface surface = EGL_NO_SURFACE;
+    };
+    std::map<int, Encoder> encoders_;
+    PFNEGLPRESENTATIONTIMEANDROIDPROC presentationTime_ = nullptr;
     Look activeLook_;
     int convertCount_ = 0;
     int frameWidth_ = 0, frameHeight_ = 0;

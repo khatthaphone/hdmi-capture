@@ -74,6 +74,11 @@ Java_com_example_hdmicaptain_render_VideoRenderer_nativeSetLook(JNIEnv *env, jcl
     renderer(handle)->setLook(std::move(look));
 }
 
+JNIEXPORT void JNICALL
+Java_com_example_hdmicaptain_render_VideoRenderer_nativeSetEncoder(JNIEnv *env, jclass, jlong handle, jint id, jobject surface) {
+    renderer(handle)->setEncoder(id, surface ? ANativeWindow_fromSurface(env, surface) : nullptr);
+}
+
 // out = [meanY, meanCb, meanCr, rangeY, rangeChroma, fullRange, count]
 JNIEXPORT void JNICALL
 Java_com_example_hdmicaptain_render_VideoRenderer_nativeSignal(JNIEnv *env, jclass, jlong handle, jdoubleArray out) {

@@ -207,6 +207,64 @@ void Renderer::stopSource() {
     showingPattern_ = false;
 }
 
+void Renderer::setEncoder(int id, ANativeWindow *window) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    pendingEncoders_.emplace_back(id, window);
+    encodersChanged_ = true;
+    cv_.notify_all();
+    cv_.wait_for(lock, std::chrono::seconds(2), [this] { return !encodersChanged_ || !running_; });
+}
+
+void Renderer::applyEncoderChanges(std::vector<std::pair<int, ANativeWindow *>> changes) {
+    for (auto &[id, window] : changes) {
+        auto existing = encoders_.find(id);
+        if (existing != encoders_.end()) {
+            eglMakeCurrent(display_, pbuffer_, pbuffer_, context_);
+            eglDestroySurface(display_, existing->second.surface);
+            ANativeWindow_release(existing->second.window);
+            encoders_.erase(existing);
+        }
+        if (window) {
+            EGLSurface surface = eglCreateWindowSurface(display_, config_, window, nullptr);
+            if (surface == EGL_NO_SURFACE) {
+                LOGE("encoder surface failed: 0x%x", eglGetError());
+                ANativeWindow_release(window);
+            } else {
+                encoders_[id] = {window, surface};
+            }
+        }
+    }
+    EGLSurface current = surface_ != EGL_NO_SURFACE ? surface_ : pbuffer_;
+    eglMakeCurrent(display_, current, current, context_);
+}
+
+// Draws the clean converted frame into every encoder surface (recording, Save Recent).
+void Renderer::encode(int64_t timestampNs) {
+    if (encoders_.empty()) return;
+    ATrace_beginSection("encode");
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glUseProgram(scaleProgram_);
+    glUniform4f(glGetUniformLocation(scaleProgram_, "uvRect"), 0, 0, 1, 1);
+    glUniform4f(glGetUniformLocation(scaleProgram_, "adjust"), 0, 1, 1, 1);
+    glUniform4f(glGetUniformLocation(scaleProgram_, "sharpen"), 0, 0, 0, 0);
+    glUniform4f(glGetUniformLocation(scaleProgram_, "lut"), 0, 0, 0, 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, rgbTexture_);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindVertexArray(vao_);
+    for (auto &[id, encoder] : encoders_) {
+        eglMakeCurrent(display_, encoder.surface, encoder.surface, context_);
+        glViewport(0, 0, frameWidth_, frameHeight_);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        if (presentationTime_) presentationTime_(display_, encoder.surface, timestampNs);
+        eglSwapBuffers(display_, encoder.surface);
+    }
+    EGLSurface current = surface_ != EGL_NO_SURFACE ? surface_ : pbuffer_;
+    eglMakeCurrent(display_, current, current, context_);
+    ATrace_endSection();
+}
+
 void Renderer::setLook(Look look) {
     std::lock_guard<std::mutex> lock(mutex_);
     look_ = std::move(look);
@@ -268,6 +326,7 @@ bool Renderer::ensureContext() {
     uploadLook(Look{});  // a valid (unused) 3D texture from the start
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    presentationTime_ = reinterpret_cast<PFNEGLPRESENTATIONTIMEANDROIDPROC>(eglGetProcAddress("eglPresentationTimeANDROID"));
     LOGI("GL ready: %s", glGetString(GL_RENDERER));
     return true;
 }
@@ -497,7 +556,7 @@ void Renderer::run() {
         {
             std::unique_lock<std::mutex> lock(mutex_);
             cv_.wait(lock, [this] {
-                return !running_ || windowChanged_ || optionsChanged_ || lookChanged_ || screenshotRequested_ ||
+                return !running_ || windowChanged_ || encodersChanged_ || optionsChanged_ || lookChanged_ || screenshotRequested_ ||
                        ring_.hasFresh() || patternRing_.hasFresh();
             });
             if (!running_) break;
@@ -516,6 +575,12 @@ void Renderer::run() {
                 if (lutChanged) uploadLook(activeLook_);
             }
             wantScreenshot = screenshotRequested_;
+            if (encodersChanged_) {
+                applyEncoderChanges(std::move(pendingEncoders_));
+                pendingEncoders_.clear();
+                encodersChanged_ = false;
+                cv_.notify_all();
+            }
         }
 
         if (windowChanged) {
@@ -544,6 +609,7 @@ void Renderer::run() {
             arrival = frame->timestampNs;
             convert(*frame);
             active.release();
+            encode(arrival);
             fresh = true;
         }
 
@@ -578,6 +644,9 @@ void Renderer::run() {
         }
     }
     detachWindow();
+    std::vector<std::pair<int, ANativeWindow *>> removeAll;
+    for (auto &[id, encoder] : encoders_) removeAll.emplace_back(id, nullptr);
+    applyEncoderChanges(std::move(removeAll));
     if (display_ != EGL_NO_DISPLAY) {
         eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         if (pbuffer_ != EGL_NO_SURFACE) eglDestroySurface(display_, pbuffer_);

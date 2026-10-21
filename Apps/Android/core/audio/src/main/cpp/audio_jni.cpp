@@ -32,6 +32,19 @@ JNIEXPORT void JNICALL Java_com_example_hdmicaptain_audio_CardAudio_nativeSettin
     audio(h)->setMuted(muted);
 }
 
+JNIEXPORT void JNICALL Java_com_example_hdmicaptain_audio_CardAudio_nativeSetTap(JNIEnv *, jclass, jlong h, jboolean on) {
+    audio(h)->setTapEnabled(on);
+}
+
+// Interleaved stereo float frames captured since the last read (up to out.size / 2).
+JNIEXPORT jint JNICALL Java_com_example_hdmicaptain_audio_CardAudio_nativeReadTap(JNIEnv *env, jclass, jlong h, jfloatArray out) {
+    jsize capacity = env->GetArrayLength(out) / 2;
+    jfloat *buffer = env->GetFloatArrayElements(out, nullptr);
+    int got = audio(h)->readTap(buffer, capacity);
+    env->ReleaseFloatArrayElements(out, buffer, 0);
+    return got;
+}
+
 // out = [peakL, peakR, rmsL, rmsR, bufferedMs, underruns, running]
 JNIEXPORT void JNICALL Java_com_example_hdmicaptain_audio_CardAudio_nativeLevels(JNIEnv *env, jclass, jlong h, jfloatArray out) {
     hdmi::AudioLevels l = audio(h)->levels();
