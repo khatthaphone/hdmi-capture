@@ -45,7 +45,6 @@ import kotlinx.coroutines.delay
 
 /** App-level actions the viewer can't do itself (Pro sheet, settings, PiP, system settings). */
 interface ViewerHost : StatusActions {
-    val isPro: Boolean
     fun record()
     fun saveRecent()
     fun pictureInPicture()
@@ -63,6 +62,8 @@ fun ViewerScreen(
     /** Before capture runs: the camera/microphone permission screens. */
     permission: PermissionPhase?,
     inPictureInPicture: Boolean,
+    /** HDMI Captain Pro unlocked (lock icons on Record and Save Recent otherwise). */
+    isPro: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val phase by model.phase.collectAsState()
@@ -170,7 +171,7 @@ fun ViewerScreen(
                 showDiagnostics = diagnostics,
                 testPattern = pattern,
                 guides = guides,
-                isPro = host.isPro,
+                isPro = isPro,
                 isRecording = false,
                 actions = actions,
             )

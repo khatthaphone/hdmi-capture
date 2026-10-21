@@ -29,6 +29,8 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.lifecycleScope
+import com.example.hdmicaptain.billing.ProFeature
+import com.example.hdmicaptain.billing.ProStore
 import com.example.hdmicaptain.capture.ViewerPhase
 import com.example.hdmicaptain.model.DevicePreset
 import com.example.hdmicaptain.model.FormatPreference
@@ -39,6 +41,7 @@ import com.example.hdmicaptain.settings.SettingsState
 import com.example.hdmicaptain.viewer.Feedback
 import com.example.hdmicaptain.viewer.HdmiCaptainTheme
 import com.example.hdmicaptain.viewer.PermissionPhase
+import com.example.hdmicaptain.viewer.UpgradeSheet
 import com.example.hdmicaptain.viewer.ViewerHost
 import com.example.hdmicaptain.viewer.ViewerModel
 import com.example.hdmicaptain.viewer.ViewerScreen
@@ -50,6 +53,9 @@ class MainActivity : ComponentActivity() {
     private val model by lazy {
         ViewerModel(applicationContext, lifecycleScope, graph.renderer, graph.controller, graph.audio, graph.catalog.cards, graph.prefs)
     }
+
+    // Product ID = <application id>.pro, as on Apple (ADR 0004).
+    private val pro by lazy { ProStore(applicationContext, lifecycleScope, "${BuildConfig.APPLICATION_ID}.pro") }
 
     private var permission by mutableStateOf<PermissionPhase?>(null)
     private var inPip by mutableStateOf(false)
@@ -73,7 +79,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private val host = object : ViewerHost {
-        override val isPro = false
         override fun continueFromWelcome() {
             if (hasCapturePermissions()) startCapture() else permissionRequest.launch(capturePermissions)
         }
@@ -82,8 +87,12 @@ class MainActivity : ComponentActivity() {
         }
         override fun retry() { graph.controller.retry() }
         override fun showHelp() = Unit  // handled inside ViewerScreen
-        override fun record() = model.show(Feedback("Recording comes with HDMI Captain Pro"))
-        override fun saveRecent() = model.show(Feedback("Save Recent comes with HDMI Captain Pro"))
+        override fun record() {
+            if (pro.gate(ProFeature.Recording)) model.show(Feedback("Recording isn't available on Android yet"))
+        }
+        override fun saveRecent() {
+            if (pro.gate(ProFeature.ReplayBuffer)) model.show(Feedback("Save Recent isn't available on Android yet"))
+        }
         override fun pictureInPicture() = enterPip()
         override fun openSettings() {
             showSettings = true
@@ -96,8 +105,11 @@ class MainActivity : ComponentActivity() {
         immersive()
         // DEBUG launch extras mirror the Apple QA arguments: --es testPattern smpteBars, --ez qaShowStats true.
         val pattern = TestPattern.fromKey(intent.getStringExtra("testPattern"))
+        pro.start()
         if (BuildConfig.DEBUG) {
-            model.setShowDiagnostics(intent.getBooleanExtra("qaShowStats", false))
+            pro.debugUnlock = intent.getBooleanExtra("debugUnlockPro", false)
+            if (intent.getStringExtra("qaAction") == "upgrade") pro.requestUpgrade()
+            if (intent.hasExtra("qaShowStats")) model.setShowDiagnostics(intent.getBooleanExtra("qaShowStats", false))
             model.pinControls = intent.getBooleanExtra("qaPinControls", false)
         }
         when {
@@ -107,8 +119,16 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             HdmiCaptainTheme {
-                ViewerScreen(model, host, permission, inPictureInPicture = inPip)
+                val isPro by pro.isPro.collectAsState()
+                ViewerScreen(model, host, permission, inPictureInPicture = inPip, isPro = isPro)
                 if (showSettings) Settings(onDone = { showSettings = false })
+                val upgrade by pro.upgradeRequest.collectAsState()
+                upgrade?.let { request ->
+                    val price by pro.price.collectAsState()
+                    val state by pro.purchaseState.collectAsState()
+                    UpgradeSheet(isPro, request.feature, price, state,
+                        onBuy = { pro.purchase(this@MainActivity) }, onRestore = { pro.restore() }, onDismiss = pro::dismissUpgrade)
+                }
             }
         }
         lifecycleScope.launch {
@@ -149,6 +169,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        lifecycleScope.launch { runCatching { pro.refresh() } }  // refunds and family changes
         // Coming back from system Settings after allowing Camera.
         if (permission == PermissionPhase.Denied && hasCapturePermissions()) startCapture()
     }
