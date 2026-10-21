@@ -6,6 +6,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.hdmicaptain.model.DevicePreset
+import com.example.hdmicaptain.model.GuideSettings
+import kotlinx.serialization.json.Json
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -19,6 +21,7 @@ data class AppPrefs(
     /** Pro Save Recent: keep the last [recentMinutes] on disk. */
     val recentEnabled: Boolean = false,
     val recentMinutes: Int = 15,
+    val guides: GuideSettings = GuideSettings(),
 )
 
 /**
@@ -34,6 +37,7 @@ class PrefsStore(context: Context) {
             lastCardKey = p[LAST_CARD],
             recentEnabled = p[RECENT_ENABLED] ?: false,
             recentMinutes = p[RECENT_MINUTES] ?: 15,
+            guides = p[GUIDES]?.let { runCatching { Json.decodeFromString(GuideSettings.serializer(), it) }.getOrNull() } ?: GuideSettings(),
         )
     }
 
@@ -48,6 +52,10 @@ class PrefsStore(context: Context) {
             it[RECENT_ENABLED] = enabled
             it[RECENT_MINUTES] = minutes
         }
+    }
+
+    suspend fun setGuides(guides: GuideSettings) {
+        store.edit { it[GUIDES] = Json.encodeToString(GuideSettings.serializer(), guides) }
     }
 
     suspend fun setLastCard(key: String) {
@@ -65,6 +73,7 @@ class PrefsStore(context: Context) {
     private companion object {
         val SHOW_DIAGNOSTICS = booleanPreferencesKey("showDiagnostics")
         val LAST_CARD = stringPreferencesKey("lastCardKey")
+        val GUIDES = stringPreferencesKey("guides")
         val RECENT_ENABLED = booleanPreferencesKey("recentEnabled")
         val RECENT_MINUTES = androidx.datastore.preferences.core.intPreferencesKey("recentMinutes")
     }

@@ -61,6 +61,8 @@ interface ControlBarActions {
     fun setShowDiagnostics(on: Boolean)
     fun setTestPattern(pattern: TestPattern?)
     fun setGuides(guides: GuideSettings)
+    fun setShowScopes(on: Boolean)
+    fun copyFrame()
     fun pictureInPicture()
     fun openSettings()
     fun showHelp()
@@ -81,6 +83,7 @@ fun ControlBar(
     testPattern: TestPattern?,
     guides: GuideSettings,
     isPro: Boolean,
+    showScopes: Boolean = false,
     isRecording: Boolean,
     actions: ControlBarActions,
     modifier: Modifier = Modifier,
@@ -117,7 +120,7 @@ fun ControlBar(
                 actions::record,
                 tint = if (isRecording) Color(0xFFFF453A) else Color.White,
             )
-            MoreMenu(options, showDiagnostics, testPattern, guides, actions)
+            MoreMenu(options, showDiagnostics, showScopes, testPattern, guides, actions)
         }
     }
     }
@@ -165,7 +168,7 @@ private fun InputMenu(cards: List<Card>, currentCard: String?, actions: ControlB
 }
 
 @Composable
-private fun MoreMenu(options: RenderOptions, showDiagnostics: Boolean, testPattern: TestPattern?, guides: GuideSettings, actions: ControlBarActions) {
+private fun MoreMenu(options: RenderOptions, showDiagnostics: Boolean, showScopes: Boolean, testPattern: TestPattern?, guides: GuideSettings, actions: ControlBarActions) {
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true; actions.poke() }) { Icon(Icons.Outlined.MoreHoriz, contentDescription = "More") }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -202,6 +205,8 @@ private fun MoreMenu(options: RenderOptions, showDiagnostics: Boolean, testPatte
             Check(pattern.title, testPattern == pattern) { actions.setTestPattern(if (it) pattern else null) }
         }
         HorizontalDivider()
+        Check("Scopes", showScopes) { actions.setShowScopes(it) }
+        DropdownMenuItem(text = { Text("Copy Frame") }, onClick = { open = false; actions.copyFrame() })
         DropdownMenuItem(
             text = { Text("Picture in Picture") },
             leadingIcon = { Icon(Icons.Outlined.PictureInPictureAlt, null) },

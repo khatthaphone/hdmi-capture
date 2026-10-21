@@ -82,6 +82,9 @@ class ViewerModel(
     private val _testPattern = MutableStateFlow<TestPattern?>(null)
     val testPattern: StateFlow<TestPattern?> = _testPattern.asStateFlow()
 
+    private val _showScopes = MutableStateFlow(false)
+    val showScopes: StateFlow<Boolean> = _showScopes.asStateFlow()
+
     private val _guides = MutableStateFlow(GuideSettings())
     val guides: StateFlow<GuideSettings> = _guides.asStateFlow()
 
@@ -126,7 +129,10 @@ class ViewerModel(
         scope.launch { watchSignal() }
         watchThermal()
         scope.launch {
-            prefs.appPrefs().let { _recent.value = it.recentEnabled to it.recentMinutes }
+            prefs.appPrefs().let {
+                _recent.value = it.recentEnabled to it.recentMinutes
+                _guides.value = it.guides
+            }
             // Outputs follow the picture: a lost card ends the recording cleanly; Save Recent follows the mode.
             phase.collect { p ->
                 if (p !is ViewerPhase.Live && recorder != null) {
@@ -272,7 +278,31 @@ class ViewerModel(
 
     fun setGuides(next: GuideSettings) {
         _guides.value = next
+        scope.launch { prefs.setGuides(next) }
         pokeControls()
+    }
+
+    fun setShowScopes(on: Boolean) {
+        _showScopes.value = on
+        pokeControls()
+    }
+
+    /** Copy Frame: the clean frame as a PNG on the clipboard (a content:// URI apps can paste). */
+    fun copyFrame() {
+        scope.launch {
+            val uri = withContext(Dispatchers.IO) {
+                renderer.screenshot()?.let { bitmap ->
+                    val dir = java.io.File(context.cacheDir, "clips").apply { mkdirs() }
+                    val file = java.io.File(dir, "HDMI Captain frame.png")
+                    file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                    androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+                }
+            }
+            if (uri == null) return@launch show(Feedback("Couldn't copy the frame: no picture yet", isError = true))
+            val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+            clipboard.setPrimaryClip(android.content.ClipData.newUri(context.contentResolver, "HDMI Captain frame", uri))
+            show(Feedback("Frame copied"))
+        }
     }
 
     /** Settings › LUT: a .cube file the user picked (content:// URI with a persisted grant). */

@@ -30,6 +30,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.compose.material.icons)
+    implementation(libs.androidx.core.ktx)
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(platform(libs.compose.bom))

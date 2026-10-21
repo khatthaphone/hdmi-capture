@@ -82,6 +82,7 @@ fun ViewerScreen(
     val sourceSize by model.sourceSize.collectAsState()
     val testPattern = pattern != null
     val recordingSince by model.recordingSince.collectAsState()
+    val showScopes by model.showScopes.collectAsState()
     var showHelp by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -99,6 +100,8 @@ fun ViewerScreen(
             override fun setShowDiagnostics(on: Boolean) = model.setShowDiagnostics(on)
             override fun setTestPattern(pattern: TestPattern?) = model.setTestPattern(pattern)
             override fun setGuides(guides: GuideSettings) = model.setGuides(guides)
+            override fun setShowScopes(on: Boolean) = model.setShowScopes(on)
+            override fun copyFrame() = model.copyFrame()
             override fun pictureInPicture() = host.pictureInPicture()
             override fun openSettings() = host.openSettings()
             override fun showHelp() { showHelp = true }
@@ -146,6 +149,10 @@ fun ViewerScreen(
             Diagnostics(model, phase, Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp))
         }
 
+        if (showScopes && live && !inPictureInPicture) {
+            ScopesPanel(model.renderer, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = 48.dp, end = 12.dp))
+        }
+
         recordingSince?.let { since ->
             RecordingPill(since, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(12.dp))
         }
@@ -180,6 +187,7 @@ fun ViewerScreen(
                 testPattern = pattern,
                 guides = guides,
                 isPro = isPro,
+                showScopes = showScopes,
                 isRecording = recordingSince != null,
                 actions = actions,
             )

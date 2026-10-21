@@ -16,6 +16,15 @@
         android:label="@string/app_name"
         android:theme="@style/Theme.HDMICaptain">
 
+        <!-- Copy Frame shares a PNG from cache/clips through the clipboard. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/shared_files" />
+        </provider>
+
         <!-- Rotation, resizing, folding and desktop-window changes must never recreate the
              activity: capture keeps running (spec §12.5). -->
         <activity

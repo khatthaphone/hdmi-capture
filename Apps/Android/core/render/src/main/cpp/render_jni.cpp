@@ -79,6 +79,20 @@ Java_com_example_hdmicaptain_render_VideoRenderer_nativeSetEncoder(JNIEnv *env, 
     renderer(handle)->setEncoder(id, surface ? ANativeWindow_fromSurface(env, surface) : nullptr);
 }
 
+JNIEXPORT void JNICALL
+Java_com_example_hdmicaptain_render_VideoRenderer_nativeSetScopes(JNIEnv *, jclass, jlong handle, jboolean on) {
+    renderer(handle)->setScopesEnabled(on);
+}
+
+JNIEXPORT jlong JNICALL
+Java_com_example_hdmicaptain_render_VideoRenderer_nativeScopeSamples(JNIEnv *env, jclass, jlong handle, jbyteArray out) {
+    jsize size = env->GetArrayLength(out);
+    jbyte *bytes = env->GetByteArrayElements(out, nullptr);
+    jlong sequence = renderer(handle)->scopeSamples(reinterpret_cast<uint8_t *>(bytes), size_t(size));
+    env->ReleaseByteArrayElements(out, bytes, 0);
+    return sequence;
+}
+
 // out = [meanY, meanCb, meanCr, rangeY, rangeChroma, fullRange, count]
 JNIEXPORT void JNICALL
 Java_com_example_hdmicaptain_render_VideoRenderer_nativeSignal(JNIEnv *env, jclass, jlong handle, jdoubleArray out) {

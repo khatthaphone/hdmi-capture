@@ -57,6 +57,12 @@ class VideoRenderer {
      */
     fun setEncoder(id: Int, surface: Surface?) = nativeSetEncoder(handle, id, surface)
 
+    /** Scopes on: the renderer keeps a 320×180 Y/Cb/Cr sample grid of every 5th frame. */
+    fun setScopes(on: Boolean) = nativeSetScopes(handle, on)
+
+    /** Copies the latest grid (interleaved Y, Cb, Cr; size [SCOPE_COLUMNS]×[SCOPE_ROWS]×3); returns its sequence (0 = none). */
+    fun scopeSamples(out: ByteArray): Long = nativeScopeSamples(handle, out)
+
     /** Native frame ring for a capture source (UvcSource); valid until [release]. */
     val ringHandle: Long get() = nativeRing(handle)
 
@@ -80,22 +86,27 @@ class VideoRenderer {
         handle = 0L
     }
 
-    private companion object {
+    companion object {
+        const val SCOPE_COLUMNS = 320
+        const val SCOPE_ROWS = 180
+
         init {
             System.loadLibrary("hdmirender")
         }
 
-        @JvmStatic external fun nativeCreate(): Long
-        @JvmStatic external fun nativeDestroy(handle: Long)
-        @JvmStatic external fun nativeSetSurface(handle: Long, surface: Surface?)
-        @JvmStatic external fun nativeSetOptions(handle: Long, scale: Int, filter: Int, range: Int)
-        @JvmStatic external fun nativeStartTestPattern(handle: Long, pattern: Int, width: Int, height: Int, fps: Int)
-        @JvmStatic external fun nativeStopSource(handle: Long)
-        @JvmStatic external fun nativeRing(handle: Long): Long
-        @JvmStatic external fun nativeSetLook(handle: Long, adjust: FloatArray, lut: FloatArray?, lutSize: Int, intensity: Float, domain: FloatArray?)
-        @JvmStatic external fun nativeSignal(handle: Long, out: DoubleArray)
-        @JvmStatic external fun nativeSetEncoder(handle: Long, id: Int, surface: Surface?)
-        @JvmStatic external fun nativeStats(handle: Long, out: LongArray)
-        @JvmStatic external fun nativeScreenshot(handle: Long, size: IntArray): ByteArray?
+        @JvmStatic private external fun nativeCreate(): Long
+        @JvmStatic private external fun nativeDestroy(handle: Long)
+        @JvmStatic private external fun nativeSetSurface(handle: Long, surface: Surface?)
+        @JvmStatic private external fun nativeSetOptions(handle: Long, scale: Int, filter: Int, range: Int)
+        @JvmStatic private external fun nativeStartTestPattern(handle: Long, pattern: Int, width: Int, height: Int, fps: Int)
+        @JvmStatic private external fun nativeStopSource(handle: Long)
+        @JvmStatic private external fun nativeRing(handle: Long): Long
+        @JvmStatic private external fun nativeSetLook(handle: Long, adjust: FloatArray, lut: FloatArray?, lutSize: Int, intensity: Float, domain: FloatArray?)
+        @JvmStatic private external fun nativeSignal(handle: Long, out: DoubleArray)
+        @JvmStatic private external fun nativeSetEncoder(handle: Long, id: Int, surface: Surface?)
+        @JvmStatic private external fun nativeSetScopes(handle: Long, on: Boolean)
+        @JvmStatic private external fun nativeScopeSamples(handle: Long, out: ByteArray): Long
+        @JvmStatic private external fun nativeStats(handle: Long, out: LongArray)
+        @JvmStatic private external fun nativeScreenshot(handle: Long, size: IntArray): ByteArray?
     }
 }

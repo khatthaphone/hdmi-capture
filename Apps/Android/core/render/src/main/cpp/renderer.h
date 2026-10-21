@@ -80,6 +80,11 @@ public:
     // clean (no UI, no look), stamped with its arrival time. nullptr removes it. Blocks until applied.
     void setEncoder(int id, ANativeWindow *window);
     SignalSample signal();
+    // Scopes: while enabled, every 5th frame leaves a 320×180 grid of Y,Cb,Cr bytes (interleaved).
+    void setScopesEnabled(bool on) { scopesEnabled_ = on; }
+    // Copies the latest grid into out (size ≥ 320*180*3); returns its sequence number (0 = none yet).
+    int64_t scopeSamples(uint8_t *out, size_t size);
+    static constexpr int kScopeW = 320, kScopeH = 180;
     RenderStats stats();
     // Blocks until the render thread has read the current frame; empty if none yet.
     Screenshot screenshot();
@@ -93,6 +98,7 @@ private:
     void convert(const Frame &frame);
     void present(int64_t arrivalNs);
     void sampleSignal(const Frame &frame);
+    void sampleScopes(const Frame &frame);
     void applyEncoderChanges(std::vector<std::pair<int, ANativeWindow *>> changes);
     void encode(int64_t timestampNs);
     void uploadLook(const Look &look);
@@ -115,6 +121,9 @@ private:
     bool lookChanged_ = false;
     Look look_;
     SignalSample signal_;
+    std::atomic<bool> scopesEnabled_{false};
+    std::vector<uint8_t> scopeGrid_;
+    int64_t scopeSequence_ = 0;
     bool screenshotRequested_ = false;
     bool screenshotReady_ = false;
     Screenshot screenshot_;

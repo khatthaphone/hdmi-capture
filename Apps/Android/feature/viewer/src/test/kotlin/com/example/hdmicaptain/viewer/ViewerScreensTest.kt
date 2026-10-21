@@ -50,6 +50,8 @@ class ViewerScreensTest {
         override fun setShowDiagnostics(on: Boolean) = Unit
         override fun setTestPattern(pattern: TestPattern?) = Unit
         override fun setGuides(guides: GuideSettings) = Unit
+        override fun setShowScopes(on: Boolean) = Unit
+        override fun copyFrame() = Unit
         override fun pictureInPicture() = Unit
         override fun openSettings() = Unit
         override fun poke() = Unit

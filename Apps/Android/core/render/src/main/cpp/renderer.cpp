@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cerrno>
+#include <cstring>
 #include <cmath>
 #include <string>
 #include <ctime>
@@ -437,16 +438,72 @@ void Renderer::convert(const Frame &f) {
     glBindVertexArray(vao_);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     hasFrame_ = true;
-    if (convertCount_++ % 10 == 0) sampleSignal(f);
+    if (convertCount_ % 10 == 0) sampleSignal(f);
+    if (scopesEnabled_ && convertCount_ % 5 == 0) sampleScopes(f);
+    convertCount_++;
     ATrace_endSection();
+}
+
+// Y, Cb, Cr at pixel (x, y) of any supported frame layout.
+static inline void readYCC(const Frame &f, int x, int y, int v[3]) {
+    const int w = f.width, h = f.height;
+    const uint8_t *d = f.data.data();
+    const size_t plane = size_t(w) * h;
+    switch (f.format) {
+        case PixelFormat::NV12: {
+            const uint8_t *c = d + plane + size_t(y / 2) * w + (x / 2) * 2;
+            v[0] = d[size_t(y) * w + x]; v[1] = c[0]; v[2] = c[1];
+            break;
+        }
+        case PixelFormat::YUY2: {
+            const uint8_t *p = d + size_t(y) * w * 2 + (x / 2) * 4;
+            v[0] = p[(x & 1) * 2]; v[1] = p[1]; v[2] = p[3];
+            break;
+        }
+        case PixelFormat::I420: {
+            size_t ci = size_t(y / 2) * (w / 2) + x / 2;
+            v[0] = d[size_t(y) * w + x]; v[1] = d[plane + ci]; v[2] = d[plane + plane / 4 + ci];
+            break;
+        }
+        case PixelFormat::I422: {
+            size_t ci = size_t(y) * (w / 2) + x / 2;
+            v[0] = d[size_t(y) * w + x]; v[1] = d[plane + ci]; v[2] = d[plane + plane / 2 + ci];
+            break;
+        }
+    }
+    (void) h;
+}
+
+void Renderer::sampleScopes(const Frame &f) {
+    if (f.width < 2 || f.height < 2) return;
+    std::vector<uint8_t> grid(size_t(kScopeW) * kScopeH * 3);
+    size_t i = 0;
+    for (int sy = 0; sy < kScopeH; sy++) {
+        int y = (sy * 2 + 1) * f.height / (kScopeH * 2);
+        for (int sx = 0; sx < kScopeW; sx++) {
+            int v[3];
+            readYCC(f, (sx * 2 + 1) * f.width / (kScopeW * 2), y, v);
+            grid[i++] = uint8_t(v[0]);
+            grid[i++] = uint8_t(v[1]);
+            grid[i++] = uint8_t(v[2]);
+        }
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    scopeGrid_.swap(grid);
+    scopeSequence_++;
+}
+
+int64_t Renderer::scopeSamples(uint8_t *out, size_t size) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (scopeGrid_.empty() || size < scopeGrid_.size()) return 0;
+    std::memcpy(out, scopeGrid_.data(), scopeGrid_.size());
+    return scopeSequence_;
 }
 
 // Mean and range of Y/Cb/Cr over SignalAnalyzer's grid (every 10th frame; ~14 k byte reads).
 void Renderer::sampleSignal(const Frame &f) {
     const int gw = 160, gh = 90, w = f.width, h = f.height;
     if (w < 2 || h < 2) return;
-    const uint8_t *d = f.data.data();
-    const size_t plane = size_t(w) * h;
     double sum[3] = {0, 0, 0};
     int lo[3] = {255, 255, 255}, hi[3] = {0, 0, 0};
     for (int gy = 0; gy < gh; gy++) {
@@ -454,28 +511,7 @@ void Renderer::sampleSignal(const Frame &f) {
         for (int gx = 0; gx < gw; gx++) {
             int x = (gx * 2 + 1) * w / (gw * 2);
             int v[3];
-            switch (f.format) {
-                case PixelFormat::NV12: {
-                    const uint8_t *c = d + plane + size_t(y / 2) * w + (x / 2) * 2;
-                    v[0] = d[size_t(y) * w + x]; v[1] = c[0]; v[2] = c[1];
-                    break;
-                }
-                case PixelFormat::YUY2: {
-                    const uint8_t *p = d + size_t(y) * w * 2 + (x / 2) * 4;
-                    v[0] = p[(x & 1) * 2]; v[1] = p[1]; v[2] = p[3];
-                    break;
-                }
-                case PixelFormat::I420: {
-                    size_t ci = size_t(y / 2) * (w / 2) + x / 2;
-                    v[0] = d[size_t(y) * w + x]; v[1] = d[plane + ci]; v[2] = d[plane + plane / 4 + ci];
-                    break;
-                }
-                case PixelFormat::I422: {
-                    size_t ci = size_t(y) * (w / 2) + x / 2;
-                    v[0] = d[size_t(y) * w + x]; v[1] = d[plane + ci]; v[2] = d[plane + plane / 2 + ci];
-                    break;
-                }
-            }
+            readYCC(f, x, y, v);
             for (int i = 0; i < 3; i++) {
                 sum[i] += v[i];
                 lo[i] = std::min(lo[i], v[i]);
