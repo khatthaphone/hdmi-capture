@@ -15,15 +15,18 @@ struct SettingsView: View {
         Group {
             if page == .window {
                 WindowSettingsPage()
-            } else if let viewer = app.currentViewer {
+            } else if let viewer = app.currentViewer, viewer.session != nil || page == .input {
                 CardSettingsPage(page: page).environment(viewer)
             } else {
-                Text("Open the HDMI Captain window to change settings.")
-                    .foregroundStyle(.secondary)
-                    .padding(40)
+                ContentUnavailableView {
+                    Label("No active capture card", systemImage: "cable.connector.slash")
+                } description: {
+                    Text("Connect a card, or bring its HDMI Captain window to the front.")
+                }
             }
         }
-        .frame(width: 480)
+        // One size for every tab, so switching tabs doesn't make the window jump.
+        .frame(width: 560, height: 620)
     }
 }
 
@@ -43,8 +46,6 @@ private struct CardSettingsPage: View {
             }
         }
         .formStyle(.grouped)
-        .disabled(viewer.session == nil)
-        .fixedSize(horizontal: false, vertical: true)
         .onAppear { outputDevices = app.outputDevices() }
     }
 
@@ -63,6 +64,10 @@ private struct CardSettingsPage: View {
             } else {
                 LabeledContent("Video", value: viewer.session?.deviceName ?? "Not connected")
             }
+            if viewer.session == nil {
+                Label("Connect or select a capture card to change its audio and format.", systemImage: "cable.connector.slash")
+                    .foregroundStyle(.secondary)
+            }
             Picker("Audio", selection: $viewer.preset.audio) {
                 Text("Automatic").tag(DevicePreset.AudioSelection.automatic)
                 Text("None").tag(DevicePreset.AudioSelection.none)
@@ -74,6 +79,7 @@ private struct CardSettingsPage: View {
                 Divider()
                 ForEach(viewer.formatOptions, id: \.self) { Text(label(for: $0)).tag($0) }
             }
+            .disabled(viewer.session == nil)
         }
         Section {
             Toggle("Show built-in and Continuity cameras", isOn: $app.prefs.includeNonExternalCameras)
@@ -106,11 +112,26 @@ private struct CardSettingsPage: View {
                 ForEach(ImageAdjustments.Preset.allCases, id: \.self) { Text($0.title).tag(Optional($0)) }
                 if viewer.preset.adjustments.preset == nil { Text("Custom").tag(ImageAdjustments.Preset?.none) }
             }
-            Slider(value: $viewer.preset.adjustments.brightness, in: -0.5...0.5) { Text("Brightness") }
-            Slider(value: $viewer.preset.adjustments.contrast, in: 0.5...1.5) { Text("Contrast") }
-            Slider(value: $viewer.preset.adjustments.saturation, in: 0...2) { Text("Saturation") }
-            Slider(value: $viewer.preset.adjustments.gamma, in: 0.5...2) { Text("Gamma") }
-            Slider(value: $viewer.preset.adjustments.sharpness, in: 0...1) { Text("Sharpness") }
+            LabeledContent("Brightness") {
+                Slider(value: $viewer.preset.adjustments.brightness, in: -0.5...0.5)
+                Text(String(format: "%+.2f", viewer.preset.adjustments.brightness)).monospacedDigit().frame(width: 52, alignment: .trailing)
+            }
+            LabeledContent("Contrast") {
+                Slider(value: $viewer.preset.adjustments.contrast, in: 0.5...1.5)
+                Text(String(format: "%.2f×", viewer.preset.adjustments.contrast)).monospacedDigit().frame(width: 52, alignment: .trailing)
+            }
+            LabeledContent("Saturation") {
+                Slider(value: $viewer.preset.adjustments.saturation, in: 0...2)
+                Text(String(format: "%.0f%%", viewer.preset.adjustments.saturation * 100)).monospacedDigit().frame(width: 52, alignment: .trailing)
+            }
+            LabeledContent("Gamma") {
+                Slider(value: $viewer.preset.adjustments.gamma, in: 0.5...2)
+                Text(String(format: "%.2f", viewer.preset.adjustments.gamma)).monospacedDigit().frame(width: 52, alignment: .trailing)
+            }
+            LabeledContent("Sharpness") {
+                Slider(value: $viewer.preset.adjustments.sharpness, in: 0...1)
+                Text(String(format: "%.0f%%", viewer.preset.adjustments.sharpness * 100)).monospacedDigit().frame(width: 52, alignment: .trailing)
+            }
             HStack {
                 Spacer()
                 Button("Reset Look") { viewer.preset.adjustments = ImageAdjustments() }
@@ -212,7 +233,6 @@ private struct WindowSettingsPage: View {
             }
         }
         .formStyle(.grouped)
-        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

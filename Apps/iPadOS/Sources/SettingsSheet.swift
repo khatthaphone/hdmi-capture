@@ -50,6 +50,11 @@ private struct SettingsForm: View {
                     Text("Automatic").tag(FormatPreference.auto)
                     ForEach(viewer.formatOptions, id: \.self) { Text(label(for: $0)).tag($0) }
                 }
+                .disabled(noCard)
+                if noCard {
+                    Label("Connect a capture card to change its picture and sound.", systemImage: "cable.connector.slash")
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("Picture") {
@@ -66,6 +71,7 @@ private struct SettingsForm: View {
                     Text("Full (0–255)").tag(ColorRange.full)
                 }
             }
+            .disabled(noCard)
 
             Section("Look") {
                 Picker("Preset", selection: Binding(
@@ -83,6 +89,7 @@ private struct SettingsForm: View {
                 Button("Reset Look") { viewer.preset.adjustments = ImageAdjustments() }
                     .disabled(viewer.preset.adjustments == ImageAdjustments())
             }
+            .disabled(noCard)
 
             Section("LUT") {
                 LabeledContent("File", value: viewer.preset.lutName ?? "None")
@@ -95,6 +102,7 @@ private struct SettingsForm: View {
                     Button("Remove LUT", role: .destructive) { viewer.session?.setLUT(url: nil) }
                 }
             }
+            .disabled(noCard)
 
             Section {
                 Toggle("Mute", isOn: $viewer.preset.muted)
@@ -111,6 +119,7 @@ private struct SettingsForm: View {
             } footer: {
                 Text("HDMI sound plays only when the capture card is the iPad's audio input, never the built-in microphone. Use the delay to line sound up with the picture.")
             }
+            .disabled(noCard)
 
             Section("Display") {
                 Toggle("Show controls on tap", isOn: $app.prefs.showControlsOnHover)
@@ -125,7 +134,6 @@ private struct SettingsForm: View {
 
             ProSettingsSections()
         }
-        .disabled(viewer.session == nil && viewer.testPattern == nil)
         .fileImporter(isPresented: $choosingLUT, allowedContentTypes: [UTType(filenameExtension: "cube") ?? .data]) { result in
             guard case let .success(url) = result else { return }
             // Files outside the app's container need security-scoped access while we read them.
@@ -134,6 +142,9 @@ private struct SettingsForm: View {
             viewer.session?.setLUT(url: url)
         }
     }
+
+    /// Card settings need a card; app-wide ones (display, guides, Pro) don't.
+    private var noCard: Bool { viewer.session == nil }
 
     private func label(for preference: FormatPreference) -> String {
         guard case let .pinned(width, height, rate) = preference else { return "Automatic" }

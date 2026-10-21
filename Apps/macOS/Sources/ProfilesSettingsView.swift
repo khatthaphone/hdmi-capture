@@ -67,7 +67,7 @@ struct ProfilesSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 460)
+        .frame(width: 560, height: 620)
     }
 
     private func update(_ profile: Profile, _ change: (inout Profile) -> Void) {

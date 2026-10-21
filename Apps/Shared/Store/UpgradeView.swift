@@ -109,7 +109,7 @@ struct ProSettingsView: View {
             ProSettingsSections()
         }
         .formStyle(.grouped)
-        .frame(width: 480, height: 520)
+        .frame(width: 560, height: 620)
     }
 }
 

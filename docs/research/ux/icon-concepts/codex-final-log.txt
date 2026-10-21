@@ -374,3 +374,139 @@ Edit:
 ## Where to find copy/paste recipes
 For copy/paste prompt specs (examples only), see `references/sample-prompts.md`. This file focuses on principles, specificity, and iteration patterns.
 
+codex
+The first render has the requested full-bleed navy field, eight handles, a clean ring, and six pins. I’m checking its actual pixel/color properties now, then I’ll use it as the structural reference for the brighter high-contrast variant.
+exec
+/bin/zsh -lc "identify -format '%f %wx%h %[channels]\\n' /Users/khatthaphone/.codex/generated_images/01a15bd2-d55c-7d43-bde1-03ae6fdcc275/exec-e9690db1-cf16-47dc-8b42-4d426981e01c.png" in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 757ms:
+exec-e9690db1-cf16-47dc-8b42-4d426981e01c.png 1254x1254 srgb  3.0
+
+exec
+/bin/zsh -lc 'magick /Users/khatthaphone/.codex/generated_images/01a15bd2-d55c-7d43-bde1-03ae6fdcc275/exec-e9690db1-cf16-47dc-8b42-4d426981e01c.png -resize 1024x1024! -alpha off -colorspace sRGB -type TrueColor -strip docs/research/ux/icon-concepts/final-a-1024.png
+magick /Users/khatthaphone/.codex/generated_images/01a15bd2-d55c-7d43-bde1-03ae6fdcc275/exec-8e8fc990-05a6-4095-9b29-ff0c08a5bfde.png -resize 1024x1024! -alpha off -colorspace sRGB -type TrueColor -strip docs/research/ux/icon-concepts/final-a-1024-v2.png
+identify -format '"'%f %wx%h %[channels] %[opaque]\\n' docs/research/ux/icon-concepts/final-a-1024.png docs/research/ux/icon-concepts/final-a-1024-v2.png
+git status --short -- docs/research/ux/icon-concepts" in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 1494ms:
+final-a-1024.png 1024x1024 srgb  3.0 True
+final-a-1024-v2.png 1024x1024 srgb  3.0 True
+ M docs/research/ux/icon-concepts/codex-final-log.txt
+?? docs/research/ux/icon-concepts/final-a-1024-v2.png
+?? docs/research/ux/icon-concepts/final-a-1024.png
+
+codex
+Both deliverables are now exactly 1024×1024, RGB, and fully opaque. I noticed an unrelated tracked log already shows as modified, so I’m verifying that the final operation only introduced the two requested image assets and did not alter that file.
+exec
+/bin/zsh -lc "git diff -- docs/research/ux/icon-concepts/codex-final-log.txt
+stat -f '%N %Sm' -t '%Y-%m-%d %H:%M:%S' docs/research/ux/icon-concepts/codex-final-log.txt docs/research/ux/icon-concepts/final-a-1024.png docs/research/ux/icon-concepts/final-a-1024-v2.png
+shasum -a 256 docs/research/ux/icon-concepts/final-a-1024.png docs/research/ux/icon-concepts/final-a-1024-v2.png" in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 0ms:
+diff --git a/docs/research/ux/icon-concepts/codex-final-log.txt b/docs/research/ux/icon-concepts/codex-final-log.txt
+index fc81e46..4b9a672 100644
+--- a/docs/research/ux/icon-concepts/codex-final-log.txt
++++ b/docs/research/ux/icon-concepts/codex-final-log.txt
+@@ -374,3 +374,24 @@ Edit:
+ ## Where to find copy/paste recipes
+ For copy/paste prompt specs (examples only), see `references/sample-prompts.md`. This file focuses on principles, specificity, and iteration patterns.
+ 
++codex
++The first render has the requested full-bleed navy field, eight handles, a clean ring, and six pins. I’m checking its actual pixel/color properties now, then I’ll use it as the structural reference for the brighter high-contrast variant.
++exec
++/bin/zsh -lc "identify -format '%f %wx%h %[channels]\\n' /Users/khatthaphone/.codex/generated_images/01a15bd2-d55c-7d43-bde1-03ae6fdcc275/exec-e9690db1-cf16-47dc-8b42-4d426981e01c.png" in /Users/khatthaphone/Projects/hdmi-captain
++ succeeded in 757ms:
++exec-e9690db1-cf16-47dc-8b42-4d426981e01c.png 1254x1254 srgb  3.0
++
++exec
++/bin/zsh -lc 'magick /Users/khatthaphone/.codex/generated_images/01a15bd2-d55c-7d43-bde1-03ae6fdcc275/exec-e9690db1-cf16-47dc-8b42-4d426981e01c.png -resize 1024x1024! -alpha off -colorspace sRGB -type TrueColor -strip docs/research/ux/icon-concepts/final-a-1024.png
++magick /Users/khatthaphone/.codex/generated_images/01a15bd2-d55c-7d43-bde1-03ae6fdcc275/exec-8e8fc990-05a6-4095-9b29-ff0c08a5bfde.png -resize 1024x1024! -alpha off -colorspace sRGB -type TrueColor -strip docs/research/ux/icon-concepts/final-a-1024-v2.png
++identify -format '"'%f %wx%h %[channels] %[opaque]\\n' docs/research/ux/icon-concepts/final-a-1024.png docs/research/ux/icon-concepts/final-a-1024-v2.png
++git status --short -- docs/research/ux/icon-concepts" in /Users/khatthaphone/Projects/hdmi-captain
++ succeeded in 1494ms:
++final-a-1024.png 1024x1024 srgb  3.0 True
++final-a-1024-v2.png 1024x1024 srgb  3.0 True
++ M docs/research/ux/icon-concepts/codex-final-log.txt
++?? docs/research/ux/icon-concepts/final-a-1024-v2.png
++?? docs/research/ux/icon-concepts/final-a-1024.png
++
++codex
++Both deliverables are now exactly 1024×1024, RGB, and fully opaque. I noticed an unrelated tracked log already shows as modified, so I’m verifying that the final operation only introduced the two requested image assets and did not alter that file.
+docs/research/ux/icon-concepts/codex-final-log.txt 2026-10-21 07:20:46
+docs/research/ux/icon-concepts/final-a-1024.png 2026-10-21 07:20:41
+docs/research/ux/icon-concepts/final-a-1024-v2.png 2026-10-21 07:20:41
+1ebc645bdb87866ca2ec44bf39fc0e7adc5e538d9f9d1cb478e19c4b4b99c484  docs/research/ux/icon-concepts/final-a-1024.png
+1bc220233c84d4543a548764693b5878ca472c2ebe5683541d53b3ed776e0283  docs/research/ux/icon-concepts/final-a-1024-v2.png
+
+exec
+/bin/zsh -lc 'tail -n 50 docs/research/ux/icon-concepts/codex-final-log.txt
+git show HEAD:docs/research/ux/icon-concepts/codex-final-log.txt | tail -n 20' in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 0ms:
+git status --short -- docs/research/ux/icon-concepts" in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 1494ms:
+final-a-1024.png 1024x1024 srgb  3.0 True
+final-a-1024-v2.png 1024x1024 srgb  3.0 True
+ M docs/research/ux/icon-concepts/codex-final-log.txt
+?? docs/research/ux/icon-concepts/final-a-1024-v2.png
+?? docs/research/ux/icon-concepts/final-a-1024.png
+
+codex
+Both deliverables are now exactly 1024×1024, RGB, and fully opaque. I noticed an unrelated tracked log already shows as modified, so I’m verifying that the final operation only introduced the two requested image assets and did not alter that file.
+exec
+/bin/zsh -lc "git diff -- docs/research/ux/icon-concepts/codex-final-log.txt
+stat -f '%N %Sm' -t '%Y-%m-%d %H:%M:%S' docs/research/ux/icon-concepts/codex-final-log.txt docs/research/ux/icon-concepts/final-a-1024.png docs/research/ux/icon-concepts/final-a-1024-v2.png
+shasum -a 256 docs/research/ux/icon-concepts/final-a-1024.png docs/research/ux/icon-concepts/final-a-1024-v2.png" in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 0ms:
+diff --git a/docs/research/ux/icon-concepts/codex-final-log.txt b/docs/research/ux/icon-concepts/codex-final-log.txt
+index fc81e46..4b9a672 100644
+--- a/docs/research/ux/icon-concepts/codex-final-log.txt
++++ b/docs/research/ux/icon-concepts/codex-final-log.txt
+@@ -374,3 +374,24 @@ Edit:
+ ## Where to find copy/paste recipes
+ For copy/paste prompt specs (examples only), see `references/sample-prompts.md`. This file focuses on principles, specificity, and iteration patterns.
+ 
++codex
++The first render has the requested full-bleed navy field, eight handles, a clean ring, and six pins. I’m checking its actual pixel/color properties now, then I’ll use it as the structural reference for the brighter high-contrast variant.
++exec
++/bin/zsh -lc "identify -format '%f %wx%h %[channels]\\n' /Users/khatthaphone/.codex/generated_images/01a15bd2-d55c-7d43-bde1-03ae6fdcc275/exec-e9690db1-cf16-47dc-8b42-4d426981e01c.png" in /Users/khatthaphone/Projects/hdmi-captain
++ succeeded in 757ms:
++exec-e9690db1-cf16-47dc-8b42-4d426981e01c.png 1254x1254 srgb  3.0
++
++exec
++/bin/zsh -lc 'magick /Users/khatthaphone/.codex/generated_images/01a15bd2-d55c-7d43-bde1-03ae6fdcc275/exec-e9690db1-cf16-47dc-8b42-4d426981e01c.png -resize 1024x1024! -alpha off -colorspace sRGB -type TrueColor -strip docs/research/ux/icon-concepts/final-a-1024.png
++magick /Users/khatthaphone/.codex/generated_images/01a15bd2-d55c-7d43-bde1-03ae6fdcc275/exec-8e8fc990-05a6-4095-9b29-ff0c08a5bfde.png -resize 1024x1024! -alpha off -colorspace sRGB -type TrueColor -strip docs/research/ux/icon-concepts/final-a-1024-v2.png
++identify -format '"'%f %wx%h %[channels] %[opaque]\\n' docs/research/ux/icon-concepts/final-a-1024.png docs/research/ux/icon-concepts/final-a-1024-v2.png
++git status --short -- docs/research/ux/icon-concepts" in /Users/khatthaphone/Projects/hdmi-captain
++ succeeded in 1494ms:
++final-a-1024.png 1024x1024 srgb  3.0 True
++final-a-1024-v2.png 1024x1024 srgb  3.0 True
++ M docs/research/ux/icon-concepts/codex-final-log.txt
++?? docs/research/ux/icon-concepts/final-a-1024-v2.png
++?? docs/research/ux/icon-concepts/final-a-1024.png
++
++codex
++Both deliverables are now exactly 1024×1024, RGB, and fully opaque. I noticed an unrelated tracked log already shows as modified, so I’m verifying that the final operation only introduced the two requested image assets and did not alter that file.
+docs/research/ux/icon-concepts/codex-final-log.txt 2026-10-21 07:20:46
+docs/research/ux/icon-concepts/final-a-1024.png 2026-10-21 07:20:41
+docs/research/ux/icon-concepts/final-a-1024-v2.png 2026-10-21 07:20:41
+1ebc645bdb87866ca2ec44bf39fc0e7adc5e538d9f9d1cb478e19c4b4b99c484  docs/research/ux/icon-concepts/final-a-1024.png
+1bc220233c84d4543a548764693b5878ca472c2ebe5683541d53b3ed776e0283  docs/research/ux/icon-concepts/final-a-1024-v2.png
+
+- ads-marketing: Write like a creative brief; include brand positioning, audience, desired vibe, scene, and exact tagline if text must appear.
+- productivity-visual: Name the exact artifact (slide, chart, workflow diagram), define the canvas and hierarchy, provide real labels/data, and ask for readable typography and polished spacing.
+- scientific-educational: Define audience, lesson objective, required labels, scientific constraints, arrows, and scan-friendly whitespace.
+- illustration-story: Define panels or scene beats; keep each action concrete.
+- stylized-concept: Specify style cues, material finish, and rendering approach (3D, painterly, clay) without inventing new story elements.
+- historical-scene: State the location/date and required period accuracy; constrain clothing, props, and environment to match the era.
+
+Edit:
+- text-localization: Change only the text; preserve layout, typography, spacing, and hierarchy; no extra words or reflow unless needed.
+- identity-preserve: Lock identity (face, body, pose, hair, expression); change only the specified elements; match lighting and shadows.
+- precise-object-edit: Specify exactly what to remove/replace; preserve surrounding texture and lighting; keep everything else unchanged.
+- lighting-weather: Change only environmental conditions (light, shadows, atmosphere, precipitation); keep geometry, framing, and subject identity.
+- background-extraction: Request a clean cutout on a genuinely transparent background; preserve fine edges and label text; no halos or restyling.
+- style-transfer: Specify style cues to preserve (palette, texture, brushwork) and what must change; add `no extra elements` to prevent drift.
+- compositing: Reference inputs by index; specify what moves where; match lighting, perspective, and scale; keep the base framing unchanged.
+- sketch-to-render: Preserve layout, proportions, and perspective; choose materials and lighting that support the supplied sketch without adding new elements.
+
+## Where to find copy/paste recipes
+For copy/paste prompt specs (examples only), see `references/sample-prompts.md`. This file focuses on principles, specificity, and iteration patterns.
+
+
