@@ -7,6 +7,7 @@ import com.example.hdmicaptain.capture.CaptureController
 import com.example.hdmicaptain.capture.ViewerPhase
 import com.example.hdmicaptain.model.AudioSettings
 import com.example.hdmicaptain.model.CubeLUT
+import com.example.hdmicaptain.model.FormatPreference
 import com.example.hdmicaptain.model.GuideSettings
 import com.example.hdmicaptain.model.LiveInfo
 import com.example.hdmicaptain.record.AudioFanOut
@@ -109,6 +110,9 @@ class ViewerModel(
     private var rollingMode: LiveInfo? = null
     private val io = Dispatchers.IO.limitedParallelism(1)
 
+    /** Stepped down to ≤ 30 fps because the device got hot (not saved; undone when it cools). */
+    private var thermalStepDown = false
+
     private var lut: CubeLUT? = null
     private var lutUri: String? = null
 
@@ -120,6 +124,7 @@ class ViewerModel(
         pokeControls()
         scope.launch { _showDiagnostics.value = prefs.appPrefs().showDiagnostics }
         scope.launch { watchSignal() }
+        watchThermal()
         scope.launch {
             prefs.appPrefs().let { _recent.value = it.recentEnabled to it.recentMinutes }
             // Outputs follow the picture: a lost card ends the recording cleanly; Save Recent follows the mode.
@@ -146,6 +151,29 @@ class ViewerModel(
         val formatChanged = next.format != _preset.value.format
         apply(next, save = true)
         if (formatChanged) controller.applyFormat(next.format)
+    }
+
+    /**
+     * Before Android throttles: at SEVERE heat, drop an automatic format to ≤ 30 fps (half the decode
+     * and GPU work) and say so; back to the card's own format once it is LIGHT or cooler (spec §12.5).
+     */
+    private fun watchThermal() {
+        val power = context.getSystemService(android.os.PowerManager::class.java) ?: return
+        power.addThermalStatusListener(context.mainExecutor) { status ->
+            val hot = status >= android.os.PowerManager.THERMAL_STATUS_SEVERE
+            val cool = status <= android.os.PowerManager.THERMAL_STATUS_LIGHT
+            val format = _preset.value.format
+            if (hot && !thermalStepDown && format == FormatPreference.Auto) {
+                val cooler = controller.formatOptions.value.firstOrNull { (it.frameRate ?: 0.0) <= 30.5 } ?: return@addThermalStatusListener
+                thermalStepDown = true
+                controller.applyFormat(cooler)
+                show(Feedback("This device is hot, so the picture drops to ${cooler.frameRate?.toInt() ?: 30} fps until it cools", isError = true))
+            } else if (cool && thermalStepDown) {
+                thermalStepDown = false
+                controller.applyFormat(format)
+                show(Feedback("Back to full frame rate"))
+            }
+        }
     }
 
     /** Record / Stop Recording (the app checks Pro first). */

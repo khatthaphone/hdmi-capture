@@ -141,6 +141,9 @@ private:
     };
     std::map<int, Encoder> encoders_;
     PFNEGLPRESENTATIONTIMEANDROIDPROC presentationTime_ = nullptr;
+    void *hintSession_ = nullptr;  // APerformanceHintSession (Android 13+)
+    int64_t hintTargetNs_ = 0;
+    void updateHint(float fps, int64_t workNs);
     Look activeLook_;
     int convertCount_ = 0;
     int frameWidth_ = 0, frameHeight_ = 0;

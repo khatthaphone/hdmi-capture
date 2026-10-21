@@ -2,10 +2,14 @@
 
 #include <android/api-level.h>
 #include <android/log.h>
+#include <android/performance_hint.h>
 #include <android/trace.h>
+#include <sys/resource.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <chrono>
+#include <cerrno>
 #include <cmath>
 #include <string>
 #include <ctime>
@@ -544,7 +548,27 @@ void Renderer::present(int64_t arrivalNs) {
     if (arrivalNs > 0) stats_.lastLatencyNs = nowNs() - arrivalNs;
 }
 
+// ADPF: tell the CPU governor what a frame costs against the frame budget, so it clocks up for
+// 1080p60 instead of reacting a few frames late (Android 13+).
+void Renderer::updateHint(float fps, int64_t workNs) {
+    if (__builtin_available(android 33, *)) {
+        int64_t target = fps > 1 ? int64_t(1e9 / fps) : 16666667;
+        if (!hintSession_) {
+            APerformanceHintManager *manager = APerformanceHint_getManager();
+            int32_t tid = gettid();
+            if (manager) hintSession_ = APerformanceHint_createSession(manager, &tid, 1, target);
+            hintTargetNs_ = target;
+        } else if (std::llabs(target - hintTargetNs_) > 1000000) {
+            APerformanceHint_updateTargetWorkDuration(static_cast<APerformanceHintSession *>(hintSession_), target);
+            hintTargetNs_ = target;
+        }
+        if (hintSession_ && workNs > 0) APerformanceHint_reportActualWorkDuration(static_cast<APerformanceHintSession *>(hintSession_), workNs);
+    }
+}
+
 void Renderer::run() {
+    // THREAD_PRIORITY_URGENT_DISPLAY: the picture must not wait behind app work.
+    if (setpriority(PRIO_PROCESS, 0, -8) != 0) LOGI("render priority: %d", errno);
     if (!ensureContext()) {
         LOGE("EGL setup failed: 0x%x", eglGetError());
         return;
@@ -600,6 +624,7 @@ void Renderer::run() {
         FrameRing &active = showingPattern_ ? patternRing_ : ring_;
         FrameRing &idle = showingPattern_ ? ring_ : patternRing_;
         if (idle.take()) idle.release();
+        int64_t workStart = nowNs();
         if (Frame *frame = active.take()) {
             if (lastArrivalNs_ > 0) {
                 float dt = float(frame->timestampNs - lastArrivalNs_) / 1e9f;
@@ -631,6 +656,7 @@ void Renderer::run() {
 
         if (hasFrame_ && surface_ != EGL_NO_SURFACE && (fresh || windowChanged || optionsChanged)) {
             present(arrival);
+            updateHint(interval > 0 ? 1.f / interval : 60.f, nowNs() - workStart);
             // Ask the display to match the source rate (60 fps on a 90/120 Hz panel), Android 11+.
             if (interval > 0) {
                 float fps = 1.f / interval;
@@ -642,6 +668,9 @@ void Renderer::run() {
                 }
             }
         }
+    }
+    if (__builtin_available(android 33, *)) {
+        if (hintSession_) APerformanceHint_closeSession(static_cast<APerformanceHintSession *>(hintSession_));
     }
     detachWindow();
     std::vector<std::pair<int, ANativeWindow *>> removeAll;

@@ -4,6 +4,8 @@
 #include <android/trace.h>
 #include <turbojpeg.h>
 
+#include <sys/resource.h>
+
 #include <ctime>
 #include <utility>
 
@@ -60,6 +62,7 @@ MjpegStats MjpegDecoder::stats() {
 }
 
 void MjpegDecoder::run() {
+    setpriority(PRIO_PROCESS, 0, -4);  // THREAD_PRIORITY_DISPLAY: decode feeds the picture
     tjhandle tj = tj3Init(TJINIT_DECOMPRESS);
     Job job;
     Frame frame;

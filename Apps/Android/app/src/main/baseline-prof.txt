@@ -1,0 +1,8 @@
+# Baseline profile (hand-written until Macrobenchmark can run on a device, task 083): compile our
+# code and the Compose viewer ahead of time so launch → first frame doesn't run interpreted.
+HSPLcom/example/hdmicaptain/**->**(**)**
+HSPLcom/example/hdmicaptain/viewer/**->**(**)**
+HSPLcom/example/hdmicaptain/capture/**->**(**)**
+HSPLcom/example/hdmicaptain/render/**->**(**)**
+HSPLcom/example/hdmicaptain/model/**->**(**)**
+Lcom/example/hdmicaptain/**;

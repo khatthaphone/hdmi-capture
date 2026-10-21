@@ -3,6 +3,8 @@
 #include <android/log.h>
 #include <libusb.h>
 
+#include <sys/resource.h>
+
 #include <cstring>
 #include <ctime>
 #include <sstream>
@@ -143,6 +145,12 @@ void UvcSource::onFrame(uvc_frame_t *frame, void *self) { static_cast<UvcSource 
 
 // libuvc's stream thread. One copy into the ring slot; no allocation once the slot is sized.
 void UvcSource::deliver(uvc_frame_t *frame) {
+    // libuvc's callback thread: raise it once, it carries every frame.
+    thread_local bool raised = false;
+    if (!raised) {
+        setpriority(PRIO_PROCESS, 0, -8);
+        raised = true;
+    }
     int64_t now = nowNs();
     if (compressed_) {
         decoder_.submit(static_cast<const uint8_t *>(frame->data), frame->data_bytes, now);
