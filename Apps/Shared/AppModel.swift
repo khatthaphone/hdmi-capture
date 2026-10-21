@@ -81,7 +81,7 @@ final class AppModel {
         // QA overrides from launch arguments; applied in memory only (init doesn't trigger savePrefs).
         let defaults = UserDefaults.standard
         if defaults.bool(forKey: "qaBuiltInCameras") { prefs.includeNonExternalCameras = true }
-        if defaults.bool(forKey: "qaShowStats") { prefs.showStats = true }
+        if defaults.object(forKey: "qaShowStats") != nil { prefs.showStats = defaults.bool(forKey: "qaShowStats") }
         #endif
         self.prefs = prefs
         catalog = DeviceCatalog(provider: AVDeviceProvider(), includeNonExternalCameras: prefs.includeNonExternalCameras)

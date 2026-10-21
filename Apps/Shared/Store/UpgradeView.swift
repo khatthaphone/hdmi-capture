@@ -55,6 +55,7 @@ struct UpgradeView: View {
             Text(title)
                 .font(.title.bold())
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Text(store.isPro ? "Thank you for supporting HDMI Captain." : "One-time purchase. No subscription.")
                 .font(.headline)
                 .foregroundStyle(.secondary)
@@ -82,6 +83,7 @@ struct UpgradeView: View {
 
             Text("The live viewer, screenshots and every picture setting stay free.")
                 .font(.footnote)
+                .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.top, 12)
@@ -107,7 +109,8 @@ struct UpgradeView: View {
                             if store.purchaseState == .purchasing {
                                 ProgressView().controlSize(.small)
                             } else {
-                                Text(store.product.map { "Buy Pro — \($0.displayPrice)" } ?? "Buy Pro")
+                                Label(store.product.map { "Buy Pro — \($0.displayPrice)" } ?? "Buy Pro", systemImage: Symbol.upgrade)
+                                    .fontWeight(.semibold)
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -116,14 +119,18 @@ struct UpgradeView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .disabled(store.purchaseState == .purchasing)
-                    Button("Not Now") { dismiss() }
-                        .keyboardShortcut(.cancelAction)
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
                 }
-                Button("Restore Purchase") { Task { await store.restore() } }
-                    .buttonStyle(.borderless)
-                    .font(.callout)
+                // Secondary choices are quiet text buttons, so Buy Pro is the one obvious action.
+                HStack(spacing: 18) {
+                    if !store.isPro {
+                        Button("Not Now") { dismiss() }
+                            .keyboardShortcut(.cancelAction)
+                    }
+                    Button("Restore Purchase") { Task { await store.restore() } }
+                }
+                .buttonStyle(.borderless)
+                .font(.callout)
+                .foregroundStyle(.secondary)
             }
             .padding(.top, 20)
         }
