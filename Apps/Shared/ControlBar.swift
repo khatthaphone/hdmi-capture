@@ -334,7 +334,7 @@ private struct OptionsMenu: View {
             }
             Menu { GuideItems(app: app) } label: { Label("Guides", systemImage: Symbol.guides) }
             Divider()
-            Toggle(isOn: $app.prefs.showStats) { Label("Show Stats", systemImage: Symbol.stats) }
+            Toggle(isOn: $app.prefs.showStats) { Label("Show Diagnostics", systemImage: Symbol.stats) }
             #if os(iOS)
             Button { app.isShowingSettings = true } label: { Label("Settings…", systemImage: Symbol.settings) }
             #endif

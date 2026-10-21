@@ -91,12 +91,12 @@ private struct CardSettingsPage: View {
     @ViewBuilder private var picture: some View {
         @Bindable var viewer = viewer
         Section {
-            Picker("Scaling", selection: $viewer.preset.scale) {
+            Picker("Scale", selection: $viewer.preset.scale) {
                 ForEach(ScaleMode.allCases, id: \.self) { Text($0.title).tag($0) }
             }
-            Picker("Filtering", selection: $viewer.preset.filter) {
+            Picker("Image filtering", selection: $viewer.preset.filter) {
                 Text("Smooth").tag(FilterMode.linear)
-                Text("Sharp pixels").tag(FilterMode.nearest)
+                Text("Pixel-sharp").tag(FilterMode.nearest)
             }
             Picker("Color range", selection: $viewer.preset.colorRange) {
                 Text("Automatic").tag(ColorRange.auto)
@@ -160,7 +160,7 @@ private struct CardSettingsPage: View {
         @Bindable var viewer = viewer
         @Bindable var app = app
         Section {
-            Picker("Output", selection: $viewer.preset.outputDeviceUID) {
+            Picker("Audio output", selection: $viewer.preset.outputDeviceUID) {
                 Text("System default").tag(String?.none)
                 Divider()
                 ForEach(outputDevices) { Text($0.name).tag(Optional($0.id)) }
@@ -180,7 +180,7 @@ private struct CardSettingsPage: View {
             Picker("Channels", selection: $viewer.preset.channelMode) {
                 ForEach(ChannelMode.allCases, id: \.self) { Text($0.title).tag($0) }
             }
-            Toggle("Sound follows the focused window", isOn: $app.prefs.audioFollowsFocus)
+            Toggle("Play sound from the frontmost window", isOn: $app.prefs.audioFollowsFocus)
         }
     }
 
@@ -208,15 +208,15 @@ private struct WindowSettingsPage: View {
     var body: some View {
         @Bindable var app = app
         Form {
-            Section {
+            Section("Viewer") {
                 Toggle("Lock aspect ratio", isOn: $app.prefs.lockAspect)
-                Toggle("Float on top", isOn: $app.prefs.floatOnTop)
+                Toggle("Keep window on top", isOn: $app.prefs.floatOnTop)
                 Toggle("Show on all Spaces", isOn: $app.prefs.allSpaces)
-                Toggle("Clean mode (hide window buttons)", isOn: $app.prefs.cleanMode)
-                Toggle("Show controls when the pointer nears the bottom edge", isOn: $app.prefs.showControlsOnHover)
-                Toggle("Show stats", isOn: $app.prefs.showStats)
+                Toggle("Hide window buttons (clean mode)", isOn: $app.prefs.cleanMode)
+                Toggle("Show controls near the bottom edge", isOn: $app.prefs.showControlsOnHover)
+                Toggle("Show diagnostics", isOn: $app.prefs.showStats)
             }
-            Section {
+            Section("Menu Bar") {
                 Toggle("Show menu bar item", isOn: $app.prefs.showMenuBarItem)
                 Toggle("Menu bar only (hide Dock icon)", isOn: $app.prefs.menuBarOnly)
                     .disabled(!app.prefs.showMenuBarItem)

@@ -58,10 +58,10 @@ private struct SettingsForm: View {
             }
 
             Section("Picture") {
-                Picker("Scaling", selection: $viewer.preset.scale) {
+                Picker("Scale", selection: $viewer.preset.scale) {
                     ForEach(ScaleMode.allCases, id: \.self) { Label($0.title, systemImage: $0.symbol).tag($0) }
                 }
-                Toggle("Sharp pixels", isOn: Binding(
+                Toggle("Pixel-sharp scaling", isOn: Binding(
                     get: { viewer.preset.filter == .nearest },
                     set: { viewer.preset.filter = $0 ? .nearest : .linear }
                 ))
@@ -123,7 +123,7 @@ private struct SettingsForm: View {
 
             Section("Display") {
                 Toggle("Show controls on tap", isOn: $app.prefs.showControlsOnHover)
-                Toggle("Show stats", isOn: $app.prefs.showStats)
+                Toggle("Show diagnostics", isOn: $app.prefs.showStats)
                 Toggle("Show recording timer", isOn: $app.prefs.showRecordingIndicator)
             }
 

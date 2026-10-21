@@ -27,11 +27,11 @@
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>HDMI Captain shows the video from your HDMI capture device.</string>
+	<string>HDMI capture cards appear as cameras. HDMI Captain shows the picture from the card you connect.</string>
 	<key>NSCameraUseExternalDeviceType</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>HDMI Captain plays the audio from your HDMI capture device.</string>
+	<string>HDMI capture cards deliver their sound as a microphone. HDMI Captain plays it; nothing is recorded unless you record.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>HDMI Captain saves screenshots and recordings to your photo library.</string>
 	<key>UIApplicationSceneManifest</key>

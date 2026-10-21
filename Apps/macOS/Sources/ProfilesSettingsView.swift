@@ -46,7 +46,7 @@ struct ProfilesSettingsView: View {
                     }
                 }
             } footer: {
-                Text("A profile bundles format, scaling, picture look and audio delay. Apply it to the card in the active window.")
+                Text("A profile bundles format, scale, picture look and audio delay. Apply uses it on the card in the HDMI Captain window you used last.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 

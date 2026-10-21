@@ -52,7 +52,7 @@ private struct VideoItems: View {
             Label("Sharp Pixels", systemImage: Symbol.sharpPixels)
         }
         Menu { GuideItems(app: app) } label: { Label("Guides", systemImage: Symbol.guides) }
-        Toggle(isOn: $app.prefs.showStats) { Label("Show Stats", systemImage: Symbol.stats) }
+        Toggle(isOn: $app.prefs.showStats) { Label("Show Diagnostics", systemImage: Symbol.stats) }
             .keyboardShortcut("i")
         Divider()
         Menu {

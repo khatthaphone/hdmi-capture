@@ -112,7 +112,7 @@ final class DeviceSession {
     func update(device: CaptureDeviceInfo?, catalog: DeviceCatalog) {
         guard let device else {
             if state != .absent {
-                stopRecording(reason: "Recording saved: the device was disconnected")
+                stopRecording(reason: "Recording saved: the capture card was disconnected")
                 engine.stop()
                 signalMonitor.reset()
                 runningConfig = nil
@@ -214,7 +214,7 @@ final class DeviceSession {
     /// Saves the last `seconds` (nil = everything kept) to Movies/HDMI Captain.
     func saveRecent(seconds: Double?) {
         guard recent.isEnabled else {
-            onMessage?("Turn on Keep Recent in the Save Recent menu first", .warning)
+            onMessage?("Turn on Keep Recent Footage in the Save Recent menu first", .warning)
             return
         }
         let url = RollingRecorder.fileURL(in: MediaLibrary.videoFolder)
@@ -330,7 +330,7 @@ final class DeviceSession {
             liveInfo = info
             state = .live
         case let .recovering(reason):
-            if reason == "Device disconnected" { stopRecording(reason: "Recording saved: the device was disconnected") }
+            if reason == "Device disconnected" { stopRecording(reason: "Recording saved: the capture card was disconnected") }
             state = .recovering(reason)
         case let .paused(reason):
             state = .paused(reason)

@@ -64,7 +64,7 @@ struct MenuBarPanel: View {
 
     private var status: String {
         guard app.permission == .granted else { return "Camera access needed" }
-        guard let session else { return "No capture device" }
+        guard let session else { return "No capture card" }
         switch session.state {
         case .live: return session.liveInfo.map { "\(session.deviceName) · \($0.format.width)×\($0.format.height)" } ?? session.deviceName
         case .idle, .connecting: return "Connecting to \(session.deviceName)"

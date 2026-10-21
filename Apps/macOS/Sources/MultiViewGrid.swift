@@ -10,7 +10,7 @@ struct MultiViewGrid: View {
         Group {
             if devices.isEmpty {
                 ContentUnavailableView("No capture cards", systemImage: "rectangle.on.rectangle.slash",
-                                       description: Text("Connect HDMI capture devices to see them here."))
+                                       description: Text("Connect capture cards to see them here."))
             } else {
                 let columns = devices.count == 1 ? 1 : devices.count <= 4 ? 2 : 3
                 Grid(horizontalSpacing: 2, verticalSpacing: 2) {

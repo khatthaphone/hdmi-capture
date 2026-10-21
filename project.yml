@@ -40,8 +40,8 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.utilities
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
-        NSCameraUsageDescription: HDMI Captain shows the video from your HDMI capture device.
-        NSMicrophoneUsageDescription: HDMI Captain plays the audio from your HDMI capture device.
+        NSCameraUsageDescription: HDMI capture cards appear as cameras. HDMI Captain shows the picture from the card you connect.
+        NSMicrophoneUsageDescription: HDMI capture cards deliver their sound as a microphone. HDMI Captain plays it; nothing is recorded unless you record.
     entitlements:
       path: Apps/macOS/HDMICaptain.entitlements
       properties:
@@ -111,8 +111,8 @@ targets:
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         NSCameraUseExternalDeviceType: true
-        NSCameraUsageDescription: HDMI Captain shows the video from your HDMI capture device.
-        NSMicrophoneUsageDescription: HDMI Captain plays the audio from your HDMI capture device.
+        NSCameraUsageDescription: HDMI capture cards appear as cameras. HDMI Captain shows the picture from the card you connect.
+        NSMicrophoneUsageDescription: HDMI capture cards deliver their sound as a microphone. HDMI Captain plays it; nothing is recorded unless you record.
         NSPhotoLibraryAddUsageDescription: HDMI Captain saves screenshots and recordings to your photo library.
     settings:
       base:
