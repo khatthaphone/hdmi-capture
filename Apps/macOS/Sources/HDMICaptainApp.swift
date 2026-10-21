@@ -41,6 +41,9 @@ struct HDMICaptainApp: App {
             CommandGroup(replacing: .help) {
                 Button("HDMI Captain Help") { app.isShowingHelp = true }
             }
+            #if DIRECT_DISTRIBUTION
+            UpdateCommands()
+            #endif
             CardWindowCommands(app: app)
             ViewerCommands(app: app)
             WindowSizeCommands(app: app)

@@ -1,5 +1,6 @@
 #!/bin/zsh
-# Mac release: archive → export → (notarize + staple) → DMG → verify.
+# Direct-download Mac release (HDMICaptain-Direct target, with Sparkle updates):
+# archive → export → (notarize + staple) → DMG → Sparkle update zip + signed appcast → verify.
 #
 #   tools/release/release.sh                 # development-signed DMG (no Developer account needed)
 #   DEVELOPER_ID=1 NOTARY_PROFILE=hdmicaptain tools/release/release.sh
@@ -20,9 +21,9 @@ METHOD=$([[ -n "${DEVELOPER_ID:-}" ]] && echo developer-id || echo debugging)
 rm -rf "$OUT" && mkdir -p "$OUT"
 xcodegen generate --quiet
 
-echo "▸ Archive (Release, arm64)"
-xcodebuild -project HDMICaptain.xcodeproj -scheme HDMICaptain -configuration Release \
-  -archivePath "$ARCHIVE" -derivedDataPath .build/xcode-release -allowProvisioningUpdates -quiet archive
+echo "▸ Archive (Release, universal)"
+xcodebuild -project HDMICaptain.xcodeproj -scheme HDMICaptain-Direct -configuration Release \
+  -archivePath "$ARCHIVE" -derivedDataPath .build/xcode-direct -allowProvisioningUpdates -quiet archive
 
 echo "▸ Export ($METHOD)"
 cat > "$OUT/ExportOptions.plist" <<PLIST
@@ -49,6 +50,14 @@ STAGE=$OUT/dmg && mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/" && ln -s /Applications "$STAGE/Applications"
 hdiutil create -volname "HDMI Captain" -srcfolder "$STAGE" -ov -format UDZO "$DMG" -quiet
 [[ -n "${NOTARY_PROFILE:-}" ]] && xcrun stapler staple "$DMG"
+
+echo "▸ Sparkle update + appcast"
+# Signs with the EdDSA private key in this Mac's keychain (Sparkle's generate_keys); the public key
+# is SPARKLE_PUBLIC_ED_KEY in project.yml. Upload updates/* next to the existing appcast.xml.
+SPARKLE_BIN=$(find .build/xcode-direct/SourcePackages/artifacts -type d -name bin -path "*Sparkle*" | head -1)
+mkdir -p "$OUT/updates"
+ditto -c -k --keepParent "$APP" "$OUT/updates/HDMI-Captain-$VERSION.zip"
+"$SPARKLE_BIN/generate_appcast" --download-url-prefix "${UPDATE_URL_PREFIX:-https://hdmicaptain.app/updates/}" "$OUT/updates"
 
 echo "▸ Verify"
 codesign --verify --deep --strict "$APP" && echo "codesign: OK"
