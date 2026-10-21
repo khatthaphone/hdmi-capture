@@ -2,7 +2,10 @@ package com.example.hdmicaptain.render
 
 import android.graphics.Bitmap
 import android.view.Surface
+import com.example.hdmicaptain.model.CubeLUT
+import com.example.hdmicaptain.model.ImageAdjustments
 import com.example.hdmicaptain.model.RenderOptions
+import com.example.hdmicaptain.model.SignalAnalyzer
 import com.example.hdmicaptain.model.TestPattern
 import java.nio.ByteBuffer
 
@@ -26,6 +29,27 @@ class VideoRenderer {
         nativeStartTestPattern(handle, pattern.ordinal, width, height, fps)
 
     fun stopSource() = nativeStopSource(handle)
+
+    /** Picture look (adjustments + optional LUT at [lutIntensity]), applied on screen. */
+    fun setLook(adjustments: ImageAdjustments, lut: CubeLUT?, lutIntensity: Double) {
+        val a = floatArrayOf(
+            adjustments.brightness.toFloat(), adjustments.contrast.toFloat(), adjustments.saturation.toFloat(),
+            adjustments.gamma.toFloat(), adjustments.sharpness.toFloat(),
+        )
+        nativeSetLook(handle, a, lut?.entries, lut?.size ?: 0, lutIntensity.toFloat(), lut?.let { it.domainMin + it.domainMax })
+    }
+
+    /** The latest Y/Cb/Cr sample (every 10th frame) for no-signal detection; [count] grows with each. */
+    data class SignalSample(val stats: SignalAnalyzer.Stats, val fullRange: Boolean, val count: Long)
+
+    fun signal(): SignalSample {
+        val v = DoubleArray(7)
+        nativeSignal(handle, v)
+        return SignalSample(
+            SignalAnalyzer.Stats(meanY = v[0], meanCb = v[1], meanCr = v[2], rangeY = v[3], rangeChroma = v[4]),
+            fullRange = v[5] > 0, count = v[6].toLong(),
+        )
+    }
 
     /** Native frame ring for a capture source (UvcSource); valid until [release]. */
     val ringHandle: Long get() = nativeRing(handle)
@@ -62,6 +86,8 @@ class VideoRenderer {
         @JvmStatic external fun nativeStartTestPattern(handle: Long, pattern: Int, width: Int, height: Int, fps: Int)
         @JvmStatic external fun nativeStopSource(handle: Long)
         @JvmStatic external fun nativeRing(handle: Long): Long
+        @JvmStatic external fun nativeSetLook(handle: Long, adjust: FloatArray, lut: FloatArray?, lutSize: Int, intensity: Float, domain: FloatArray?)
+        @JvmStatic external fun nativeSignal(handle: Long, out: DoubleArray)
         @JvmStatic external fun nativeStats(handle: Long, out: LongArray)
         @JvmStatic external fun nativeScreenshot(handle: Long, size: IntArray): ByteArray?
     }

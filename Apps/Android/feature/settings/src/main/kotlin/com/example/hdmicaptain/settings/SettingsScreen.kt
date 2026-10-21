@@ -42,6 +42,7 @@ import com.example.hdmicaptain.model.ColorRange
 import com.example.hdmicaptain.model.DevicePreset
 import com.example.hdmicaptain.model.FilterMode
 import com.example.hdmicaptain.model.FormatPreference
+import com.example.hdmicaptain.model.ImageAdjustments
 import com.example.hdmicaptain.model.ScaleMode
 import kotlin.math.roundToInt
 
@@ -61,6 +62,8 @@ interface SettingsActions {
     fun update(preset: DevicePreset)
     fun setShowDiagnostics(on: Boolean)
     fun showLicenses()
+    /** Opens the system file picker for a .cube file. */
+    fun chooseLut()
 }
 
 /**
@@ -106,6 +109,28 @@ private fun LazyListScope.settingsContent(state: SettingsState, actions: Setting
     item { Choice("Scale", scaleTitle(p.scale), ScaleMode.entries.map(::scaleTitle)) { actions.update(p.copy(scale = ScaleMode.entries[it])) } }
     item { SwitchRow("Pixel-sharp scaling", p.filter == FilterMode.Nearest) { actions.update(p.copy(filter = if (it) FilterMode.Nearest else FilterMode.Linear)) } }
     item { Choice("Color range", rangeTitle(p.colorRange), ColorRange.entries.map(::rangeTitle)) { actions.update(p.copy(colorRange = ColorRange.entries[it])) } }
+
+    section("Look")
+    val a = p.adjustments
+    item { SliderRow("Brightness", a.brightness.toFloat(), -0.5f..0.5f, signed(a.brightness)) { actions.update(p.copy(adjustments = a.copy(brightness = it.toDouble()))) } }
+    item { SliderRow("Contrast", a.contrast.toFloat(), 0.5f..1.5f, "%.2f".format(a.contrast)) { actions.update(p.copy(adjustments = a.copy(contrast = it.toDouble()))) } }
+    item { SliderRow("Saturation", a.saturation.toFloat(), 0f..2f, "%.2f".format(a.saturation)) { actions.update(p.copy(adjustments = a.copy(saturation = it.toDouble()))) } }
+    item { SliderRow("Gamma", a.gamma.toFloat(), 0.5f..2f, "%.2f".format(a.gamma)) { actions.update(p.copy(adjustments = a.copy(gamma = it.toDouble()))) } }
+    item { SliderRow("Sharpness", a.sharpness.toFloat(), 0f..1f, "%.2f".format(a.sharpness)) { actions.update(p.copy(adjustments = a.copy(sharpness = it.toDouble()))) } }
+    if (!a.isIdentity) item { TextButton(onClick = { actions.update(p.copy(adjustments = ImageAdjustments())) }) { Text("Reset Look") } }
+
+    section("LUT")
+    item {
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(p.lutName ?: "None", Modifier.weight(1f))
+            TextButton(onClick = actions::chooseLut) { Text("Choose .cube File…") }
+            if (p.lutUri != null) TextButton(onClick = { actions.update(p.copy(lutUri = null, lutName = null)) }) { Text("Remove") }
+        }
+    }
+    if (p.lutUri != null) {
+        item { SliderRow("Intensity", p.lutIntensity.toFloat(), 0f..1f, "${(p.lutIntensity * 100).roundToInt()} %") { actions.update(p.copy(lutIntensity = it.toDouble())) } }
+    }
+    footer("A .cube colour lookup table from Resolve, Premiere or a camera maker, applied on screen.")
 
     section("Sound")
     item { SwitchRow("Mute", p.muted) { actions.update(p.copy(muted = it)) } }
@@ -201,6 +226,8 @@ fun channelTitle(mode: ChannelMode) = when (mode) {
     ChannelMode.RightToBoth -> "Right to both"
     ChannelMode.Mono -> "Mono mix"
 }
+
+private fun signed(v: Double) = if (v > 0) "+%.2f".format(v) else "%.2f".format(v)
 
 fun formatTitle(format: FormatPreference) = when (format) {
     FormatPreference.Auto -> "Automatic"

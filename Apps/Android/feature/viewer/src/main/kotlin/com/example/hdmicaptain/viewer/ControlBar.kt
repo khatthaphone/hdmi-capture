@@ -23,6 +23,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -40,6 +41,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.hdmicaptain.capture.Card
 import com.example.hdmicaptain.model.AudioSettings
+import com.example.hdmicaptain.model.GuideSettings
+import com.example.hdmicaptain.model.TestPattern
 import com.example.hdmicaptain.model.FilterMode
 import com.example.hdmicaptain.model.RenderOptions
 import com.example.hdmicaptain.model.ScaleMode
@@ -55,6 +58,8 @@ interface ControlBarActions {
     fun setScale(mode: ScaleMode)
     fun setSharpPixels(on: Boolean)
     fun setShowDiagnostics(on: Boolean)
+    fun setTestPattern(pattern: TestPattern?)
+    fun setGuides(guides: GuideSettings)
     fun pictureInPicture()
     fun openSettings()
     fun showHelp()
@@ -72,6 +77,8 @@ fun ControlBar(
     options: RenderOptions,
     audio: AudioSettings,
     showDiagnostics: Boolean,
+    testPattern: TestPattern?,
+    guides: GuideSettings,
     isPro: Boolean,
     isRecording: Boolean,
     actions: ControlBarActions,
@@ -109,7 +116,7 @@ fun ControlBar(
                 actions::record,
                 tint = if (isRecording) Color(0xFFFF453A) else Color.White,
             )
-            MoreMenu(options, showDiagnostics, actions)
+            MoreMenu(options, showDiagnostics, testPattern, guides, actions)
         }
     }
     }
@@ -137,7 +144,7 @@ private fun InputMenu(cards: List<Card>, currentCard: String?, actions: ControlB
 }
 
 @Composable
-private fun MoreMenu(options: RenderOptions, showDiagnostics: Boolean, actions: ControlBarActions) {
+private fun MoreMenu(options: RenderOptions, showDiagnostics: Boolean, testPattern: TestPattern?, guides: GuideSettings, actions: ControlBarActions) {
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true; actions.poke() }) { Icon(Icons.Outlined.MoreHoriz, contentDescription = "More") }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -159,6 +166,21 @@ private fun MoreMenu(options: RenderOptions, showDiagnostics: Boolean, actions: 
             leadingIcon = { Icon(if (showDiagnostics) Icons.Outlined.Check else Icons.Outlined.QueryStats, null) },
             onClick = { actions.setShowDiagnostics(!showDiagnostics) },
         )
+        HorizontalDivider()
+        Text("Guides", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+        Check("Rule of Thirds", guides.thirds) { actions.setGuides(guides.copy(thirds = it)) }
+        Check("Center", guides.center) { actions.setGuides(guides.copy(center = it)) }
+        Check("Safe Areas", guides.safeAreas) { actions.setGuides(guides.copy(safeAreas = it)) }
+        GuideSettings.Mask.entries.forEach { mask ->
+            Check("Mask ${mask.title}", guides.mask == mask) { actions.setGuides(guides.copy(mask = if (it) mask else null)) }
+        }
+        HorizontalDivider()
+        Text("Test Pattern", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+        Check("Off (live picture)", testPattern == null) { actions.setTestPattern(null) }
+        TestPattern.entries.forEach { pattern ->
+            Check(pattern.title, testPattern == pattern) { actions.setTestPattern(if (it) pattern else null) }
+        }
+        HorizontalDivider()
         DropdownMenuItem(
             text = { Text("Picture in Picture") },
             leadingIcon = { Icon(Icons.Outlined.PictureInPictureAlt, null) },
@@ -176,6 +198,15 @@ private fun MoreMenu(options: RenderOptions, showDiagnostics: Boolean, actions: 
             onClick = { open = false; actions.showHelp() },
         )
     }
+}
+
+@Composable
+private fun Check(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    DropdownMenuItem(
+        text = { Text(title) },
+        leadingIcon = { if (checked) Icon(Icons.Outlined.Check, null) },
+        onClick = { onChange(!checked) },
+    )
 }
 
 /** Same names as the Apple scale menu. */

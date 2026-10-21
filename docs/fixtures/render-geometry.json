@@ -1,0 +1,17 @@
+{
+  "comment": "RenderGeometry.compute: source size + drawable size + scale mode → viewport (pixels, top-left origin) and visible source rect (0…1).",
+  "cases": [
+    {"name": "fit pillarbox", "source": [1920, 1080], "drawable": [2000, 1500], "mode": "fit",
+     "viewport": [0, 187, 2000, 1125], "sourceRect": [0, 0, 1, 1]},
+    {"name": "fit exact", "source": [1920, 1080], "drawable": [1920, 1080], "mode": "fit",
+     "viewport": [0, 0, 1920, 1080], "sourceRect": [0, 0, 1, 1]},
+    {"name": "fill crops the sides", "source": [1920, 1080], "drawable": [1080, 1080], "mode": "fill",
+     "viewport": [0, 0, 1080, 1080], "sourceRect": [0.21875, 0, 0.5625, 1]},
+    {"name": "stretch", "source": [1280, 720], "drawable": [1000, 1000], "mode": "stretch",
+     "viewport": [0, 0, 1000, 1000], "sourceRect": [0, 0, 1, 1]},
+    {"name": "integer 2x", "source": [640, 480], "drawable": [1920, 1080], "mode": "integer",
+     "viewport": [320, 60, 1280, 960], "sourceRect": [0, 0, 1, 1]},
+    {"name": "integer below 1x falls back to fit", "source": [1920, 1080], "drawable": [960, 540], "mode": "integer",
+     "viewport": [0, 0, 960, 540], "sourceRect": [0, 0, 1, 1]}
+  ]
+}

@@ -37,7 +37,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.hdmicaptain.capture.ViewerPhase
+import com.example.hdmicaptain.model.GuideSettings
 import com.example.hdmicaptain.model.ScaleMode
+import com.example.hdmicaptain.model.SignalContent
+import com.example.hdmicaptain.model.TestPattern
 import kotlinx.coroutines.delay
 
 /** App-level actions the viewer can't do itself (Pro sheet, settings, PiP, system settings). */
@@ -59,8 +62,6 @@ fun ViewerScreen(
     host: ViewerHost,
     /** Before capture runs: the camera/microphone permission screens. */
     permission: PermissionPhase?,
-    /** A test pattern is showing instead of a card. */
-    testPattern: Boolean,
     inPictureInPicture: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -71,6 +72,11 @@ fun ViewerScreen(
     val controlsVisible by model.controlsVisible.collectAsState()
     val cards by model.cards.collectAsState()
     val feedback by model.feedback.collectAsState()
+    val pattern by model.testPattern.collectAsState()
+    val signal by model.signal.collectAsState()
+    val guides by model.guides.collectAsState()
+    val sourceSize by model.sourceSize.collectAsState()
+    val testPattern = pattern != null
     var showHelp by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -86,6 +92,8 @@ fun ViewerScreen(
             override fun setScale(mode: ScaleMode) = model.setScale(mode)
             override fun setSharpPixels(on: Boolean) = model.setSharpPixels(on)
             override fun setShowDiagnostics(on: Boolean) = model.setShowDiagnostics(on)
+            override fun setTestPattern(pattern: TestPattern?) = model.setTestPattern(pattern)
+            override fun setGuides(guides: GuideSettings) = model.setGuides(guides)
             override fun pictureInPicture() = host.pictureInPicture()
             override fun openSettings() = host.openSettings()
             override fun showHelp() { showHelp = true }
@@ -121,9 +129,12 @@ fun ViewerScreen(
         VideoSurface(model.renderer, Modifier.fillMaxSize())
 
         val live = phase is ViewerPhase.Live || testPattern
+        if (live && !inPictureInPicture) GuidesOverlay(guides, sourceSize.first, sourceSize.second, options.scale)
         when {
             permission != null -> PermissionScreen(permission, statusActions)
-            !testPattern -> StatusOverlay(phase, statusActions)
+            testPattern -> Unit
+            phase is ViewerPhase.Live && signal.isNoSignal -> NoSignalOverlay(black = signal == SignalContent.Black, actions = statusActions)
+            else -> StatusOverlay(phase, statusActions)
         }
 
         if (diagnostics && !inPictureInPicture) {
@@ -157,6 +168,8 @@ fun ViewerScreen(
                 options = options,
                 audio = audio,
                 showDiagnostics = diagnostics,
+                testPattern = pattern,
+                guides = guides,
                 isPro = host.isPro,
                 isRecording = false,
                 actions = actions,

@@ -27,6 +27,22 @@ struct RenderOptions {
     ColorRange range = ColorRange::Auto;
 };
 
+// Picture look, applied when scaling into the window (CaptureCore's ImageAdjustments + LUT).
+struct Look {
+    float brightness = 0, contrast = 1, saturation = 1, gamma = 1, sharpness = 0;
+    float lutIntensity = 0;
+    int lutSize = 0;
+    std::vector<float> lut;  // size³ RGB, red fastest
+    float lutMin[3] = {0, 0, 0}, lutMax[3] = {1, 1, 1};
+};
+
+// Y/Cb/Cr statistics over SignalAnalyzer's 160×90 grid, for no-signal detection in Kotlin.
+struct SignalSample {
+    double meanY = 0, meanCb = 128, meanCr = 128, rangeY = 0, rangeChroma = 0;
+    bool fullRange = false;
+    int64_t count = 0;  // increases with every new sample
+};
+
 struct RenderStats {
     int64_t framesIn = 0;      // published by the source
     int64_t framesDrawn = 0;   // presented on screen
@@ -48,6 +64,7 @@ public:
     Renderer();
     ~Renderer();
 
+    // The capture source's ring. Test patterns have their own, so a card and a pattern never share one.
     FrameRing &ring() { return ring_; }
 
     // Window from the SurfaceView; nullptr detaches and returns only once EGL let go of it.
@@ -55,6 +72,8 @@ public:
     void setOptions(RenderOptions options);
     void startTestPattern(Pattern pattern, int width, int height, int fps);
     void stopSource();
+    void setLook(Look look);
+    SignalSample signal();
     RenderStats stats();
     // Blocks until the render thread has read the current frame; empty if none yet.
     Screenshot screenshot();
@@ -67,10 +86,14 @@ private:
     void upload(const Frame &frame);
     void convert(const Frame &frame);
     void present(int64_t arrivalNs);
+    void sampleSignal(const Frame &frame);
+    void uploadLook(const Look &look);
     void wake();
 
     FrameRing ring_;
+    FrameRing patternRing_;
     std::unique_ptr<TestPatternSource> pattern_;
+    std::atomic<bool> showingPattern_{false};
 
     std::mutex mutex_;
     std::condition_variable cv_;
@@ -79,6 +102,9 @@ private:
     ANativeWindow *pendingWindow_ = nullptr;
     bool optionsChanged_ = false;
     RenderOptions options_;
+    bool lookChanged_ = false;
+    Look look_;
+    SignalSample signal_;
     bool screenshotRequested_ = false;
     bool screenshotReady_ = false;
     Screenshot screenshot_;
@@ -98,6 +124,9 @@ private:
     GLuint rgbTexture_ = 0;
     GLuint rgbFramebuffer_ = 0;
     GLuint vao_ = 0;
+    GLuint lutTexture_ = 0;
+    Look activeLook_;
+    int convertCount_ = 0;
     int frameWidth_ = 0, frameHeight_ = 0;
     PixelFormat frameFormat_ = PixelFormat::NV12;
     bool hasFrame_ = false;

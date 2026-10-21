@@ -6,6 +6,12 @@ import com.example.hdmicaptain.capture.Card
 import com.example.hdmicaptain.capture.CaptureController
 import com.example.hdmicaptain.capture.ViewerPhase
 import com.example.hdmicaptain.model.AudioSettings
+import com.example.hdmicaptain.model.CubeLUT
+import com.example.hdmicaptain.model.GuideSettings
+import com.example.hdmicaptain.model.SignalAnalyzer
+import com.example.hdmicaptain.model.SignalContent
+import com.example.hdmicaptain.model.SignalDebouncer
+import com.example.hdmicaptain.model.TestPattern
 import com.example.hdmicaptain.model.DevicePreset
 import com.example.hdmicaptain.model.FilterMode
 import com.example.hdmicaptain.model.RenderOptions
@@ -64,6 +70,23 @@ class ViewerModel(
     private val _feedback = MutableStateFlow<Feedback?>(null)
     val feedback: StateFlow<Feedback?> = _feedback.asStateFlow()
 
+    private val _signal = MutableStateFlow<SignalContent>(SignalContent.Picture)
+    /** What the live card shows: a picture, or its no-signal screen / black (HDCP). */
+    val signal: StateFlow<SignalContent> = _signal.asStateFlow()
+
+    private val _testPattern = MutableStateFlow<TestPattern?>(null)
+    val testPattern: StateFlow<TestPattern?> = _testPattern.asStateFlow()
+
+    private val _guides = MutableStateFlow(GuideSettings())
+    val guides: StateFlow<GuideSettings> = _guides.asStateFlow()
+
+    /** Source size of the picture on screen (for the guides overlay). */
+    private val _sourceSize = MutableStateFlow(0 to 0)
+    val sourceSize: StateFlow<Pair<Int, Int>> = _sourceSize.asStateFlow()
+
+    private var lut: CubeLUT? = null
+    private var lutUri: String? = null
+
     private var hideJob: Job? = null
     private var feedbackJob: Job? = null
 
@@ -71,6 +94,7 @@ class ViewerModel(
         renderer.setOptions(_options.value)
         pokeControls()
         scope.launch { _showDiagnostics.value = prefs.appPrefs().showDiagnostics }
+        scope.launch { watchSignal() }
         // A card came (back): restore its picture and sound settings.
         scope.launch {
             controller.currentCard.collect { card ->
@@ -89,8 +113,48 @@ class ViewerModel(
         if (formatChanged) controller.applyFormat(next.format)
     }
 
+    /** Show a generated pattern instead of the card (null = back to the live input). */
+    fun setTestPattern(pattern: TestPattern?) {
+        _testPattern.value = pattern
+        if (pattern != null) renderer.startTestPattern(pattern) else renderer.stopSource()
+        pokeControls()
+    }
+
+    fun setGuides(next: GuideSettings) {
+        _guides.value = next
+        pokeControls()
+    }
+
+    /** Settings › LUT: a .cube file the user picked (content:// URI with a persisted grant). */
+    fun setLut(uri: String?, name: String?) = updatePreset(_preset.value.copy(lutUri = uri, lutName = name))
+
+    /**
+     * No-signal detection (SignalAnalyzer + the 1.5 s debounce), sampled 4× a second from the
+     * renderer's grid; loss shows only after it persists, recovery at once.
+     */
+    private suspend fun watchSignal() {
+        val debouncer = SignalDebouncer()
+        var lastCount = -1L
+        while (true) {
+            delay(250)
+            val stats = renderer.stats()
+            _sourceSize.value = stats.width to stats.height
+            if (phase.value !is ViewerPhase.Live || _testPattern.value != null) {
+                debouncer.reset()
+                _signal.value = SignalContent.Picture
+                continue
+            }
+            val sample = renderer.signal()
+            if (sample.count == lastCount) continue
+            lastCount = sample.count
+            debouncer.observe(SignalAnalyzer.classify(sample.stats, sample.fullRange), System.nanoTime() / 1e9)
+            _signal.value = debouncer.current
+        }
+    }
+
     private fun apply(next: DevicePreset, save: Boolean) {
         _preset.value = next
+        applyLook(next)
         _options.value = next.renderOptions
         renderer.setOptions(next.renderOptions)
         _audioSettings.value = next.audioSettings
@@ -130,6 +194,31 @@ class ViewerModel(
             delay(3_000)
             if (!pinControls && phase.value is ViewerPhase.Live) _controlsVisible.value = false
         }
+    }
+
+    /** Adjustments now; the LUT file is read off the main thread and applied when ready. */
+    private fun applyLook(next: DevicePreset) {
+        if (next.lutUri != lutUri) {
+            lutUri = next.lutUri
+            lut = null
+            val uri = next.lutUri
+            if (uri != null) {
+                scope.launch {
+                    val parsed = withContext(Dispatchers.IO) {
+                        runCatching {
+                            context.contentResolver.openInputStream(android.net.Uri.parse(uri))?.bufferedReader()?.use { it.readText() }
+                                ?.let { CubeLUT.parse(it, next.lutName ?: "LUT") }
+                        }
+                    }
+                    parsed.onFailure { show(Feedback("Couldn't read the LUT: ${it.message}", isError = true)) }
+                    if (lutUri == uri) {
+                        lut = parsed.getOrNull()
+                        renderer.setLook(_preset.value.adjustments, lut, _preset.value.lutIntensity)
+                    }
+                }
+            }
+        }
+        renderer.setLook(next.adjustments, lut, next.lutIntensity)
     }
 
     /** Saves the clean frame (no UI) to Pictures/HDMI Captain. */

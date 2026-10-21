@@ -79,6 +79,19 @@ struct SharedFixtureTests {
         }
     }
 
+    @Test func renderGeometry() throws {
+        for case let c as [String: Any] in try load("render-geometry.json")["cases"] as! [Any] {
+            let source = c["source"] as! [Double], drawable = c["drawable"] as! [Double]
+            let mode = ScaleMode(rawValue: c["mode"] as! String)!
+            let g = RenderGeometry.compute(source: CGSize(width: source[0], height: source[1]),
+                                           drawable: CGSize(width: drawable[0], height: drawable[1]), mode: mode)
+            let v = c["viewport"] as! [Double], r = c["sourceRect"] as! [Double]
+            #expect([g.viewport.minX, g.viewport.minY, g.viewport.width, g.viewport.height] == v.map { CGFloat($0) }, "\(c["name"]!)")
+            let got = [g.sourceRect.minX, g.sourceRect.minY, g.sourceRect.width, g.sourceRect.height]
+            #expect(zip(got, r).allSatisfy { abs($0 - CGFloat($1)) < 1e-9 }, "\(c["name"]!)")
+        }
+    }
+
     @Test func recoveryBackoff() throws {
         for case let pair as [Double] in try load("recovery-backoff.json")["delays"] as! [Any] {
             #expect(CaptureEngine.restartDelay(attempt: Int(pair[0])) == pair[1])

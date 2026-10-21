@@ -4,6 +4,7 @@
 #include <android/log.h>
 #include <android/trace.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <string>
@@ -73,13 +74,38 @@ const char *kConvertBody[4] = {
     })",
 };
 
-// Pass 2: scale the RGB picture into the window.
+// Pass 2: scale the RGB picture into the window, with the picture look (MetalRenderer's
+// adjustColor + applyLUT; identity when adjust == (0, 1, 1, 1) and lut.x == 0).
 const char *kScale = R"(#version 300 es
 precision mediump float;
+precision mediump sampler3D;
 uniform sampler2D picture;
+uniform sampler3D table;
+uniform vec4 adjust;   // brightness, contrast, saturation, 1/gamma
+uniform vec4 sharpen;  // amount, texel x, texel y
+uniform vec4 lut;      // intensity, size
+uniform vec3 lutMin;
+uniform vec3 lutMax;
 in vec2 uv;
 out vec4 color;
-void main() { color = vec4(texture(picture, uv).rgb, 1.0); }
+void main() {
+    vec3 c = texture(picture, uv).rgb;
+    if (sharpen.x > 0.0) {
+        vec3 n = texture(picture, uv + vec2(sharpen.y, 0.0)).rgb + texture(picture, uv - vec2(sharpen.y, 0.0)).rgb
+               + texture(picture, uv + vec2(0.0, sharpen.z)).rgb + texture(picture, uv - vec2(0.0, sharpen.z)).rgb;
+        c += (c - n * 0.25) * sharpen.x * 2.0;
+    }
+    c = (c - 0.5) * adjust.y + 0.5 + adjust.x;
+    float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    c = clamp(mix(vec3(luma), c, adjust.z), 0.0, 1.0);
+    if (adjust.w != 1.0) c = pow(c, vec3(adjust.w));
+    if (lut.x > 0.0) {
+        float n = lut.y;
+        vec3 t = clamp((c - lutMin) / (lutMax - lutMin), 0.0, 1.0);
+        c = mix(c, clamp(texture(table, t * ((n - 1.0) / n) + 0.5 / n).rgb, 0.0, 1.0), lut.x);
+    }
+    color = vec4(c, 1.0);
+}
 )";
 
 GLuint compile(GLenum type, const char *source) {
@@ -132,6 +158,7 @@ void updateTexture(GLuint texture, int w, int h, GLenum format, const uint8_t *d
 
 Renderer::Renderer() {
     ring_.setOnPublish([this] { wake(); });
+    patternRing_.setOnPublish([this] { wake(); });
     thread_ = std::thread([this] { run(); });
 }
 
@@ -144,6 +171,7 @@ Renderer::~Renderer() {
     cv_.notify_all();
     if (thread_.joinable()) thread_.join();
     ring_.setOnPublish(nullptr);
+    patternRing_.setOnPublish(nullptr);
 }
 
 void Renderer::wake() {
@@ -170,15 +198,31 @@ void Renderer::setOptions(RenderOptions options) {
 
 void Renderer::startTestPattern(Pattern pattern, int width, int height, int fps) {
     pattern_.reset();
-    pattern_ = std::make_unique<TestPatternSource>(ring_, pattern, width, height, fps);
+    pattern_ = std::make_unique<TestPatternSource>(patternRing_, pattern, width, height, fps);
+    showingPattern_ = true;
 }
 
-void Renderer::stopSource() { pattern_.reset(); }
+void Renderer::stopSource() {
+    pattern_.reset();
+    showingPattern_ = false;
+}
+
+void Renderer::setLook(Look look) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    look_ = std::move(look);
+    lookChanged_ = true;
+    cv_.notify_all();
+}
+
+SignalSample Renderer::signal() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return signal_;
+}
 
 RenderStats Renderer::stats() {
     std::lock_guard<std::mutex> lock(mutex_);
     RenderStats s = stats_;
-    s.framesIn = ring_.published();
+    s.framesIn = showingPattern_ ? patternRing_.published() : ring_.published();
     return s;
 }
 
@@ -215,10 +259,13 @@ bool Renderer::ensureContext() {
     scaleProgram_ = link(kScale);
     glUseProgram(scaleProgram_);
     glUniform1i(glGetUniformLocation(scaleProgram_, "picture"), 0);
+    glUniform1i(glGetUniformLocation(scaleProgram_, "table"), 1);
     glGenTextures(3, planes_);
     glGenTextures(1, &rgbTexture_);
     glGenFramebuffers(1, &rgbFramebuffer_);
     glGenVertexArrays(1, &vao_);
+    glGenTextures(1, &lutTexture_);
+    uploadLook(Look{});  // a valid (unused) 3D texture from the start
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     LOGI("GL ready: %s", glGetString(GL_RENDERER));
@@ -327,7 +374,76 @@ void Renderer::convert(const Frame &f) {
     glBindVertexArray(vao_);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     hasFrame_ = true;
+    if (convertCount_++ % 10 == 0) sampleSignal(f);
     ATrace_endSection();
+}
+
+// Mean and range of Y/Cb/Cr over SignalAnalyzer's grid (every 10th frame; ~14 k byte reads).
+void Renderer::sampleSignal(const Frame &f) {
+    const int gw = 160, gh = 90, w = f.width, h = f.height;
+    if (w < 2 || h < 2) return;
+    const uint8_t *d = f.data.data();
+    const size_t plane = size_t(w) * h;
+    double sum[3] = {0, 0, 0};
+    int lo[3] = {255, 255, 255}, hi[3] = {0, 0, 0};
+    for (int gy = 0; gy < gh; gy++) {
+        int y = (gy * 2 + 1) * h / (gh * 2);
+        for (int gx = 0; gx < gw; gx++) {
+            int x = (gx * 2 + 1) * w / (gw * 2);
+            int v[3];
+            switch (f.format) {
+                case PixelFormat::NV12: {
+                    const uint8_t *c = d + plane + size_t(y / 2) * w + (x / 2) * 2;
+                    v[0] = d[size_t(y) * w + x]; v[1] = c[0]; v[2] = c[1];
+                    break;
+                }
+                case PixelFormat::YUY2: {
+                    const uint8_t *p = d + size_t(y) * w * 2 + (x / 2) * 4;
+                    v[0] = p[(x & 1) * 2]; v[1] = p[1]; v[2] = p[3];
+                    break;
+                }
+                case PixelFormat::I420: {
+                    size_t ci = size_t(y / 2) * (w / 2) + x / 2;
+                    v[0] = d[size_t(y) * w + x]; v[1] = d[plane + ci]; v[2] = d[plane + plane / 4 + ci];
+                    break;
+                }
+                case PixelFormat::I422: {
+                    size_t ci = size_t(y) * (w / 2) + x / 2;
+                    v[0] = d[size_t(y) * w + x]; v[1] = d[plane + ci]; v[2] = d[plane + plane / 2 + ci];
+                    break;
+                }
+            }
+            for (int i = 0; i < 3; i++) {
+                sum[i] += v[i];
+                lo[i] = std::min(lo[i], v[i]);
+                hi[i] = std::max(hi[i], v[i]);
+            }
+        }
+    }
+    const double n = gw * gh;
+    std::lock_guard<std::mutex> lock(mutex_);
+    signal_.meanY = sum[0] / n;
+    signal_.meanCb = sum[1] / n;
+    signal_.meanCr = sum[2] / n;
+    signal_.rangeY = hi[0] - lo[0];
+    signal_.rangeChroma = std::max(hi[1] - lo[1], hi[2] - lo[2]);
+    signal_.fullRange = f.fullRange;
+    signal_.count++;
+}
+
+void Renderer::uploadLook(const Look &look) {
+    glBindTexture(GL_TEXTURE_3D, lutTexture_);
+    if (look.lutSize > 1 && look.lut.size() == size_t(look.lutSize) * look.lutSize * look.lutSize * 3) {
+        glTexImage3D(GL_TEXTURE_3D, 0, GL_RGB16F, look.lutSize, look.lutSize, look.lutSize, 0, GL_RGB, GL_FLOAT, look.lut.data());
+    } else {
+        const float black[3] = {0, 0, 0};
+        glTexImage3D(GL_TEXTURE_3D, 0, GL_RGB16F, 1, 1, 1, 0, GL_RGB, GL_FLOAT, black);
+    }
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 }
 
 void Renderer::present(int64_t arrivalNs) {
@@ -344,6 +460,14 @@ void Renderer::present(int64_t arrivalNs) {
     glViewport(GLint(g.viewport.x), GLint(float(h) - g.viewport.y - g.viewport.h), GLsizei(g.viewport.w), GLsizei(g.viewport.h));
     glUseProgram(scaleProgram_);
     glUniform4f(glGetUniformLocation(scaleProgram_, "uvRect"), g.source.x, g.source.y, g.source.w, g.source.h);
+    const Look &l = activeLook_;
+    glUniform4f(glGetUniformLocation(scaleProgram_, "adjust"), l.brightness, l.contrast, l.saturation, 1.f / std::max(0.1f, l.gamma));
+    glUniform4f(glGetUniformLocation(scaleProgram_, "sharpen"), l.sharpness, 1.f / frameWidth_, 1.f / frameHeight_, 0);
+    glUniform4f(glGetUniformLocation(scaleProgram_, "lut"), l.lutSize > 1 ? l.lutIntensity : 0.f, float(l.lutSize), 0, 0);
+    glUniform3f(glGetUniformLocation(scaleProgram_, "lutMin"), l.lutMin[0], l.lutMin[1], l.lutMin[2]);
+    glUniform3f(glGetUniformLocation(scaleProgram_, "lutMax"), l.lutMax[0], l.lutMax[1], l.lutMax[2]);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_3D, lutTexture_);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, rgbTexture_);
     GLint filter = active_.filter == FilterMode::Nearest ? GL_NEAREST : GL_LINEAR;
@@ -372,16 +496,25 @@ void Renderer::run() {
         ANativeWindow *newWindow = nullptr;
         {
             std::unique_lock<std::mutex> lock(mutex_);
-            cv_.wait(lock, [this] { return !running_ || windowChanged_ || optionsChanged_ || screenshotRequested_ || ring_.hasFresh(); });
+            cv_.wait(lock, [this] {
+                return !running_ || windowChanged_ || optionsChanged_ || lookChanged_ || screenshotRequested_ ||
+                       ring_.hasFresh() || patternRing_.hasFresh();
+            });
             if (!running_) break;
             windowChanged = windowChanged_;
             if (windowChanged) {
                 newWindow = pendingWindow_;
                 pendingWindow_ = nullptr;
             }
-            optionsChanged = optionsChanged_;
+            optionsChanged = optionsChanged_ || lookChanged_;
             optionsChanged_ = false;
             active_ = options_;
+            if (lookChanged_) {
+                bool lutChanged = look_.lutSize != activeLook_.lutSize || look_.lut != activeLook_.lut;
+                activeLook_ = look_;
+                lookChanged_ = false;
+                if (lutChanged) uploadLook(activeLook_);
+            }
             wantScreenshot = screenshotRequested_;
         }
 
@@ -398,7 +531,11 @@ void Renderer::run() {
 
         int64_t arrival = 0;
         bool fresh = false;
-        if (Frame *frame = ring_.take()) {
+        // Draw from the pattern ring while a test pattern shows; drop the other ring's frames.
+        FrameRing &active = showingPattern_ ? patternRing_ : ring_;
+        FrameRing &idle = showingPattern_ ? ring_ : patternRing_;
+        if (idle.take()) idle.release();
+        if (Frame *frame = active.take()) {
             if (lastArrivalNs_ > 0) {
                 float dt = float(frame->timestampNs - lastArrivalNs_) / 1e9f;
                 interval = interval == 0 ? dt : interval * 0.9f + dt * 0.1f;
@@ -406,7 +543,7 @@ void Renderer::run() {
             lastArrivalNs_ = frame->timestampNs;
             arrival = frame->timestampNs;
             convert(*frame);
-            ring_.release();
+            active.release();
             fresh = true;
         }
 

@@ -9,6 +9,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.util.Log
 import android.util.Rational
@@ -61,6 +62,16 @@ class MainActivity : ComponentActivity() {
         if (hasCapturePermissions()) startCapture() else permission = PermissionPhase.Denied
     }
 
+    // Settings › LUT: any file (many pickers don't know a .cube MIME type); the parser checks it.
+    private val lutPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@registerForActivityResult
+        runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        val name = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }?.substringBeforeLast(".")
+        model.setLut(uri.toString(), name ?: "LUT")
+    }
+
     private val host = object : ViewerHost {
         override val isPro = false
         override fun continueFromWelcome() {
@@ -90,13 +101,13 @@ class MainActivity : ComponentActivity() {
             model.pinControls = intent.getBooleanExtra("qaPinControls", false)
         }
         when {
-            pattern != null -> graph.renderer.startTestPattern(pattern)
+            pattern != null -> model.setTestPattern(pattern)
             hasCapturePermissions() -> startCapture()
             else -> permission = PermissionPhase.Welcome  // explain before the system asks
         }
         setContent {
             HdmiCaptainTheme {
-                ViewerScreen(model, host, permission, testPattern = pattern != null, inPictureInPicture = inPip)
+                ViewerScreen(model, host, permission, inPictureInPicture = inPip)
                 if (showSettings) Settings(onDone = { showSettings = false })
             }
         }
@@ -193,6 +204,7 @@ class MainActivity : ComponentActivity() {
                 override fun setFormat(format: FormatPreference) = model.updatePreset(model.preset.value.copy(format = format))
                 override fun update(preset: DevicePreset) = model.updatePreset(preset)
                 override fun setShowDiagnostics(on: Boolean) = model.setShowDiagnostics(on)
+                override fun chooseLut() = lutPicker.launch(arrayOf("*/*"))
                 override fun showLicenses() = model.show(Feedback("Licenses: libusb (LGPL-2.1), libuvc (BSD), libjpeg-turbo (BSD/IJG), Oboe (Apache-2.0)"))
             },
             onDone,

@@ -55,6 +55,33 @@ Java_com_example_hdmicaptain_render_VideoRenderer_nativeRing(JNIEnv *, jclass, j
     return reinterpret_cast<jlong>(&renderer(handle)->ring());
 }
 
+JNIEXPORT void JNICALL
+Java_com_example_hdmicaptain_render_VideoRenderer_nativeSetLook(JNIEnv *env, jclass, jlong handle, jfloatArray adjust,
+                                                                jfloatArray lut, jint lutSize, jfloat intensity, jfloatArray domain) {
+    hdmi::Look look;
+    float a[5];
+    env->GetFloatArrayRegion(adjust, 0, 5, a);
+    look.brightness = a[0]; look.contrast = a[1]; look.saturation = a[2]; look.gamma = a[3]; look.sharpness = a[4];
+    if (lut) {
+        look.lutSize = lutSize;
+        look.lutIntensity = intensity;
+        look.lut.resize(size_t(env->GetArrayLength(lut)));
+        env->GetFloatArrayRegion(lut, 0, jsize(look.lut.size()), look.lut.data());
+        float dom[6];
+        env->GetFloatArrayRegion(domain, 0, 6, dom);
+        for (int i = 0; i < 3; i++) { look.lutMin[i] = dom[i]; look.lutMax[i] = dom[3 + i]; }
+    }
+    renderer(handle)->setLook(std::move(look));
+}
+
+// out = [meanY, meanCb, meanCr, rangeY, rangeChroma, fullRange, count]
+JNIEXPORT void JNICALL
+Java_com_example_hdmicaptain_render_VideoRenderer_nativeSignal(JNIEnv *env, jclass, jlong handle, jdoubleArray out) {
+    hdmi::SignalSample s = renderer(handle)->signal();
+    jdouble v[7] = {s.meanY, s.meanCb, s.meanCr, s.rangeY, s.rangeChroma, s.fullRange ? 1.0 : 0.0, double(s.count)};
+    env->SetDoubleArrayRegion(out, 0, 7, v);
+}
+
 // out = [framesIn, framesDrawn, lastLatencyNs, width, height]
 JNIEXPORT void JNICALL
 Java_com_example_hdmicaptain_render_VideoRenderer_nativeStats(JNIEnv *env, jclass, jlong handle, jlongArray out) {

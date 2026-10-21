@@ -14,6 +14,8 @@ import androidx.compose.ui.unit.dp
 import com.example.hdmicaptain.capture.Card
 import com.example.hdmicaptain.capture.ViewerPhase
 import com.example.hdmicaptain.model.AudioSettings
+import com.example.hdmicaptain.model.GuideSettings
+import com.example.hdmicaptain.model.TestPattern
 import com.example.hdmicaptain.model.PauseReason
 import com.example.hdmicaptain.model.RenderOptions
 import com.example.hdmicaptain.model.ScaleMode
@@ -46,6 +48,8 @@ class ViewerScreensTest {
         override fun setScale(mode: ScaleMode) { calls += "scale:$mode" }
         override fun setSharpPixels(on: Boolean) = Unit
         override fun setShowDiagnostics(on: Boolean) = Unit
+        override fun setTestPattern(pattern: TestPattern?) = Unit
+        override fun setGuides(guides: GuideSettings) = Unit
         override fun pictureInPicture() = Unit
         override fun openSettings() = Unit
         override fun poke() = Unit
@@ -118,7 +122,7 @@ class ViewerScreensTest {
         compose.setContent {
             HdmiCaptainTheme {
                 Box(Modifier.width(360.dp)) {
-                    ControlBar(emptyList<Card>(), null, RenderOptions(), AudioSettings(), false, isPro = false, isRecording = false, actions = actions)
+                    ControlBar(emptyList<Card>(), null, RenderOptions(), AudioSettings(), false, null, GuideSettings(), isPro = false, isRecording = false, actions = actions)
                 }
             }
         }
@@ -134,7 +138,7 @@ class ViewerScreensTest {
         compose.setContent {
             HdmiCaptainTheme {
                 Box(Modifier.width(700.dp)) {
-                    ControlBar(emptyList<Card>(), null, RenderOptions(), AudioSettings(), false, isPro = true, isRecording = false, actions = actions)
+                    ControlBar(emptyList<Card>(), null, RenderOptions(), AudioSettings(), false, null, GuideSettings(), isPro = true, isRecording = false, actions = actions)
                 }
             }
         }
