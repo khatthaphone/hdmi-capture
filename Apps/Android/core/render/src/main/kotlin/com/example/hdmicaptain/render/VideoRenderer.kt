@@ -27,6 +27,9 @@ class VideoRenderer {
 
     fun stopSource() = nativeStopSource(handle)
 
+    /** Native frame ring for a capture source (UvcSource); valid until [release]. */
+    val ringHandle: Long get() = nativeRing(handle)
+
     fun stats(): Stats {
         val v = LongArray(5)
         nativeStats(handle, v)
@@ -58,6 +61,7 @@ class VideoRenderer {
         @JvmStatic external fun nativeSetOptions(handle: Long, scale: Int, filter: Int, range: Int)
         @JvmStatic external fun nativeStartTestPattern(handle: Long, pattern: Int, width: Int, height: Int, fps: Int)
         @JvmStatic external fun nativeStopSource(handle: Long)
+        @JvmStatic external fun nativeRing(handle: Long): Long
         @JvmStatic external fun nativeStats(handle: Long, out: LongArray)
         @JvmStatic external fun nativeScreenshot(handle: Long, size: IntArray): ByteArray?
     }

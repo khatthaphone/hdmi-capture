@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Any USB device with a video-class interface (UVC): HDMI capture cards. Lets the user pick
+     "always open HDMI Captain" when a card is plugged in. -->
+<resources>
+    <usb-device class="14" />
+    <usb-device class="239" subclass="2" protocol="1" />
+</resources>

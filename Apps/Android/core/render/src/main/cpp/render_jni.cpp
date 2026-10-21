@@ -49,6 +49,12 @@ Java_com_example_hdmicaptain_render_VideoRenderer_nativeStopSource(JNIEnv *, jcl
     renderer(handle)->stopSource();
 }
 
+// The frame ring a capture source publishes into (core:capture's UvcSource). Valid until destroy.
+JNIEXPORT jlong JNICALL
+Java_com_example_hdmicaptain_render_VideoRenderer_nativeRing(JNIEnv *, jclass, jlong handle) {
+    return reinterpret_cast<jlong>(&renderer(handle)->ring());
+}
+
 // out = [framesIn, framesDrawn, lastLatencyNs, width, height]
 JNIEXPORT void JNICALL
 Java_com_example_hdmicaptain_render_VideoRenderer_nativeStats(JNIEnv *env, jclass, jlong handle, jlongArray out) {
