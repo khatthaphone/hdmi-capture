@@ -9,4 +9,4 @@ add_library(hdmirender SHARED render_jni.cpp renderer.cpp test_pattern.cpp)
 target_compile_options(hdmirender PRIVATE -D__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__ -Werror=unguarded-availability -Wall)
 # 16 KB pages: NDK r28+ does this by default; keep it explicit so a toolchain change can't regress it.
 target_link_options(hdmirender PRIVATE "-Wl,-z,max-page-size=16384")
-target_link_libraries(hdmirender android log EGL GLESv3)
+target_link_libraries(hdmirender android nativewindow log EGL GLESv3)

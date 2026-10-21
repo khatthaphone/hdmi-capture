@@ -131,11 +131,12 @@ class ViewerScreensTest {
         val bar = compose.onNodeWithTag("control-bar").getBoundsInRoot()
         assertTrue("bar ${bar.right} wide", bar.right <= 360.dp)
         compose.onNodeWithContentDescription("More").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Record").performClick()
+        compose.onNodeWithContentDescription("Record (Pro)").performClick()
         compose.onNodeWithContentDescription("Screenshot").performClick()
         assertEquals(listOf("record", "screenshot"), actions.calls)
     }
 
+    @Config(qualifiers = "w800dp-h480dp")  // a tablet or desktop window
     @Test fun controlBarShowsVolumeSliderWhenThereIsRoom() {
         compose.setContent {
             HdmiCaptainTheme {

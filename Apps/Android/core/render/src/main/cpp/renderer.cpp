@@ -736,7 +736,7 @@ void Renderer::run() {
                 if (std::abs(fps - frameRateHint_) > 1.f) {
                     frameRateHint_ = fps;
                     if (__builtin_available(android 30, *)) {
-                        ANativeWindow_setFrameRate(window_, fps, ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
+                        if (window_) ANativeWindow_setFrameRate(window_, fps, ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
                     }
                 }
             }
