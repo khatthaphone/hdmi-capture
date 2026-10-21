@@ -1,7 +1,7 @@
 DERIVED := .build/xcode
 APP := $(DERIVED)/Build/Products/Debug/HDMI Captain.app
 
-.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad ipad-snapshot ipad-soak android-build android-test android-run android-check16k inventory logs clean
+.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad ipad-snapshot ipad-soak android-build android-test android-run android-check16k android-soak inventory logs clean
 
 IOS_SIM ?= iPad Pro 11-inch (M5)
 IPAD_APP_SIM := $(DERIVED)/Build/Products/Debug-iphonesimulator/HDMI Captain.app
@@ -84,6 +84,11 @@ android-check16k:
 	@bad=0; for f in .build/apk-libs/lib/*/*.so; do \
 	  a=$$($(HOME)/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-readelf -lW $$f | awk '/LOAD/{print $$NF}' | sort -u | tr '\n' ' '); \
 	  echo "$$f $$a"; case "$$a" in "0x4000 ") ;; *) bad=1;; esac; done; exit $$bad
+
+# Copies the DEBUG soak CSV, descriptor and Camera2 probes, and the QA frame from the app's files.
+android-soak:
+	@mkdir -p .build/android-qa && for f in qa-soak.csv qa-descriptors.json qa-camera2.json qa-frame.png; do \
+	  adb exec-out run-as com.example.hdmicaptain cat files/$$f > .build/android-qa/$$f 2>/dev/null && echo ".build/android-qa/$$f"; done
 
 android-run: android-build
 	adb install -r $(ANDROID_DIR)/app/build/outputs/apk/debug/app-debug.apk

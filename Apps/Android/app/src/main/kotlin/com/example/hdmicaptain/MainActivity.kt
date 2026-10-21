@@ -54,6 +54,8 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+        val soakMinutes = intent.getIntExtra("qaSoakMinutes", 0)
+        if (BuildConfig.DEBUG && soakMinutes > 0) QASoak(this, renderer, capture).start(lifecycleScope, soakMinutes)
         if (BuildConfig.DEBUG && intent.getStringExtra("qaAction") == "screenshot") {
             window.decorView.postDelayed({ saveQAScreenshot() }, 1500)
         }
