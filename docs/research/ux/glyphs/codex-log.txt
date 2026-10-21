@@ -258,3 +258,85 @@ More principles shared by both modes: `references/prompting.md`.
 Copy/paste specs shared by both modes: `references/sample-prompts.md`.
 
 
+codex
+Both initial glyphs are generated. I’m checking the actual PNG dimensions, transparency, pixel bounds, and small-size legibility before placing them; the preview uses a dark backdrop, so alpha and black strokes need file-level verification.
+exec
+/bin/zsh -lc "find /Users/khatthaphone/.codex/generated_images/01a15bde-552c-7ea2-a4db-c95c70d8e1be -maxdepth 1 -type f -name '*.png' -print | sort
+command -v identify || true
+command -v magick || true
+command -v sips || true" in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 0ms:
+/Users/khatthaphone/.codex/generated_images/01a15bde-552c-7ea2-a4db-c95c70d8e1be/exec-0716933a-5aae-428c-a60c-6da04e6f249c.png
+/Users/khatthaphone/.codex/generated_images/01a15bde-552c-7ea2-a4db-c95c70d8e1be/exec-f6093586-c1a6-409e-8991-35e4157ce6ad.png
+/opt/homebrew/bin/identify
+/opt/homebrew/bin/magick
+/usr/bin/sips
+
+exec
+/bin/zsh -lc "for f in /Users/khatthaphone/.codex/generated_images/01a15bde-552c-7ea2-a4db-c95c70d8e1be/*.png; do identify -format '%f %wx%h %[channels] alpha-min=%[fx:minima.a] alpha-max=%[fx:maxima.a] opaque-bounds=%@ colors=%k\\n' \""'$f"; done
+magick /Users/khatthaphone/.codex/generated_images/01a15bde-552c-7ea2-a4db-c95c70d8e1be/exec-0716933a-5aae-428c-a60c-6da04e6f249c.png -background white -alpha background -alpha remove -resize 512x512 /private/tmp/glyph-0716-white.png
+magick /Users/khatthaphone/.codex/generated_images/01a15bde-552c-7ea2-a4db-c95c70d8e1be/exec-f6093586-c1a6-409e-8991-35e4157ce6ad.png -background white -alpha background -alpha remove -resize 512x512 /private/tmp/glyph-f609-white.png' in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 1203ms:
+exec-0716933a-5aae-428c-a60c-6da04e6f249c.png 1254x1254 srgba 4.0 alpha-min=0 alpha-max=1 opaque-bounds=1110x860+98+368 colors=792
+exec-f6093586-c1a6-409e-8991-35e4157ce6ad.png 1254x1254 srgba 4.0 alpha-min=0 alpha-max=1 opaque-bounds=923x942+160+161 colors=788
+
+exec
+/bin/zsh -lc "for f in /Users/khatthaphone/.codex/generated_images/01a15bde-552c-7ea2-a4db-c95c70d8e1be/*.png; do identify -format '%f R=%[fx:minima.r]..%[fx:maxima.r] G=%[fx:minima.g]..%[fx:maxima.g] B=%[fx:minima.b]..%[fx:maxima.b] A=%[fx:minima.a]..%[fx:maxima.a]\\n' \""'$f"; done
+ls -la docs/research/ux/glyphs 2>/dev/null || true
+git status --short -- docs/research/ux/glyphs' in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 732ms:
+exec-0716933a-5aae-428c-a60c-6da04e6f249c.png R=0..0.0196078 G=0..0.0196078 B=0..0.0196078 A=0..1
+exec-f6093586-c1a6-409e-8991-35e4157ce6ad.png R=0..0.0313725 G=0..0.0313725 B=0..0.0235294 A=0..1
+total 40
+drwxr-xr-x@ 3 khatthaphone  staff     96 Oct 21 07:30 .
+drwxr-xr-x@ 8 khatthaphone  staff    256 Oct 21 07:30 ..
+-rw-r--r--@ 1 khatthaphone  staff  19344 Oct 21 07:32 codex-log.txt
+ M docs/research/ux/glyphs/codex-log.txt
+
+exec
+/bin/zsh -lc 'for f in /Users/khatthaphone/.codex/generated_images/01a15bde-552c-7ea2-a4db-c95c70d8e1be/*.png; do magick "$f" -channel A -threshold 10% -format '"'%f visible10-bounds=%@\\n' info:; done" in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 122ms:
+exec-0716933a-5aae-428c-a60c-6da04e6f249c.png visible10-bounds=1054x613+100+370
+exec-f6093586-c1a6-409e-8991-35e4157ce6ad.png visible10-bounds=917x924+163+163
+
+exec
+/bin/zsh -lc 'magick /Users/khatthaphone/.codex/generated_images/01a15bde-552c-7ea2-a4db-c95c70d8e1be/exec-0716933a-5aae-428c-a60c-6da04e6f249c.png -resize 18x18 -background white -alpha background -alpha remove -filter point -resize 360x360 /private/tmp/hdmi-18pt.png
+magick /Users/khatthaphone/.codex/generated_images/01a15bde-552c-7ea2-a4db-c95c70d8e1be/exec-f6093586-c1a6-409e-8991-35e4157ce6ad.png -resize 18x18 -background white -alpha background -alpha remove -filter point -resize 360x360 /private/tmp/save-18pt.png' in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 31ms:
+codex
+The shapes pass the 18 px legibility check: HDMI remains a nested trapezoid with cable, and the recent-save mark remains a counter-clockwise arrow around a film frame. I’m now placing resized 512×512 copies and normalizing visible RGB to exact black while retaining alpha antialiasing.
+exec
+/bin/zsh -lc 'cp /Users/khatthaphone/.codex/generated_images/01a15bde-552c-7ea2-a4db-c95c70d8e1be/exec-0716933a-5aae-428c-a60c-6da04e6f249c.png docs/research/ux/glyphs/hdmi-input.png
+cp /Users/khatthaphone/.codex/generated_images/01a15bde-552c-7ea2-a4db-c95c70d8e1be/exec-f6093586-c1a6-409e-8991-35e4157ce6ad.png docs/research/ux/glyphs/save-recent.png
+magick docs/research/ux/glyphs/hdmi-input.png -resize 512x512! -channel RGB -evaluate set 0 +channel -strip /private/tmp/hdmi-input-final.png
+magick docs/research/ux/glyphs/save-recent.png -resize 512x512! -channel RGB -evaluate set 0 +channel -strip /private/tmp/save-recent-final.png
+mv /private/tmp/hdmi-input-final.png docs/research/ux/glyphs/hdmi-input.png
+mv /private/tmp/save-recent-final.png docs/research/ux/glyphs/save-recent.png' in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 101ms:
+exec
+/bin/zsh -lc "for f in docs/research/ux/glyphs/hdmi-input.png docs/research/ux/glyphs/save-recent.png; do identify -format '%f %wx%h %[channels] R=%[fx:minima.r]..%[fx:maxima.r] G=%[fx:minima.g]..%[fx:maxima.g] B=%[fx:minima.b]..%[fx:maxima.b] A=%[fx:minima.a]..%[fx:maxima.a] visible10-bounds=' \""'$f"; magick "$f" -channel A -threshold 10% -format '"'%@ bytes=' info:; stat -f '%z' \""'$f"; done
+git status --short -- docs/research/ux/glyphs/hdmi-input.png docs/research/ux/glyphs/save-recent.png docs/research/ux/glyphs/codex-log.txt
+shasum -a 256 docs/research/ux/glyphs/hdmi-input.png docs/research/ux/glyphs/save-recent.png' in /Users/khatthaphone/Projects/hdmi-captain
+ succeeded in 109ms:
+save-recent.png 512x512 graya 2.0 R=0..0 G=2.7431e+303..-2.7431e+303 B=2.7431e+303..-2.7431e+303 A=0..1 visible10-bounds=375x378+66+66 bytes=18542
+ M docs/research/ux/glyphs/codex-log.txt
+?? docs/research/ux/glyphs/hdmi-input.png
+?? docs/research/ux/glyphs/save-recent.png
+f509f73e9b1bbe572779d2e083c3b8c73c218bfbf1dcb10fd952b5738d8ee968  docs/research/ux/glyphs/hdmi-input.png
+db4d5bbb8cb01bd578bc1bbf320055e5022b5ad7d07ed87ac38ec1d3e3d80465  docs/research/ux/glyphs/save-recent.png
+
+codex
+Created with the built-in ImageGen tool and verified as 512×512 PNGs with pure-black pixels and transparent alpha:
+
+- [hdmi-input.png](/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/glyphs/hdmi-input.png)
+- [save-recent.png](/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/glyphs/save-recent.png)
+
+Prompts specified SF Symbols Regular-style rounded strokes, ~8% weight, ~10% padding, transparent backgrounds, and the requested HDMI and counter-clockwise film-frame subjects. No other files were modified.
+tokens used
+36,290
+Created with the built-in ImageGen tool and verified as 512×512 PNGs with pure-black pixels and transparent alpha:
+
+- [hdmi-input.png](/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/glyphs/hdmi-input.png)
+- [save-recent.png](/Users/khatthaphone/Projects/hdmi-captain/docs/research/ux/glyphs/save-recent.png)
+
+Prompts specified SF Symbols Regular-style rounded strokes, ~8% weight, ~10% padding, transparent backgrounds, and the requested HDMI and counter-clockwise film-frame subjects. No other files were modified.

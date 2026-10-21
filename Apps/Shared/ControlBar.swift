@@ -124,7 +124,7 @@ private struct InputChip: View {
             Divider()
             Button { app.retry() } label: { Label("Reconnect", systemImage: Symbol.reconnect) }
         } label: {
-            BarLabel(symbol: viewer.testPattern != nil ? Symbol.testPattern : Symbol.input, title: title,
+            BarLabel(symbol: viewer.testPattern != nil ? Symbol.testPattern : Symbol.inputGlyph, title: title,
                      showsTitle: layout.showsLabels, chevron: true)
         }
         .barMenuStyle()
@@ -223,7 +223,7 @@ private struct SaveRecentButton: View {
             Divider()
             SaveRecentItems(app: app, store: store, viewer: viewer)
         } label: {
-            BarLabel(symbol: Symbol.saveRecent, title: "Save Recent", showsTitle: layout.showsLabels, chevron: true)
+            BarLabel(symbol: Symbol.saveRecentGlyph, title: "Save Recent", showsTitle: layout.showsLabels, chevron: true)
                 .proLock(!store.isUnlocked(.replayBuffer))
         }
         .barMenuStyle()
@@ -393,9 +393,14 @@ private struct BarLabel: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: symbol)
-                .font(.system(size: 14, weight: .medium))
-                .frame(width: 18)
+            Group {
+                if symbol.hasPrefix("asset:") {
+                    Image.symbol(symbol).resizable().scaledToFit().frame(width: 19, height: 19)
+                } else {
+                    Image(systemName: symbol).font(.system(size: 14, weight: .medium))
+                }
+            }
+            .frame(width: 19)
                 .foregroundStyle(tint ?? .white)
             if showsTitle, let title {
                 Text(title)

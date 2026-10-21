@@ -1,9 +1,13 @@
+import SwiftUI
 import CaptureCore
 
 /// SF Symbol per action, shared by the menu bar, the control bar and Settings so an action
 /// always has the same icon wherever it appears.
 enum Symbol {
     static let input = "cable.connector.horizontal"
+    /// Custom template glyphs (Codex-generated, task 048) for the control bar; menus keep SF Symbols.
+    static let inputGlyph = "asset:HDMIInput"
+    static let saveRecentGlyph = "asset:SaveRecentGlyph"
     static let newWindow = "macwindow.badge.plus"
     static let multiView = "rectangle.grid.2x2"
     static let profiles = "person.crop.rectangle.stack"
@@ -30,7 +34,7 @@ enum Symbol {
     static let lockAspect = "lock.rectangle"
 
     static let record = "record.circle"
-    static let saveRecent = "gobackward"
+    static let saveRecent = "clock.arrow.circlepath"
     static let keepRecent = "clock.arrow.circlepath"
     static let goLive = "dot.radiowaves.left.and.right"
     static let virtualCamera = "web.camera"
@@ -75,5 +79,12 @@ extension ChannelMode {
         case .rightToBoth: "Right to both"
         case .mono: "Mono mix"
         }
+    }
+}
+
+extension Image {
+    /// SF Symbol name, or `asset:<name>` for one of our template glyphs.
+    static func symbol(_ name: String) -> Image {
+        name.hasPrefix("asset:") ? Image(String(name.dropFirst(6))).renderingMode(.template) : Image(systemName: name)
     }
 }
