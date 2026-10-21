@@ -403,6 +403,16 @@ final class AppModel {
                 viewer.toggleRecording()
                 try? await Task.sleep(for: .seconds(3))
                 viewer.toggleRecording()
+            case "lut":
+                // QA (LUT persistence): writes a warm 2³ .cube to Documents and applies it to the card.
+                let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("QA Warm.cube")
+                var cube = "TITLE \"QA Warm\"\nLUT_3D_SIZE 2\n"
+                for b in 0...1 { for g in 0...1 { for r in 0...1 {
+                    cube += String(format: "%.3f %.3f %.3f\n", min(1, Double(r) * 1.0 + 0.08), Double(g) * 0.9, Double(b) * 0.6)
+                } } }
+                try? cube.write(to: url, atomically: true, encoding: .utf8)
+                viewer.session?.setLUT(url: url)
+            case "lutOff": viewer.session?.setLUT(url: nil)
             case "record20s":
                 // iPad QA: record across a trip to the background (see task 021).
                 viewer.toggleRecording()
