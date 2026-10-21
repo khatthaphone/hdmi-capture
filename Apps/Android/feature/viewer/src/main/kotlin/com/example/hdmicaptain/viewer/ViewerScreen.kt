@@ -1,79 +1,209 @@
 package com.example.hdmicaptain.viewer
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import com.example.hdmicaptain.render.VideoRenderer
+import com.example.hdmicaptain.capture.ViewerPhase
+import com.example.hdmicaptain.model.ScaleMode
 import kotlinx.coroutines.delay
 
+/** App-level actions the viewer can't do itself (Pro sheet, settings, PiP, system settings). */
+interface ViewerHost : StatusActions {
+    val isPro: Boolean
+    fun record()
+    fun saveRecent()
+    fun pictureInPicture()
+    fun openSettings()
+}
+
 /**
- * The viewer: video surface + status screens + control bar (task 078).
- * Today: the video when a source is live (or a test pattern), otherwise a status card.
+ * The viewer (spec §12.7): video, state screens, control bar, diagnostics and feedback.
+ * The video is always composed, so its surface (and EGL) survive every state change.
  */
 @Composable
 fun ViewerScreen(
-    renderer: VideoRenderer,
-    showVideo: Boolean,
-    status: String,
-    statsLine: (() -> String?)? = null,
+    model: ViewerModel,
+    host: ViewerHost,
+    /** Before capture runs: the camera/microphone permission screens. */
+    permission: PermissionPhase?,
+    /** A test pattern is showing instead of a card. */
+    testPattern: Boolean,
+    inPictureInPicture: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier.fillMaxSize().background(Color.Black)) {
-        // Always composed, so the surface (and EGL) survive status changes.
-        VideoSurface(renderer, Modifier.fillMaxSize())
-        if (!showVideo) ConnectCard(status, Modifier.align(Alignment.Center))
-        if (statsLine != null) StatsOverlay(renderer, statsLine, Modifier.align(Alignment.TopStart).padding(16.dp))
+    val phase by model.phase.collectAsState()
+    val options by model.options.collectAsState()
+    val audio by model.audioSettings.collectAsState()
+    val diagnostics by model.showDiagnostics.collectAsState()
+    val controlsVisible by model.controlsVisible.collectAsState()
+    val cards by model.cards.collectAsState()
+    val feedback by model.feedback.collectAsState()
+    var showHelp by remember { mutableStateOf(false) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+
+    val actions = remember(model, host) {
+        object : ControlBarActions {
+            override fun selectInput(key: String) { model.controller.select(key) }
+            override fun setMuted(muted: Boolean) = model.setMuted(muted)
+            override fun setVolume(volume: Float) = model.setVolume(volume)
+            override fun screenshot() = model.saveScreenshot()
+            override fun record() = host.record()
+            override fun saveRecent() = host.saveRecent()
+            override fun setScale(mode: ScaleMode) = model.setScale(mode)
+            override fun setSharpPixels(on: Boolean) = model.setSharpPixels(on)
+            override fun setShowDiagnostics(on: Boolean) = model.setShowDiagnostics(on)
+            override fun pictureInPicture() = host.pictureInPicture()
+            override fun openSettings() = host.openSettings()
+            override fun showHelp() { showHelp = true }
+            override fun poke() = model.pokeControls()
+        }
     }
+    val statusActions = remember(host) {
+        object : StatusActions by host {
+            override fun showHelp() { showHelp = true }
+        }
+    }
+
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .focusRequester(focus)
+            .focusable()
+            .onPreviewKeyEvent { event -> event.type == KeyEventType.KeyDown && shortcut(event.key, event.isCtrlPressed, event.isShiftPressed, model, host) }
+            .pointerInput(model) { detectTapGestures(onTap = { model.toggleControls() }) }
+            .pointerInput(model) {
+                // Mouse or trackpad (DeX, ChromeOS, desktop windows): reveal the bar near the bottom edge.
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Move && event.changes.any { it.position.y > size.height - 140.dp.toPx() }) {
+                            model.pokeControls()
+                        }
+                    }
+                }
+            },
+    ) {
+        VideoSurface(model.renderer, Modifier.fillMaxSize())
+
+        val live = phase is ViewerPhase.Live || testPattern
+        when {
+            permission != null -> PermissionScreen(permission, statusActions)
+            !testPattern -> StatusOverlay(phase, statusActions)
+        }
+
+        if (diagnostics && !inPictureInPicture) {
+            Diagnostics(model, phase, Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp))
+        }
+
+        feedback?.let {
+            Text(
+                it.text,
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .safeDrawingPadding()
+                    .padding(top = 16.dp)
+                    .background(if (it.isError) Color(0xE6B3261E) else Color(0xE6161B2B), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .testTag("feedback"),
+            )
+        }
+
+        AnimatedVisibility(
+            visible = permission == null && !inPictureInPicture && (controlsVisible || !live),
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter).safeDrawingPadding(),
+        ) {
+            ControlBar(
+                cards = cards,
+                currentCard = model.controller.preferredKey,
+                options = options,
+                audio = audio,
+                showDiagnostics = diagnostics,
+                isPro = host.isPro,
+                isRecording = false,
+                actions = actions,
+            )
+        }
+    }
+    if (showHelp) HelpSheet(onDismiss = { showHelp = false })
 }
 
-@Composable
-private fun ConnectCard(status: String, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxSize().background(Color.Black).padding(32.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(status, style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
-        Text(
-            "Plug an HDMI capture card into this device. The picture appears automatically.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = Color.White.copy(alpha = 0.75f),
-            textAlign = TextAlign.Center,
-        )
+/** Keyboard shortcuts, the Mac set with Ctrl for ⌘ (spec §5.6, §12.7). */
+private fun shortcut(key: Key, ctrl: Boolean, shift: Boolean, model: ViewerModel, host: ViewerHost): Boolean {
+    if (!ctrl) return false
+    when {
+        shift && key == Key.S -> model.saveScreenshot()
+        shift && key == Key.M -> model.setMuted(!model.audioSettings.value.muted)
+        key == Key.One -> model.setScale(ScaleMode.Fit)
+        key == Key.Two -> model.setScale(ScaleMode.Fill)
+        key == Key.Three -> model.setScale(ScaleMode.Stretch)
+        key == Key.Four -> model.setScale(ScaleMode.Integer)
+        key == Key.I -> model.setShowDiagnostics(!model.showDiagnostics.value)
+        key == Key.R -> host.record()
+        key == Key.Comma -> host.openSettings()
+        else -> return false
     }
+    return true
 }
 
 /** Diagnostics, sampled twice a second (never per frame). */
 @Composable
-private fun StatsOverlay(renderer: VideoRenderer, extra: () -> String?, modifier: Modifier = Modifier) {
+private fun Diagnostics(model: ViewerModel, phase: ViewerPhase, modifier: Modifier = Modifier) {
     var text by remember { mutableStateOf("") }
-    LaunchedEffect(renderer) {
-        var last = renderer.stats()
+    LaunchedEffect(model, phase) {
+        var last = model.renderer.stats()
         while (true) {
             delay(500)
-            val now = renderer.stats()
+            val now = model.renderer.stats()
             val fpsIn = (now.framesIn - last.framesIn) * 2
             val fpsOut = (now.framesDrawn - last.framesDrawn) * 2
-            text = "${now.width}×${now.height}  in $fpsIn fps  shown $fpsOut fps  ${"%.1f".format(now.latencyNanos / 1e6)} ms" +
-                (extra()?.let { "\n$it" } ?: "")
+            val mode = (phase as? ViewerPhase.Live)?.let { "${it.info.fourCC} · ${it.speed}" } ?: ""
+            text = "${now.width}×${now.height} $mode\nin $fpsIn fps · shown $fpsOut fps · ${"%.1f".format(now.latencyNanos / 1e6)} ms"
             last = now
         }
     }
-    Text(text, modifier.background(Color.Black.copy(alpha = 0.6f)).padding(8.dp), color = Color.White, style = MaterialTheme.typography.labelMedium)
+    Text(
+        text,
+        modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp)).padding(8.dp).testTag("diagnostics"),
+        color = Color.White,
+        style = MaterialTheme.typography.labelMedium,
+    )
 }
