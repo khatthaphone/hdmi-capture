@@ -17,6 +17,10 @@ final class AppModel {
     }
 
     private(set) var permission: Permission = .unknown
+    /// Video works without it, but there's no sound; the viewer shows a banner.
+    private(set) var microphoneDenied = false
+    /// Connection Help sheet (no signal, HDCP, no sound, card not found).
+    var isShowingHelp = false
     let catalog: DeviceCatalog
     /// One session per card that something is showing (main window, card windows, grid tiles).
     private(set) var sessions: [String: DeviceSession] = [:]
@@ -194,12 +198,13 @@ final class AppModel {
 
     func retry() {
         sessions.values.forEach { $0.forceRestart() }
-        Task { await requestPermissions() }
+        Task { await requestPermissions(prompting: true) }
     }
 
-    func openPrivacySettings() {
+    func openPrivacySettings(microphone: Bool = false) {
         #if os(macOS)
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
+        let pane = microphone ? "Privacy_Microphone" : "Privacy_Camera"
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") {
             NSWorkspace.shared.open(url)
         }
         #else
@@ -237,12 +242,15 @@ final class AppModel {
 
     // MARK: Permissions
 
-    private func requestPermissions() async {
+    /// First run: the welcome screen explains camera/microphone access before any system prompt;
+    /// `continueFromWelcome()` asks. Later launches go straight through.
+    private func requestPermissions(prompting: Bool = false) async {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             break
         case .notDetermined:
             permission = .needed
+            guard prompting else { return }
             guard await AVCaptureDevice.requestAccess(for: .video) else {
                 permission = .denied
                 return
@@ -254,8 +262,14 @@ final class AppModel {
         if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
             _ = await AVCaptureDevice.requestAccess(for: .audio)
         }
+        microphoneDenied = AVCaptureDevice.authorizationStatus(for: .audio) == .denied
         permission = .granted
         catalog.refresh()
+    }
+
+    /// The welcome screen's Continue: shows the system camera (then microphone) prompts.
+    func continueFromWelcome() {
+        Task { await requestPermissions(prompting: true) }
     }
 
     // MARK: Device policy
@@ -381,6 +395,7 @@ final class AppModel {
             case "size50": viewer.setWindowSize(scale: 0.5)
             #endif
             case "fullScreen": viewer.toggleFullScreen()
+            case "help": isShowingHelp = true
             #if os(iOS)
             case "settings": isShowingSettings = true
             #endif

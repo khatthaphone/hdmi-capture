@@ -69,9 +69,14 @@ struct StatusOverlay: View {
     @ViewBuilder private var content: some View {
         switch viewer.phase {
         case .permissionNeeded:
-            StateCard(title: "Allow camera access",
-                      message: "HDMI capture cards appear to \(StatusCopy.device) as cameras. HDMI Captain only uses the card you connect.") {
-                Image(systemName: "video.badge.ellipsis")
+            // First run: explain before the system asks.
+            StateCard(title: "Welcome to HDMI Captain",
+                      message: "Your \(StatusCopy.device) sees an HDMI capture card as a camera and a microphone, so it will ask for access next. HDMI Captain uses it only to show the picture and play the sound, and nothing leaves your \(StatusCopy.device).") {
+                ConnectIllustration()
+            } actions: {
+                Button("Continue") { app.continueFromWelcome() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
             }
         case .permissionDenied:
             StateCard(title: "Camera access required", message: StatusCopy.permissionHelp) {
@@ -84,6 +89,8 @@ struct StatusOverlay: View {
             StateCard(title: "Connect a capture card",
                       message: "Plug an HDMI capture card into this \(StatusCopy.device). The picture appears automatically.") {
                 ConnectIllustration()
+            } actions: {
+                Button("Connection Help…") { app.isShowingHelp = true }.buttonStyle(.bordered)
             }
         case let .waiting(name):
             StateCard(title: "\(name) is disconnected", message: "Plug it back in to continue where you left off.") {
@@ -126,14 +133,16 @@ struct StatusOverlay: View {
 /// The card is live but shows no picture (its own "no signal" screen, or black).
 struct NoSignalOverlay: View {
     @Environment(ViewerModel.self) private var viewer
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         StateCard(title: "No HDMI signal", message: message) {
             Image(systemName: "rectangle.slash")
+        } actions: {
+            Button("Connection Help…") { app.isShowingHelp = true }.buttonStyle(.bordered)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.black.opacity(0.55))
-        .allowsHitTesting(false)
     }
 
     private var message: String {

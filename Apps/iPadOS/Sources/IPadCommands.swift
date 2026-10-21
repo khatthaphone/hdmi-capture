@@ -12,6 +12,9 @@ struct IPadCommands: Commands {
             Button { app.isShowingSettings = true } label: { Label("Settings…", systemImage: Symbol.settings) }
                 .keyboardShortcut(",")
         }
+        CommandGroup(replacing: .help) {
+            Button("HDMI Captain Help") { app.isShowingHelp = true }
+        }
         CommandMenu("Video") {
             if let viewer = app.currentViewer {
                 VideoItems(app: app, viewer: viewer)

@@ -27,6 +27,7 @@ struct HDMICaptainApp: App {
                     store.requestUpgrade(highlighting: .recording)
                 }
                 #endif
+                .sheet(isPresented: $app.isShowingHelp) { HelpSheet() }
                 .sheet(isPresented: $store.isShowingUpgrade) {
                     UpgradeView().environment(store)
                 }
@@ -37,6 +38,9 @@ struct HDMICaptainApp: App {
         .defaultSize(width: 1280, height: 720)
         .windowStyle(.hiddenTitleBar)
         .commands {
+            CommandGroup(replacing: .help) {
+                Button("HDMI Captain Help") { app.isShowingHelp = true }
+            }
             CardWindowCommands(app: app)
             ViewerCommands(app: app)
             WindowSizeCommands(app: app)

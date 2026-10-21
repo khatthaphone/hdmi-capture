@@ -52,6 +52,11 @@ struct ContentView: View {
                     .padding(.top, app.prefs.cleanMode ? 12 : 40)
                     .allowsHitTesting(false)
             }
+            if app.microphoneDenied, viewer.phase == .live {
+                MicrophoneBanner()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .padding(.top, app.prefs.cleanMode ? 12 : 40)
+            }
             VStack(alignment: .trailing, spacing: 6) {
                 // Always visible while recording; the pref only hides the timer, never the red dot.
                 if let since = viewer.session?.recordingSince {
@@ -175,6 +180,25 @@ private struct ToastView: View {
         .background(.black.opacity(0.75), in: Capsule())
         .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Video works without microphone access but has no sound; say why and how to fix it.
+private struct MicrophoneBanner: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Label("No sound: microphone access is off", systemImage: "speaker.slash.fill")
+            Button("Open Settings") { app.openPrivacySettings(microphone: true) }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+        .font(.callout.weight(.medium))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.black.opacity(0.75), in: Capsule())
     }
 }
 

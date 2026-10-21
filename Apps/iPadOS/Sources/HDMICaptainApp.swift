@@ -26,6 +26,7 @@ struct HDMICaptainApp: App {
                     store.requestUpgrade(highlighting: .recording)
                 }
                 #endif
+                .sheet(isPresented: $app.isShowingHelp) { HelpSheet() }
                 .sheet(isPresented: $store.isShowingUpgrade) {
                     UpgradeView().environment(store)
                 }

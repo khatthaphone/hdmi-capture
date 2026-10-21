@@ -338,6 +338,7 @@ private struct OptionsMenu: View {
             #if os(iOS)
             Button { app.isShowingSettings = true } label: { Label("Settings…", systemImage: Symbol.settings) }
             #endif
+            Button { app.isShowingHelp = true } label: { Label("Connection Help…", systemImage: "questionmark.circle") }
             #if os(macOS)
             Toggle(isOn: $app.prefs.floatOnTop) { Label("Float on Top", systemImage: Symbol.floatOnTop) }
             Toggle(isOn: $app.prefs.cleanMode) { Label("Clean Mode", systemImage: Symbol.cleanMode) }
