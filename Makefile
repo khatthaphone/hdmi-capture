@@ -61,7 +61,7 @@ ipad-snapshot:
 # DEBUG builds launched with IPAD_ARGS="-qaSoakMinutes 30": copies the soak CSV and format list.
 ipad-soak:
 	@mkdir -p $(SNAP_DIR)
-	for f in qa-soak.csv qa-formats.txt; do xcrun devicectl device copy from --device $(IPAD_ID) --domain-type appDataContainer --domain-identifier com.example.hdmicaptain --source Documents/$$f --destination $(SNAP_DIR)/$$f -q || true; done
+	for f in qa-soak.csv qa-formats.txt qa-events.csv; do xcrun devicectl device copy from --device $(IPAD_ID) --domain-type appDataContainer --domain-identifier com.example.hdmicaptain --source Documents/$$f --destination $(SNAP_DIR)/$$f -q || true; done
 	@cat $(SNAP_DIR)/qa-soak.csv
 
 inventory:

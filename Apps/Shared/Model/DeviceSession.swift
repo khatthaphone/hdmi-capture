@@ -75,6 +75,9 @@ final class DeviceSession {
         engine.addSink(recent)
         engine.addAudioSink(recent)
         engine.stateHandler = { [weak self] state in
+            #if DEBUG
+            QAEvents.record(state)
+            #endif
             MainActor.assumeIsolated { self?.apply(state) }
         }
         signalMonitor.onChange = { [weak self] content in

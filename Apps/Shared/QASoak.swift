@@ -109,4 +109,35 @@ final class QASoak {
         return result == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576 : 0
     }
 }
+
+/// QA: every engine state change with a timestamp, in `Documents/qa-events.csv`, so resume time
+/// after an iPadOS interruption (paused → connecting → live) can be read off the device.
+enum QAEvents {
+    private static let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("qa-events.csv")
+    private static var last: (state: String, time: CFTimeInterval)?
+
+    static func record(_ state: CaptureState) {
+        let name = switch state {
+        case .idle: "idle"
+        case .connecting: "connecting"
+        case .live: "live"
+        case let .recovering(reason): "recovering(\(reason))"
+        case let .paused(reason): "paused(\(reason.rawValue))"
+        case .failed: "failed"
+        }
+        let now = CACurrentMediaTime()
+        let sincePrevious = last.map { String(format: "%.0f", (now - $0.time) * 1000) } ?? ""
+        let line = "\(ISO8601DateFormatter().string(from: Date())),\(name),\(last?.state ?? ""),\(sincePrevious)\n"
+        last = (name, now)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            try? "time,state,previous,ms_since_previous\n".write(to: url, atomically: true, encoding: .utf8)
+        }
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile()
+            handle.write(Data(line.utf8))
+            try? handle.close()
+        }
+    }
+}
 #endif
