@@ -52,4 +52,5 @@ rm -rf "$TMP"
 [[ $bad == 0 ]] || exit 1
 
 echo "$AAB"
-"$JAVA_HOME/bin/jarsigner" -verify "$AAB" >/dev/null 2>&1 && echo "signed with the upload key" || echo "unsigned"
+# jarsigner exits 0 for unsigned files too; only "jar verified" means signed.
+if "$JAVA_HOME/bin/jarsigner" -verify "$AAB" 2>&1 | grep -q "jar verified"; then echo "signed with the upload key"; else echo "unsigned"; fi
