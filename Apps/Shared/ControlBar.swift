@@ -129,6 +129,7 @@ private struct InputChip: View {
         }
         .barMenuStyle()
         .help("Input and profiles")
+        .accessibilityLabel("Input: \(title)")
     }
 
     private var title: String {
@@ -149,13 +150,15 @@ private struct SoundControl: View {
             Button {
                 viewer.preset.muted.toggle()
             } label: {
-                BarLabel(symbol: viewer.preset.muted ? Symbol.mute : Symbol.sound, title: nil)
+                BarLabel(symbol: viewer.preset.muted ? Symbol.mute : Symbol.sound, title: viewer.preset.muted ? "Unmute" : "Mute",
+                         showsTitle: false)
             }
             .buttonStyle(BarButtonStyle())
             .help(viewer.preset.muted ? "Unmute (⇧⌘M)" : "Mute (⇧⌘M)")
             if layout == .full {
                 VStack(spacing: 3) {
                     Slider(value: $viewer.preset.volume, in: 0...1)
+                        .accessibilityLabel("Volume")
                         .controlSize(.mini)
                         .frame(width: 72)
                     BarLevelMeter()
@@ -285,7 +288,7 @@ private struct RecordButton: View {
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 10)
-            .frame(height: 28)
+            .frame(minWidth: barTarget, minHeight: barTarget)
             .background(Capsule().fill(since != nil ? Color.red : .white.opacity(0.14)))
             .proLock(!store.isUnlocked(.recording))
         }
@@ -347,7 +350,7 @@ private struct OptionsMenu: View {
             Divider()
             Button { viewer.copyFrame() } label: { Label("Copy Frame", systemImage: Symbol.copyFrame) }
         } label: {
-            BarLabel(symbol: Symbol.options, title: nil)
+            BarLabel(symbol: Symbol.options, title: "View options", showsTitle: false)
         }
         .barMenuStyle()
         .help("View options")
@@ -360,7 +363,8 @@ private struct FullScreenButton: View {
 
     var body: some View {
         Button { viewer.toggleFullScreen() } label: {
-            BarLabel(symbol: viewer.isFullScreen ? Symbol.exitFullScreen : Symbol.fullScreen, title: nil)
+            BarLabel(symbol: viewer.isFullScreen ? Symbol.exitFullScreen : Symbol.fullScreen,
+                     title: viewer.isFullScreen ? "Exit full screen" : "Full screen", showsTitle: false)
         }
         .buttonStyle(BarButtonStyle())
         .help(viewer.isFullScreen ? "Exit Full Screen (⌘F)" : "Full Screen (⌘F)")
@@ -371,6 +375,15 @@ private struct FullScreenButton: View {
 // MARK: - Building blocks
 
 /// Icon (+ optional title and ▾) in the bar's type style.
+/// Hit-target size: compact on the Mac (pointer), 44 pt on iPad (touch, HIG minimum).
+private var barTarget: CGFloat {
+    #if os(iOS)
+    44
+    #else
+    28
+    #endif
+}
+
 private struct BarLabel: View {
     let symbol: String
     let title: String?
@@ -398,8 +411,11 @@ private struct BarLabel: View {
         .foregroundStyle(.white)
         .shadow(color: .black.opacity(0.5), radius: 1.5)
         .padding(.horizontal, 7)
-        .frame(minWidth: 28, minHeight: 28)
+        .frame(minWidth: barTarget, minHeight: barTarget)
         .contentShape(Rectangle())
+        // The title is read even when the compact bar hides it.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title ?? "")
     }
 }
 

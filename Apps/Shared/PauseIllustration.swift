@@ -33,6 +33,7 @@ struct PauseIllustration: View {
 private struct Steps<From: View, To: View>: View {
     let from: From
     let to: To
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 18) {
@@ -40,7 +41,7 @@ private struct Steps<From: View, To: View>: View {
             Image(systemName: "arrow.right")
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.8))
-                .phaseAnimator([0.0, 6.0]) { arrow, offset in
+                .phaseAnimator(reduceMotion ? [0.0] : [0.0, 6.0]) { arrow, offset in
                     arrow.offset(x: offset)
                 } animation: { _ in .easeInOut(duration: 0.8) }
             to

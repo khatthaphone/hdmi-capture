@@ -22,6 +22,7 @@ struct ContentView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.openWindow) private var openWindow
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -89,7 +90,7 @@ struct ContentView: View {
                 ControlBar()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .padding(.bottom, 14)
-                    .transition(.opacity.combined(with: .offset(y: 8)))
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 8)))
             }
         }
         .animation(showsControls ? .easeOut(duration: 0.15) : .easeIn(duration: 0.3), value: showsControls)

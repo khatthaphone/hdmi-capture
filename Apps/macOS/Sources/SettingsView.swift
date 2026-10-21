@@ -240,6 +240,10 @@ private struct WindowSettingsPage: View {
 struct LevelMeter: View {
     @Environment(ViewerModel.self) private var viewer
 
+    static func decibels(_ level: Float) -> String {
+        level < 0.0001 ? "silent" : String(format: "%.0f decibels", 20 * log10(level))
+    }
+
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.05)) { _ in
             let levels = viewer.audioLevels()
@@ -249,6 +253,9 @@ struct LevelMeter: View {
             }
             .frame(width: 180)
             .help(String(format: "Buffered %.0f ms", levels.bufferedMs))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Audio level")
+            .accessibilityValue("Left \(Self.decibels(levels.rms.x)), right \(Self.decibels(levels.rms.y))")
         }
     }
 
