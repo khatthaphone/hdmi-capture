@@ -150,7 +150,8 @@ fun ViewerScreen(
         }
 
         if (showScopes && live && !inPictureInPicture) {
-            ScopesPanel(model.renderer, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = 48.dp, end = 12.dp))
+            // Below the diagnostics pill, so the two never overlap on a phone.
+            ScopesPanel(model.renderer, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(top = 64.dp, start = 12.dp, end = 12.dp))
         }
 
         recordingSince?.let { since ->

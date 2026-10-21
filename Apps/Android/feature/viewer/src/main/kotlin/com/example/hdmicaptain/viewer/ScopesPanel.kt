@@ -6,6 +6,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
@@ -65,17 +66,22 @@ fun ScopesPanel(renderer: VideoRenderer, modifier: Modifier = Modifier) {
             }
         }
     }
+    // Full size is ~450 dp wide; narrower windows (a phone in portrait) scale it down to fit.
+    BoxWithConstraints(modifier) {
+    val k = ((maxWidth.value - 24f) / 450f).coerceIn(0.5f, 1f)
+    val wide = (150 * k).dp
+    val tall = (110 * k).dp
     Row(
-        modifier.background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(12.dp)).padding(10.dp).testTag("scopes"),
+        Modifier.background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(12.dp)).padding(10.dp).testTag("scopes"),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Scope("Histogram") { images?.let { Image(it.first, null, Modifier.size(width = 150.dp, height = 110.dp), filterQuality = FilterQuality.None) } }
-        Scope("Waveform") { images?.let { Image(it.second, null, Modifier.size(150.dp, 110.dp), filterQuality = FilterQuality.Low) } }
+        Scope("Histogram") { Box(Modifier.size(wide, tall)) { images?.let { Image(it.first, null, Modifier.size(wide, tall), filterQuality = FilterQuality.None) } } }
+        Scope("Waveform") { Box(Modifier.size(wide, tall)) { images?.let { Image(it.second, null, Modifier.size(wide, tall), filterQuality = FilterQuality.Low) } } }
         Scope("Vectorscope") {
-            Box(Modifier.size(110.dp)) {
-                images?.let { Image(it.third, null, Modifier.size(110.dp), filterQuality = FilterQuality.Low) }
+            Box(Modifier.size(tall)) {
+                images?.let { Image(it.third, null, Modifier.size(tall), filterQuality = FilterQuality.Low) }
                 // 75 % colour-bar targets, as on Apple.
-                Canvas(Modifier.size(110.dp)) {
+                Canvas(Modifier.size(tall)) {
                     ScopeData.barTargets.forEach { (_, p) ->
                         val box = 8.dp.toPx()
                         drawRect(Color.White.copy(alpha = 0.6f), Offset(p.first.toFloat() * size.width - box / 2, p.second.toFloat() * size.height - box / 2), Size(box, box), style = Stroke(1f))
@@ -84,12 +90,13 @@ fun ScopesPanel(renderer: VideoRenderer, modifier: Modifier = Modifier) {
             }
         }
     }
+    }
 }
 
 @Composable
 private fun Scope(title: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelSmall)
+        Text(title, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
         content()
     }
 }

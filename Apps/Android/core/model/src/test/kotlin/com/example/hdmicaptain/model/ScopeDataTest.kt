@@ -34,6 +34,17 @@ class ScopeDataTest {
         ScopeData.barTargets.forEach { (_, p) -> assertTrue(p.first in 0.0..1.0 && p.second in 0.0..1.0) }
     }
 
+    @Test fun seventyFivePercentYellowLandsOnItsTarget() {
+        // 75 % yellow, BT.709 limited (TestPattern.ycbcr): Y 168, Cb 44, Cr 136.
+        val data = ScopeData.analyze(grid(4, 4) { _, _ -> Triple(168, 44, 136) }, 4, 4)
+        val index = data.vectorscope.indexOfFirst { it > 0 }
+        val x = (index % ScopeData.VECTOR_SIZE + 0.5) / ScopeData.VECTOR_SIZE
+        val y = (index / ScopeData.VECTOR_SIZE + 0.5) / ScopeData.VECTOR_SIZE
+        val (tx, ty) = ScopeData.barTargets.first { it.first == "Yl" }.second
+        assertEquals(tx, x, 0.01)
+        assertEquals(ty, y, 0.01)
+    }
+
     @Test fun imagesHaveTheRightSize() {
         val data = ScopeData.analyze(grid(16, 9) { c, r -> Triple(16 + c * 10, 128 + r, 128 - r) }, 16, 9)
         assertEquals(256 * 256, data.waveformPixels().size)
