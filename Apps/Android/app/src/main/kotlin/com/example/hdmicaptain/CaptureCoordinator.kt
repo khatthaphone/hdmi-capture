@@ -3,6 +3,7 @@ package com.example.hdmicaptain
 import android.content.Context
 import android.util.Log
 import com.example.hdmicaptain.audio.CardAudio
+import com.example.hdmicaptain.capture.Camera2Source
 import com.example.hdmicaptain.capture.UsbCard
 import com.example.hdmicaptain.capture.UsbCardCatalog
 import com.example.hdmicaptain.capture.UvcSource
@@ -40,6 +41,7 @@ class CaptureCoordinator(
     private val control = Dispatchers.IO.limitedParallelism(1)
     private var source: UvcSource? = null
     private var audio: CardAudio? = null
+    private var camera2: Camera2Source? = null
     private var current: UsbCard? = null
 
     fun start() {
@@ -65,6 +67,7 @@ class CaptureCoordinator(
         current = card
         if (card == null) {
             _status.value = "Connect a capture card"
+            withContext(control) { tryCamera2() }
             return
         }
         _status.value = "Connecting to ${card.name}…"
@@ -101,6 +104,29 @@ class CaptureCoordinator(
         }
     }
 
+    /**
+     * No USB card we can open: use a capture card Android exposes through Camera2 (task 073),
+     * e.g. on a Chromebook. Always writes the probe for the research doc.
+     */
+    private fun tryCamera2() {
+        val cam = Camera2Source(context)
+        File(context.filesDir, "qa-camera2.json").writeText(cam.probe())
+        val external = cam.externalCameras().firstOrNull { it.formats.isNotEmpty() }
+        if (external == null) {
+            cam.release()
+            return
+        }
+        val choice = FormatSelector.select(external.formats) ?: return cam.release()
+        cam.start(external.id, choice.format, choice.frameRate.toInt(), renderer.ringHandle) { error ->
+            _live.value = false
+            _status.value = error
+        }
+        camera2 = cam
+        _live.value = true
+        _status.value = "Camera2 external ${external.id} · ${choice.format.width}×${choice.format.height} @ ${choice.frameRate}"
+        Log.i(TAG, "streaming: ${_status.value}")
+    }
+
     /** The card's sound through Oboe (task 075). Video keeps going if audio can't start. */
     private fun startAudio(card: UsbCard) {
         val cardAudio = CardAudio(context)
@@ -121,6 +147,8 @@ class CaptureCoordinator(
     }
 
     private fun closeSource() {
+        camera2?.release()
+        camera2 = null
         audio?.stop()
         audio?.release()
         audio = null
