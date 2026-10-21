@@ -1,7 +1,7 @@
 DERIVED := .build/xcode
 APP := $(DERIVED)/Build/Products/Debug/HDMI Captain.app
 
-.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad ipad-snapshot ipad-soak android-build android-test android-run inventory logs clean
+.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad ipad-snapshot ipad-soak android-build android-test android-run android-check16k inventory logs clean
 
 IOS_SIM ?= iPad Pro 11-inch (M5)
 IPAD_APP_SIM := $(DERIVED)/Build/Products/Debug-iphonesimulator/HDMI Captain.app
@@ -77,6 +77,13 @@ android-build:
 
 android-test:
 	cd $(ANDROID_DIR) && $(ANDROID_ENV) $(GRADLE) test
+
+# Every native library in the APK must have 16 KB-aligned LOAD segments (Play, Android 15+).
+android-check16k:
+	@rm -rf .build/apk-libs && unzip -q -o $(ANDROID_DIR)/app/build/outputs/apk/debug/app-debug.apk 'lib/*' -d .build/apk-libs
+	@bad=0; for f in .build/apk-libs/lib/*/*.so; do \
+	  a=$$($(HOME)/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-readelf -lW $$f | awk '/LOAD/{print $$NF}' | sort -u | tr '\n' ' '); \
+	  echo "$$f $$a"; case "$$a" in "0x4000 ") ;; *) bad=1;; esac; done; exit $$bad
 
 android-run: android-build
 	adb install -r $(ANDROID_DIR)/app/build/outputs/apk/debug/app-debug.apk

@@ -2,6 +2,7 @@ package com.example.hdmicaptain
 
 import android.content.Context
 import android.util.Log
+import com.example.hdmicaptain.audio.CardAudio
 import com.example.hdmicaptain.capture.UsbCard
 import com.example.hdmicaptain.capture.UsbCardCatalog
 import com.example.hdmicaptain.capture.UvcSource
@@ -38,6 +39,7 @@ class CaptureCoordinator(
     /** USB and libuvc calls block; they run here, one at a time. */
     private val control = Dispatchers.IO.limitedParallelism(1)
     private var source: UvcSource? = null
+    private var audio: CardAudio? = null
     private var current: UsbCard? = null
 
     fun start() {
@@ -56,6 +58,7 @@ class CaptureCoordinator(
     }
 
     val uvcStats: UvcSource.Stats? get() = source?.stats()
+    val audioLevels: CardAudio.Levels? get() = audio?.levels()
 
     private suspend fun switchTo(card: UsbCard?) {
         withContext(control) { closeSource() }
@@ -90,6 +93,7 @@ class CaptureCoordinator(
             _live.value = true
             _status.value = "${card.name} · ${choice.format.width}×${choice.format.height} ${choice.format.fourCC} @ ${choice.frameRate} · ${description.speed}"
             Log.i(TAG, "streaming: ${_status.value}")
+            startAudio(card)
         } catch (e: Exception) {
             Log.w(TAG, "open failed", e)
             uvc.release()
@@ -97,7 +101,29 @@ class CaptureCoordinator(
         }
     }
 
+    /** The card's sound through Oboe (task 075). Video keeps going if audio can't start. */
+    private fun startAudio(card: UsbCard) {
+        val cardAudio = CardAudio(context)
+        val input = cardAudio.findInput(card.name)
+        if (input == null) {
+            Log.w(TAG, "no USB audio input for ${card.name}")
+            cardAudio.release()
+            return
+        }
+        try {
+            cardAudio.start(input)
+            audio = cardAudio
+            Log.i(TAG, "audio from ${input.productName} (id ${input.id}, rates ${input.sampleRates.toList()}, channels ${input.channelCounts.toList()})")
+        } catch (e: Exception) {
+            Log.w(TAG, "audio failed", e)
+            cardAudio.release()
+        }
+    }
+
     private fun closeSource() {
+        audio?.stop()
+        audio?.release()
+        audio = null
         source?.release()
         source = null
         _live.value = false
