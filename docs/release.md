@@ -23,6 +23,6 @@ Two channels: the **Mac App Store + iPad App Store** (one universal purchase: sa
 
 ## Notes
 
-- The Mac app is **Apple Silicon only** (`ARCHS = arm64`): HaishinKit's libsrt has no x86_64 slice. Dropping SRT would allow a universal build.
+- The Mac app is **universal** (spec §5.7). SRTHaishinKit is not linked, because its libsrt has no x86_64 slice and broke the universal Release link. Streaming (hidden, 046) uses RTMP only until SRT is rebuilt or the Mac goes arm64-only.
 - Release builds contain no QA hooks (`-qaAction`, soak, snapshot): they're all `#if DEBUG`.
 - Without the paid account, `tools/release/release.sh` still produces a development-signed DMG (Gatekeeper rejects it on other Macs), and `tools/release/appstore.sh` archives both apps.

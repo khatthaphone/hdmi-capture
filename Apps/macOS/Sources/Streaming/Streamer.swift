@@ -4,7 +4,9 @@ import HaishinKit
 import Observation
 import os
 import RTMPHaishinKit
-import SRTHaishinKit
+// SRT (SRTHaishinKit) is left out: its libsrt has no x86_64 slice, which breaks the universal
+// Release build (spec §5.7). Streaming is hidden for now (046); add the package back with an
+// arm64-only or rebuilt libsrt (and register SRTSessionFactory) when SRT ships.
 import VideoToolbox
 
 /// Live streaming of one capture card (Pro). Frames and audio are handed to HaishinKit in order
@@ -53,7 +55,6 @@ final class Streamer {
 
         if !Self.factoriesRegistered {
             await SessionBuilderFactory.shared.register(RTMPSessionFactory())
-            await SessionBuilderFactory.shared.register(SRTSessionFactory())
             Self.factoriesRegistered = true
         }
 
