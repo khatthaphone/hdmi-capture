@@ -1,0 +1,23 @@
+{
+  "comment": "Each step feeds one classification at time t (s) and expects the reported content after it.",
+  "cases": [
+    {"name": "loss only after persistence", "persistence": 1.5, "steps": [
+      {"t": 0, "content": "picture", "expect": "picture"},
+      {"t": 1, "content": "black", "expect": "picture"},
+      {"t": 2, "content": "black", "expect": "picture"},
+      {"t": 2.6, "content": "black", "expect": "black"}]},
+    {"name": "recovery is immediate", "persistence": 1, "steps": [
+      {"t": 0, "content": "black", "expect": "picture"},
+      {"t": 2, "content": "black", "expect": "black"},
+      {"t": 2.1, "content": "picture", "expect": "picture"}]},
+    {"name": "short black cut never reported", "persistence": 1.5, "steps": [
+      {"t": 0, "content": "black", "expect": "picture"},
+      {"t": 1, "content": "picture", "expect": "picture"},
+      {"t": 2, "content": "black", "expect": "picture"},
+      {"t": 3, "content": "picture", "expect": "picture"}]},
+    {"name": "flicker between black and card screen still counts as loss", "persistence": 1, "steps": [
+      {"t": 0, "content": "black", "expect": "picture"},
+      {"t": 0.6, "content": {"solid": [0, 0, 255]}, "expect": "picture"},
+      {"t": 1.1, "content": "black", "expect": "black"}]}
+  ]
+}

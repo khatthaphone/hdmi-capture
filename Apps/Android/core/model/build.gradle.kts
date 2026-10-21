@@ -10,4 +10,12 @@ kotlin {
 
 dependencies {
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.serialization.json)
+}
+
+// Shared JSON vectors, also read by the Swift tests (docs/fixtures/README.md).
+val fixtures = rootDir.resolve("../../docs/fixtures").canonicalPath
+tasks.test {
+    systemProperty("fixtures", fixtures)
+    inputs.dir(fixtures)
 }

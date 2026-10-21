@@ -1,0 +1,2 @@
+{"comment": "Restart delay in seconds for attempt n (1-based): 0.25 × 2^(n−1), capped at 4.",
+ "delays": [[1, 0.25], [2, 0.5], [3, 1.0], [4, 2.0], [5, 4.0], [6, 4.0], [12, 4.0]]}

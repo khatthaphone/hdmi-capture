@@ -1,0 +1,24 @@
+{
+  "comment": "Android only: the USB link limits uncompressed formats. Budgets (bytes/s) are estimates until spike 072 measures them: usb2 = 24 MB/s (high-bandwidth isochronous), usb3 = 300 MB/s.",
+  "cases": [
+    {"name": "USB 2.0: 1080p60 MJPEG beats 1080p YUY2 capped by bandwidth", "link": "usb2",
+     "formats": [{"w": 1920, "h": 1080, "cc": "YUY2", "rates": [60, 30, 5]}, {"w": 1920, "h": 1080, "cc": "MJPG", "rates": [60, 30]}],
+     "expect": {"w": 1920, "h": 1080, "cc": "MJPG", "fps": 60}},
+    {"name": "USB 3: uncompressed 1080p60 wins", "link": "usb3",
+     "formats": [{"w": 1920, "h": 1080, "cc": "YUY2", "rates": [60, 30, 5]}, {"w": 1920, "h": 1080, "cc": "MJPG", "rates": [60, 30]}],
+     "expect": {"w": 1920, "h": 1080, "cc": "YUY2", "fps": 60}},
+    {"name": "no link info: same as Apple", "link": null,
+     "formats": [{"w": 1920, "h": 1080, "cc": "YUY2", "rates": [60]}, {"w": 1920, "h": 1080, "cc": "MJPG", "rates": [60]}],
+     "expect": {"w": 1920, "h": 1080, "cc": "YUY2", "fps": 60}},
+    {"name": "USB 2.0 without MJPEG: highest rate that fits", "link": "usb2",
+     "formats": [{"w": 1280, "h": 720, "cc": "YUY2", "rates": [60, 30, 10]}, {"w": 640, "h": 480, "cc": "YUY2", "rates": [60, 30]}],
+     "expect": {"w": 1280, "h": 720, "cc": "YUY2", "fps": 10}},
+    {"name": "USB 2.0 range is clipped to what fits", "link": "usb2",
+     "formats": [{"w": 640, "h": 480, "cc": "YUY2", "ranges": [[5, 60]]}],
+     "expect": {"w": 640, "h": 480, "cc": "YUY2", "fps": 39.0625}},
+    {"name": "USB 2.0 pinned rate that doesn't fit uses the nearest that does", "link": "usb2",
+     "formats": [{"w": 1920, "h": 1080, "cc": "YUY2", "rates": [60, 30, 5]}],
+     "preference": {"w": 1920, "h": 1080, "fps": 60},
+     "expect": {"w": 1920, "h": 1080, "cc": "YUY2", "fps": 5}}
+  ]
+}

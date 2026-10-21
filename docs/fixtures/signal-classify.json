@@ -1,0 +1,13 @@
+{
+  "comment": "Stats → classification. 'solid' expects RGB within ±1.",
+  "cases": [
+    {"name": "limited black", "fullRange": false, "stats": {"meanY": 16, "meanCb": 128, "meanCr": 128, "rangeY": 0, "rangeChroma": 0}, "expect": "black"},
+    {"name": "full-range black", "fullRange": true, "stats": {"meanY": 0, "meanCb": 128, "meanCr": 128, "rangeY": 0, "rangeChroma": 0}, "expect": "black"},
+    {"name": "near-black with tiny noise", "fullRange": false, "stats": {"meanY": 20, "meanCb": 129, "meanCr": 127, "rangeY": 6, "rangeChroma": 4}, "expect": "black"},
+    {"name": "card's blue no-signal screen", "fullRange": false, "stats": {"meanY": 32, "meanCb": 240, "meanCr": 118, "rangeY": 0, "rangeChroma": 0}, "expect": {"solid": [1, 0, 255]}},
+    {"name": "flat mid gray", "fullRange": false, "stats": {"meanY": 126, "meanCb": 128, "meanCr": 128, "rangeY": 0, "rangeChroma": 0}, "expect": {"solid": [128, 128, 128]}},
+    {"name": "dark picture with texture", "fullRange": false, "stats": {"meanY": 24, "meanCb": 128, "meanCr": 128, "rangeY": 24, "rangeChroma": 0}, "expect": "picture"},
+    {"name": "colour bars", "fullRange": false, "stats": {"meanY": 128, "meanCb": 128, "meanCr": 128, "rangeY": 219, "rangeChroma": 224}, "expect": "picture"},
+    {"name": "flat luma but chroma texture", "fullRange": false, "stats": {"meanY": 60, "meanCb": 128, "meanCr": 128, "rangeY": 2, "rangeChroma": 30}, "expect": "picture"}
+  ]
+}

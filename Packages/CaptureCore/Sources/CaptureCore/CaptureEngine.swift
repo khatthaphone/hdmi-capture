@@ -339,7 +339,7 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
         }
         #endif
         restartAttempt += 1
-        let delay = min(0.25 * pow(2, Double(restartAttempt - 1)), 4)
+        let delay = Self.restartDelay(attempt: restartAttempt)
         let scheduled = generation
         Self.log.info("Restart #\(self.restartAttempt) in \(delay)s: \(reason, privacy: .public)")
         emit(.recovering(reason: reason))
@@ -347,6 +347,12 @@ public final class CaptureEngine: NSObject, @unchecked Sendable {
             guard generation == scheduled, desired != nil else { return }
             configureAndRun()
         }
+    }
+
+    /// Backoff for the n-th consecutive restart (1-based): 0.25 s doubling, capped at 4 s.
+    /// Shared with Android via docs/fixtures/recovery-backoff.json.
+    static func restartDelay(attempt: Int) -> Double {
+        min(0.25 * pow(2, Double(attempt - 1)), 4)
     }
 
     private func fail(_ message: String) {

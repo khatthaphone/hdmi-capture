@@ -15,7 +15,8 @@ public struct FrameRateRange: Codable, Hashable, Sendable {
 public struct FormatDescriptor: Codable, Hashable, Sendable {
     public var width: Int
     public var height: Int
-    /// Media subtype as a four-character code, e.g. "420v", "yuvs", "dmb1" (MJPEG).
+    /// Media subtype as a four-character code, e.g. "420v", "yuvs", "dmb1" (MJPEG). UVC names
+    /// ("NV12", "YUY2", "MJPG") are understood too, so the shared fixtures run on Apple and Android.
     public var fourCC: String
     public var frameRateRanges: [FrameRateRange]
 
@@ -32,7 +33,7 @@ public struct FormatDescriptor: Codable, Hashable, Sendable {
     /// Exactly 16:9 — what nearly every HDMI source outputs.
     public var isWidescreen: Bool { width * 9 == height * 16 }
 
-    static let compressedFourCCs: Set<String> = ["dmb1", "jpeg", "mjpa", "mjpg", "avc1", "hvc1"]
+    static let compressedFourCCs: Set<String> = ["dmb1", "jpeg", "mjpa", "mjpg", "avc1", "hvc1", "MJPG", "H264", "H265"]
 
     /// The supported rate closest to `target`.
     public func nearestSupportedRate(to target: Double) -> Double {
@@ -108,8 +109,8 @@ public enum FormatSelector {
     /// Uncompressed YCbCr avoids an MJPEG decode step (latency + CPU).
     private static func encodingScore(_ f: FormatDescriptor) -> Double {
         switch f.fourCC {
-        case "420v", "420f": 3
-        case "yuvs", "2vuy", "yuv2": 2
+        case "420v", "420f", "NV12", "NV21", "I420": 3
+        case "yuvs", "2vuy", "yuv2", "YUY2", "UYVY": 2
         case _ where f.isCompressed: 0
         default: 1
         }

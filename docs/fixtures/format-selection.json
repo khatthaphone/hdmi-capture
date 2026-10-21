@@ -1,0 +1,51 @@
+{
+  "formatSets": {
+    "ms2131": [
+      {"w": 720, "h": 480, "cc": "yuvs", "rates": [60, 30]},
+      {"w": 720, "h": 480, "cc": "420v", "rates": [60, 50, 30]},
+      {"w": 1024, "h": 768, "cc": "420v", "rates": [60, 30]},
+      {"w": 1280, "h": 720, "cc": "420v", "rates": [60, 50, 30]},
+      {"w": 1280, "h": 720, "cc": "yuvs", "rates": [20, 10]},
+      {"w": 1280, "h": 1024, "cc": "420v", "rates": [60, 30]},
+      {"w": 1360, "h": 768, "cc": "420v", "rates": [60, 30]},
+      {"w": 1920, "h": 1080, "cc": "420v", "rates": [30, 20]},
+      {"w": 1920, "h": 1080, "cc": "yuvs", "rates": [10, 5]}
+    ]
+  },
+  "cases": [
+    {"name": "empty list returns nothing", "formats": [], "expect": null},
+    {"name": "auto prefers smooth widescreen on MS2131", "formatSet": "ms2131",
+     "expect": {"w": 1280, "h": 720, "cc": "420v", "fps": 60}},
+    {"name": "auto prefers 1080p60 over 4K30",
+     "formats": [{"w": 3840, "h": 2160, "cc": "420v", "rates": [30]}, {"w": 1920, "h": 1080, "cc": "420v", "rates": [60]}],
+     "expect": {"w": 1920, "h": 1080, "cc": "420v", "fps": 60}},
+    {"name": "auto picks 4K60 when available",
+     "formats": [{"w": 3840, "h": 2160, "cc": "420v", "rates": [60]}, {"w": 1920, "h": 1080, "cc": "420v", "rates": [60]}],
+     "expect": {"w": 3840, "h": 2160, "cc": "420v", "fps": 60}},
+    {"name": "nothing smooth: highest resolution",
+     "formats": [{"w": 1280, "h": 720, "cc": "420v", "rates": [30]}, {"w": 1920, "h": 1080, "cc": "420v", "rates": [30]}],
+     "expect": {"w": 1920, "h": 1080, "cc": "420v", "fps": 30}},
+    {"name": "uncompressed beats MJPEG at the same mode",
+     "formats": [{"w": 1920, "h": 1080, "cc": "dmb1", "rates": [60]}, {"w": 1920, "h": 1080, "cc": "yuvs", "rates": [60]}],
+     "expect": {"w": 1920, "h": 1080, "cc": "yuvs", "fps": 60}},
+    {"name": "UVC names: NV12 beats YUY2 beats MJPG",
+     "formats": [{"w": 1920, "h": 1080, "cc": "MJPG", "rates": [60]}, {"w": 1920, "h": 1080, "cc": "YUY2", "rates": [60]}, {"w": 1920, "h": 1080, "cc": "NV12", "rates": [60]}],
+     "expect": {"w": 1920, "h": 1080, "cc": "NV12", "fps": 60}},
+    {"name": "MJPEG-only card still gets the smooth mode",
+     "formats": [{"w": 1920, "h": 1080, "cc": "dmb1", "rates": [60]}, {"w": 1920, "h": 1080, "cc": "yuvs", "rates": [5]}],
+     "expect": {"w": 1920, "h": 1080, "cc": "dmb1", "fps": 60}},
+    {"name": "pinned resolution and rate", "formatSet": "ms2131",
+     "preference": {"w": 1920, "h": 1080, "fps": 30},
+     "expect": {"w": 1920, "h": 1080, "cc": "420v", "fps": 30}},
+    {"name": "pinned unavailable rate uses the nearest", "formatSet": "ms2131",
+     "preference": {"w": 1920, "h": 1080, "fps": 60},
+     "expect": {"w": 1920, "h": 1080, "cc": "420v", "fps": 30}},
+    {"name": "pinned range clamps to the requested rate",
+     "formats": [{"w": 1920, "h": 1080, "cc": "420v", "ranges": [[1, 60]]}],
+     "preference": {"w": 1920, "h": 1080, "fps": 24},
+     "expect": {"w": 1920, "h": 1080, "cc": "420v", "fps": 24}},
+    {"name": "pinned unknown resolution falls back to auto", "formatSet": "ms2131",
+     "preference": {"w": 2560, "h": 1440, "fps": null},
+     "expect": {"w": 1280, "h": 720, "cc": "420v", "fps": 60}}
+  ]
+}
