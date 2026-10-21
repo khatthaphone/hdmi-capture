@@ -24,7 +24,10 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     packaging { jniLibs { useLegacyPackaging = false } }
 }
 
@@ -34,6 +37,7 @@ dependencies {
     implementation(project(":feature:viewer"))
     implementation(project(":feature:settings"))
     implementation(project(":core:capture"))
+    implementation(project(":core:render"))
     implementation(project(":core:audio"))
     implementation(project(":core:billing"))
     implementation(libs.androidx.core.ktx)
