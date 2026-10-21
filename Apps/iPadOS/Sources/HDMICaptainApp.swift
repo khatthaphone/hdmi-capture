@@ -16,6 +16,11 @@ struct HDMICaptainApp: App {
     var body: some Scene {
         WindowGroup {
             ViewerRoot(app: app, source: .automatic)
+                #if DEBUG
+                // QA: `-qaFrameWidth 320` lays the viewer out as a narrow Split View / Stage Manager window.
+                .frame(maxWidth: UserDefaults.standard.double(forKey: "qaFrameWidth") > 0
+                       ? UserDefaults.standard.double(forKey: "qaFrameWidth") : .infinity)
+                #endif
                 .environment(app)
                 .environment(store)
                 #if DEBUG
