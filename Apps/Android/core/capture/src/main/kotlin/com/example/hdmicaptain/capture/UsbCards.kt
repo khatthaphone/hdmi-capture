@@ -18,25 +18,32 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
 /** A USB device with a UVC video interface: an HDMI capture card (or a webcam). */
-data class UsbCard(val device: UsbDevice, val key: String, val name: String) {
+data class UsbCard(val device: UsbDevice, override val key: String, override val name: String) : Card {
     val vendorId: Int get() = device.vendorId
     val productId: Int get() = device.productId
 }
 
+/** A capture card Android exposes through Camera2 (spec §12.3 secondary path). */
+data class Camera2Card(val cameraId: String, val formats: List<com.example.hdmicaptain.model.FormatDescriptor>) : Card {
+    override val key = "camera2:$cameraId"
+    override val name = "External camera"
+}
+
 /**
  * Lists attached UVC devices and follows plug/unplug (spec §12.2). The Android twin of
- * CaptureCore's DeviceCatalog for USB cards; most recently attached last.
+ * CaptureCore's DeviceCatalog; most recently attached last. When no USB card is visible, Camera2
+ * external cameras are listed instead (USB not passed through, e.g. ChromeOS).
  */
-class UsbCardCatalog(private val context: Context) {
+class UsbCardCatalog(private val context: Context) : CardCatalog {
     private val usb = context.getSystemService(UsbManager::class.java)
-    private val _cards = MutableStateFlow<List<UsbCard>>(emptyList())
-    val cards: StateFlow<List<UsbCard>> = _cards.asStateFlow()
+    private val _cards = MutableStateFlow<List<Card>>(emptyList())
+    override val cards: StateFlow<List<Card>> = _cards.asStateFlow()
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) = refresh()
     }
 
-    fun start() {
+    override fun start() {
         val filter = IntentFilter().apply {
             addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
@@ -45,20 +52,28 @@ class UsbCardCatalog(private val context: Context) {
         refresh()
     }
 
-    fun stop() = context.unregisterReceiver(receiver)
+    override fun stop() = context.unregisterReceiver(receiver)
 
     /** Re-reads the device list (also call when the activity gets an attach intent). */
     fun refresh() {
-        val previous = _cards.value.map { it.device.deviceName }
-        val now = usb.deviceList.values.filter(::isUvc).map { card(it) }
+        val previous = _cards.value.map { it.key }
+        val usbCards: List<Card> = usb.deviceList.values.filter(::isUvc).map { card(it) }
+        val now = usbCards.ifEmpty { camera2Cards() }
         // Keep the known order; newly attached cards go last.
-        _cards.value = now.sortedBy { previous.indexOf(it.device.deviceName).let { i -> if (i < 0) Int.MAX_VALUE else i } }
+        _cards.value = now.sortedBy { previous.indexOf(it.key).let { i -> if (i < 0) Int.MAX_VALUE else i } }
     }
 
-    fun hasPermission(card: UsbCard) = usb.hasPermission(card.device)
+    private fun camera2Cards(): List<Card> = runCatching {
+        Camera2Source(context).let { cam -> cam.externalCameras().also { cam.release() } }
+            .filter { it.formats.isNotEmpty() }.map { Camera2Card(it.id, it.formats) }
+    }.getOrDefault(emptyList())
+
+    override fun hasPermission(card: Card) = card !is UsbCard || usb.hasPermission(card.device)
+
+    override suspend fun requestPermission(card: Card): Boolean = card !is UsbCard || requestUsbPermission(card)
 
     /** Shows Android's "Allow HDMI Captain to access…" dialog; true when granted. */
-    suspend fun requestPermission(card: UsbCard): Boolean {
+    private suspend fun requestUsbPermission(card: UsbCard): Boolean {
         if (usb.hasPermission(card.device)) return true
         val action = "${context.packageName}.USB_PERMISSION"
         return suspendCancellableCoroutine { continuation ->

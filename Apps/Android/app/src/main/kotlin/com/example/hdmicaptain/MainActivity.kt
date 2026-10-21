@@ -17,16 +17,30 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.lifecycleScope
 import com.example.hdmicaptain.model.RenderOptions
 import com.example.hdmicaptain.model.TestPattern
-import com.example.hdmicaptain.render.VideoRenderer
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.example.hdmicaptain.capture.ViewerPhase
 import com.example.hdmicaptain.viewer.ViewerScreen
 import java.io.File
 
 class MainActivity : ComponentActivity() {
-    private val renderer by lazy { VideoRenderer() }
-    private val capture by lazy { CaptureCoordinator(applicationContext, lifecycleScope, renderer) }
+    private val graph by lazy { CaptureGraph(applicationContext, lifecycleScope) }
+    private val renderer get() = graph.renderer
 
     // UVC cards need CAMERA (Android 9+) before the USB grant; RECORD_AUDIO for the card's sound.
-    private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { capture.start() }
+    private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { startCapture() }
+
+    private fun startCapture() {
+        graph.controller.start()
+        // Capture follows visibility (STARTED/STOPPED), not focus: split screen and PiP keep it live.
+        lifecycle.addObserver(LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> graph.controller.onVisible()
+                Lifecycle.Event.ON_STOP -> graph.controller.onHidden()
+                else -> Unit
+            }
+        })
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,24 +52,23 @@ class MainActivity : ComponentActivity() {
         if (pattern != null) {
             renderer.startTestPattern(pattern)
         } else if (hasCapturePermissions()) {
-            capture.start()
+            startCapture()
         } else {
             permissions.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
         }
         setContent {
-            val live by capture.live.collectAsState()
-            val status by capture.status.collectAsState()
+            val phase by graph.controller.phase.collectAsState()
             MaterialTheme(colorScheme = darkColorScheme()) {
                 ViewerScreen(
                     renderer = renderer,
-                    showVideo = pattern != null || live,
-                    status = status,
-                    statsLine = if (showStats) ({ capture.uvcStats?.let { "uvc ${it.frames} raw, ${it.shortFrames} short · mjpeg ${it.compressedFrames} in, ${it.decoded} decoded, ${it.decodeDropped} dropped, ${it.decodeFailed} bad, ${"%.1f".format(it.avgDecodeNanos / 1e6)} ms" + (capture.audioLevels?.let { a -> "\naudio ${"%.0f".format(a.bufferedMs)} ms buffered, ${a.underruns} underruns, peak ${"%.2f".format(a.peakLeft)}/${"%.2f".format(a.peakRight)}" } ?: "") } }) else null,
+                    showVideo = pattern != null || phase is ViewerPhase.Live,
+                    status = phase.title(),
+                    statsLine = if (showStats) ({ statsLine() }) else null,
                 )
             }
         }
         val soakMinutes = intent.getIntExtra("qaSoakMinutes", 0)
-        if (BuildConfig.DEBUG && soakMinutes > 0) QASoak(this, renderer, capture).start(lifecycleScope, soakMinutes)
+        if (BuildConfig.DEBUG && soakMinutes > 0) QASoak(this, graph).start(lifecycleScope, soakMinutes)
         if (BuildConfig.DEBUG && intent.getStringExtra("qaAction") == "screenshot") {
             window.decorView.postDelayed({ saveQAScreenshot() }, 1500)
         }
@@ -63,14 +76,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        capture.catalog.refresh()  // launched again by a USB attach
+        graph.catalog.refresh()  // launched again by a USB attach
     }
 
     override fun onDestroy() {
-        capture.stop()
-        renderer.release()
+        graph.release()
         super.onDestroy()
     }
+
+    private fun statsLine(): String = graph.audioLevels?.let { a ->
+        "audio ${"%.0f".format(a.bufferedMs)} ms buffered, ${a.underruns} underruns, peak ${"%.2f".format(a.peakLeft)}/${"%.2f".format(a.peakRight)}"
+    } ?: ""
 
     private fun hasCapturePermissions() = listOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
         .all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
@@ -86,4 +102,16 @@ class MainActivity : ComponentActivity() {
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         Log.i("HDMICaptain", "qa screenshot: ${file.absolutePath} ${bitmap.width}x${bitmap.height}")
     }
+}
+
+/** Status line until task 078's state screens. */
+private fun ViewerPhase.title(): String = when (this) {
+    ViewerPhase.Scanning -> "Connect a capture card"
+    is ViewerPhase.UsbPermission -> if (denied) "Allow USB access to $cardName to see its picture" else "Allow USB access to $cardName"
+    is ViewerPhase.Waiting -> "$cardName is disconnected"
+    is ViewerPhase.Connecting -> if (slow) "Connecting to $cardName… (taking longer than usual)" else "Connecting to $cardName…"
+    is ViewerPhase.Live -> "${info.deviceName} · ${info.width}×${info.height} ${info.fourCC} @ ${info.frameRate} · $speed"
+    is ViewerPhase.Recovering -> if (reason == "No signal") "No HDMI signal" else "Reconnecting… ($reason)"
+    is ViewerPhase.Paused -> "Paused"
+    is ViewerPhase.Failed -> message
 }

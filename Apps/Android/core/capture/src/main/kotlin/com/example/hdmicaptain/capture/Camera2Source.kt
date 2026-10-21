@@ -35,6 +35,9 @@ class Camera2Source(private val context: Context) {
 
     @Volatile var framesDelivered = 0L
         private set
+    /** System.nanoTime() of the last frame (same monotonic clock as the native sources). */
+    @Volatile var lastFrameNanos = 0L
+        private set
 
     /** External cameras and what they offer (YUV_420_888 sizes × the camera's AE fps ranges). */
     fun externalCameras(): List<ExternalCamera> = cameras.cameraIdList.mapNotNull { id ->
@@ -76,6 +79,7 @@ class Camera2Source(private val context: Context) {
                 y.buffer, y.rowStride, u.buffer, v.buffer, u.rowStride, u.pixelStride,
             )
             framesDelivered++
+            lastFrameNanos = System.nanoTime()
             image.close()
         }, handler)
         reader = imageReader

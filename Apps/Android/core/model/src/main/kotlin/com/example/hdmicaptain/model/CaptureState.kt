@@ -33,6 +33,8 @@ object RecoveryReason {
     const val DISCONNECTED = "Device disconnected"
     const val WAITING = "Waiting for device"
     const val STOPPED = "Capture stopped"
+    /** Streaming started but no frame arrived (Android: often the Camera privacy switch). */
+    const val NO_FRAMES = "No frames"
 }
 
 /** Restart delay for the n-th consecutive attempt (1-based): 0.25 s doubling, capped at 4 s. */
