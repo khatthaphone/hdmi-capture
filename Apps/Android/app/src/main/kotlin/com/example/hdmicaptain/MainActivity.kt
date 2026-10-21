@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
                     renderer = renderer,
                     showVideo = pattern != null || live,
                     status = status,
-                    statsLine = if (showStats) ({ capture.uvcStats?.let { "uvc ${it.frames} frames, ${it.shortFrames} short, ${it.compressedFrames} mjpeg" } }) else null,
+                    statsLine = if (showStats) ({ capture.uvcStats?.let { "uvc ${it.frames} raw, ${it.shortFrames} short · mjpeg ${it.compressedFrames} in, ${it.decoded} decoded, ${it.decodeDropped} dropped, ${it.decodeFailed} bad, ${"%.1f".format(it.avgDecodeNanos / 1e6)} ms" } }) else null,
                 )
             }
         }

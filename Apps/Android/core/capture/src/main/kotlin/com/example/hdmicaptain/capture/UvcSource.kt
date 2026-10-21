@@ -17,7 +17,17 @@ class UvcSource {
     /** What the card offers, parsed from its descriptors. */
     data class Description(val link: UsbLink?, val speed: String, val formats: List<FormatDescriptor>, val json: String)
 
-    data class Stats(val frames: Long, val shortFrames: Long, val compressedFrames: Long, val lastFrameNanos: Long)
+    data class Stats(
+        val frames: Long,
+        val shortFrames: Long,
+        val compressedFrames: Long,
+        val lastFrameNanos: Long,
+        /** MJPEG decode (task 074). */
+        val decoded: Long,
+        val decodeDropped: Long,
+        val decodeFailed: Long,
+        val avgDecodeNanos: Long,
+    )
 
     class UvcException(message: String) : Exception(message)
 
@@ -62,9 +72,9 @@ class UvcSource {
     }
 
     fun stats(): Stats {
-        val v = LongArray(4)
+        val v = LongArray(8)
         nativeStats(handle, v)
-        return Stats(v[0], v[1], v[2], v[3])
+        return Stats(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7])
     }
 
     fun release() {

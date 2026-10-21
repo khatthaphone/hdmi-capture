@@ -104,6 +104,7 @@ std::string UvcSource::start(const std::string &cc, int width, int height, int f
     compressed_ = cc == "MJPG";
     format_ = cc == "NV12" ? PixelFormat::NV12 : cc == "I420" ? PixelFormat::I420 : PixelFormat::YUY2;
     ring_ = ring;
+    decoder_.setRing(compressed_ ? ring : nullptr);
     {
         std::lock_guard<std::mutex> lock(statsMutex_);
         stats_ = {};
@@ -122,6 +123,7 @@ void UvcSource::stop() {
     if (devh_ && streaming_) uvc_stop_streaming(devh_);
     streaming_ = false;
     ring_ = nullptr;
+    decoder_.setRing(nullptr);
 }
 
 void UvcSource::close() {
@@ -143,7 +145,7 @@ void UvcSource::onFrame(uvc_frame_t *frame, void *self) { static_cast<UvcSource 
 void UvcSource::deliver(uvc_frame_t *frame) {
     int64_t now = nowNs();
     if (compressed_) {
-        // MJPEG decode arrives with task 074; count frames so the spike can measure delivery.
+        decoder_.submit(static_cast<const uint8_t *>(frame->data), frame->data_bytes, now);
         std::lock_guard<std::mutex> lock(statsMutex_);
         stats_.compressed++;
         stats_.lastFrameNs = now;

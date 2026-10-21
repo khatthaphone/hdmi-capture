@@ -52,12 +52,13 @@ Java_com_example_hdmicaptain_capture_UvcSource_nativeClose(JNIEnv *, jclass, jlo
     source(handle)->close();
 }
 
-// out = [frames, shortFrames, compressed, lastFrameNs]
+// out = [frames, shortFrames, compressed, lastFrameNs, decoded, decodeDropped, decodeFailed, avgDecodeNs]
 JNIEXPORT void JNICALL
 Java_com_example_hdmicaptain_capture_UvcSource_nativeStats(JNIEnv *env, jclass, jlong handle, jlongArray out) {
     hdmi::UvcStats s = source(handle)->stats();
-    jlong v[4] = {s.frames, s.shortFrames, s.compressed, s.lastFrameNs};
-    env->SetLongArrayRegion(out, 0, 4, v);
+    hdmi::MjpegStats d = source(handle)->decoderStats();
+    jlong v[8] = {s.frames, s.shortFrames, s.compressed, s.lastFrameNs, d.decoded, d.dropped, d.failed, d.avgDecodeNs};
+    env->SetLongArrayRegion(out, 0, 8, v);
 }
 
 }  // extern "C"

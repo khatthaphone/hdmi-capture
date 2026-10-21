@@ -11,13 +11,14 @@
 #include <vector>
 
 #include "frame.h"
+#include "mjpeg_decoder.h"
 
 namespace hdmi {
 
 struct UvcStats {
     int64_t frames = 0;       // complete frames handed to the ring
     int64_t shortFrames = 0;  // dropped: fewer bytes than the format needs (missed isochronous packets)
-    int64_t compressed = 0;   // MJPEG frames received (decoded from task 074 on)
+    int64_t compressed = 0;   // MJPEG frames received (decoded by MjpegDecoder)
     int64_t lastFrameNs = 0;
 };
 
@@ -36,6 +37,7 @@ public:
     void stop();
     void close();
     UvcStats stats();
+    MjpegStats decoderStats() { return decoder_.stats(); }
 
 private:
     static void onFrame(uvc_frame_t *frame, void *self);
@@ -49,6 +51,7 @@ private:
     bool streaming_ = false;
     std::mutex statsMutex_;
     UvcStats stats_;
+    MjpegDecoder decoder_;
 };
 
 }  // namespace hdmi
