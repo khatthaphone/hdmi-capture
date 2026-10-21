@@ -290,7 +290,9 @@ struct ProCommands: Commands {
             if ProFeature.shown.contains(.streaming) {
                 item(.streaming, app.streamer.state.isActive ? "Stop Streaming" : "Go Live…", key: "l", modifiers: [.command, .shift])
             }
-            item(.virtualCamera, "Virtual Camera", key: nil, modifiers: [])
+            if ProFeature.shown.contains(.virtualCamera) {
+                item(.virtualCamera, "Virtual Camera", key: nil, modifiers: [])
+            }
             Divider()
             Button(store.isPro ? "HDMI Captain Pro ✓" : "Upgrade to Pro…") {
                 store.requestUpgrade()
