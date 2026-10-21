@@ -2,6 +2,7 @@
 // No Android dependencies, so it tests fast and mirrors CaptureCore's platform-free code.
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {
@@ -9,8 +10,8 @@ kotlin {
 }
 
 dependencies {
+    api(libs.kotlinx.serialization.json)
     testImplementation(libs.junit)
-    testImplementation(libs.kotlinx.serialization.json)
 }
 
 // Shared JSON vectors, also read by the Swift tests (docs/fixtures/README.md).

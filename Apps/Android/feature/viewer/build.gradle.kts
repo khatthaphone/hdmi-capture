@@ -19,6 +19,7 @@ dependencies {
     implementation(project(":core:capture"))
     implementation(project(":core:render"))
     implementation(project(":core:audio"))
+    api(project(":core:prefs"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)

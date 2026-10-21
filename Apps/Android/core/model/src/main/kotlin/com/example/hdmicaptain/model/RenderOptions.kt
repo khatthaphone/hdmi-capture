@@ -1,13 +1,18 @@
 package com.example.hdmicaptain.model
 
+import kotlinx.serialization.Serializable
+
 // Picture options, same cases as CaptureCore's RenderOptions. Ordinals are passed to the native
 // renderer, so keep the order in sync with core/render/src/main/cpp (geometry.h, renderer.h).
 
+@Serializable
 enum class ScaleMode { Fit, Fill, Stretch, Integer }
 
+@Serializable
 enum class FilterMode { Linear, Nearest }
 
 /** Auto trusts the source's full-range flag. */
+@Serializable
 enum class ColorRange { Auto, Limited, Full }
 
 data class RenderOptions(

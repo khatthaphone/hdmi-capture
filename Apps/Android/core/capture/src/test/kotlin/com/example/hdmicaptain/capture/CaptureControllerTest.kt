@@ -86,7 +86,7 @@ class CaptureControllerTest {
     private val catalog = FakeCatalog()
     private val driver = FakeDriver { dispatcher.scheduler.currentTime * 1_000_000 }
     private val audio = FakeAudio()
-    private val controller = CaptureController(scope, dispatcher, catalog, driver, audio) { dispatcher.scheduler.currentTime * 1_000_000 }
+    private val controller = CaptureController(scope, dispatcher, catalog, driver, audio, nanoTime = { dispatcher.scheduler.currentTime * 1_000_000 })
     private val ugreen = FakeCard("usb:1DE1:F105|name:UGREEN-25854", "UGREEN-25854")
     private val ms2131 = FakeCard("usb:345F:2131|name:UGREEN HDMI Capture", "UGREEN HDMI Capture")
 

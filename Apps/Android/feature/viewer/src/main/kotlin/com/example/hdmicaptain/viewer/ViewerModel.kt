@@ -6,9 +6,11 @@ import com.example.hdmicaptain.capture.Card
 import com.example.hdmicaptain.capture.CaptureController
 import com.example.hdmicaptain.capture.ViewerPhase
 import com.example.hdmicaptain.model.AudioSettings
+import com.example.hdmicaptain.model.DevicePreset
 import com.example.hdmicaptain.model.FilterMode
 import com.example.hdmicaptain.model.RenderOptions
 import com.example.hdmicaptain.model.ScaleMode
+import com.example.hdmicaptain.prefs.PrefsStore
 import com.example.hdmicaptain.render.VideoRenderer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,7 +19,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -36,8 +37,14 @@ class ViewerModel(
     private val audio: CardAudioPort,
     /** Cards for the input menu. */
     val cards: StateFlow<List<Card>>,
+    private val prefs: PrefsStore,
 ) {
     val phase: StateFlow<ViewerPhase> get() = controller.phase
+
+    private val _preset = MutableStateFlow(DevicePreset())
+    /** The current card's settings (saved per card, spec §12.2). */
+    val preset: StateFlow<DevicePreset> = _preset.asStateFlow()
+    private var presetCardKey: String? = null
 
     private val _options = MutableStateFlow(RenderOptions())
     val options: StateFlow<RenderOptions> = _options.asStateFlow()
@@ -63,6 +70,33 @@ class ViewerModel(
     init {
         renderer.setOptions(_options.value)
         pokeControls()
+        scope.launch { _showDiagnostics.value = prefs.appPrefs().showDiagnostics }
+        // A card came (back): restore its picture and sound settings.
+        scope.launch {
+            controller.currentCard.collect { card ->
+                if (card == null || card.key == presetCardKey) return@collect
+                presetCardKey = card.key
+                prefs.setLastCard(card.key)
+                apply(prefs.preset(card.key), save = false)
+            }
+        }
+    }
+
+    /** Settings changed something in the preset. */
+    fun updatePreset(next: DevicePreset) {
+        val formatChanged = next.format != _preset.value.format
+        apply(next, save = true)
+        if (formatChanged) controller.applyFormat(next.format)
+    }
+
+    private fun apply(next: DevicePreset, save: Boolean) {
+        _preset.value = next
+        _options.value = next.renderOptions
+        renderer.setOptions(next.renderOptions)
+        _audioSettings.value = next.audioSettings
+        audio.settings = next.audioSettings
+        val key = presetCardKey
+        if (save && key != null) scope.launch { prefs.save(key, next) }
     }
 
     fun setScale(mode: ScaleMode) = updateOptions { it.copy(scale = mode) }
@@ -75,6 +109,7 @@ class ViewerModel(
 
     fun setShowDiagnostics(on: Boolean) {
         _showDiagnostics.value = on
+        scope.launch { prefs.setShowDiagnostics(on) }
     }
 
     /** Tap on the video: show or hide the bar. */
@@ -117,14 +152,12 @@ class ViewerModel(
     }
 
     private fun updateOptions(change: (RenderOptions) -> RenderOptions) {
-        _options.update(change)
-        renderer.setOptions(_options.value)
+        apply(_preset.value.with(change(_options.value)), save = true)
         pokeControls()
     }
 
     private fun updateAudio(change: (AudioSettings) -> AudioSettings) {
-        _audioSettings.update(change)
-        audio.settings = _audioSettings.value
+        apply(_preset.value.with(change(_audioSettings.value)), save = true)
         pokeControls()
     }
 }

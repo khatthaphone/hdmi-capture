@@ -1,5 +1,6 @@
 package com.example.hdmicaptain.model
 
+import kotlinx.serialization.Serializable
 import kotlin.math.abs
 
 /** A frame-rate range a capture format supports, in frames per second. */
@@ -55,11 +56,14 @@ enum class UsbLink(val bytesPerSecond: Double) {
     Usb3(300_000_000.0),
 }
 
+@Serializable
 sealed interface FormatPreference {
     /** Smooth frame rate first, then 16:9, then highest resolution. */
+    @Serializable
     data object Auto : FormatPreference
 
     /** A specific resolution, optionally at a specific frame rate. */
+    @Serializable
     data class Pinned(val width: Int, val height: Int, val frameRate: Double?) : FormatPreference
 }
 

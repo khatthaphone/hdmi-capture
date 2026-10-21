@@ -17,6 +17,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -27,7 +29,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.lifecycleScope
 import com.example.hdmicaptain.capture.ViewerPhase
+import com.example.hdmicaptain.model.DevicePreset
+import com.example.hdmicaptain.model.FormatPreference
 import com.example.hdmicaptain.model.TestPattern
+import com.example.hdmicaptain.settings.SettingsActions
+import com.example.hdmicaptain.settings.SettingsScreen
+import com.example.hdmicaptain.settings.SettingsState
 import com.example.hdmicaptain.viewer.Feedback
 import com.example.hdmicaptain.viewer.HdmiCaptainTheme
 import com.example.hdmicaptain.viewer.PermissionPhase
@@ -40,11 +47,12 @@ import java.io.File
 class MainActivity : ComponentActivity() {
     private val graph by lazy { CaptureGraph(applicationContext, lifecycleScope) }
     private val model by lazy {
-        ViewerModel(applicationContext, lifecycleScope, graph.renderer, graph.controller, graph.audio, graph.catalog.cards)
+        ViewerModel(applicationContext, lifecycleScope, graph.renderer, graph.controller, graph.audio, graph.catalog.cards, graph.prefs)
     }
 
     private var permission by mutableStateOf<PermissionPhase?>(null)
     private var inPip by mutableStateOf(false)
+    private var showSettings by mutableStateOf(false)
     private var captureStarted = false
 
     // UVC cards need CAMERA (Android 9+) before the USB grant; RECORD_AUDIO for the card's sound.
@@ -66,7 +74,9 @@ class MainActivity : ComponentActivity() {
         override fun record() = model.show(Feedback("Recording comes with HDMI Captain Pro"))
         override fun saveRecent() = model.show(Feedback("Save Recent comes with HDMI Captain Pro"))
         override fun pictureInPicture() = enterPip()
-        override fun openSettings() = model.show(Feedback("Settings open from here soon"))
+        override fun openSettings() {
+            showSettings = true
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,6 +97,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             HdmiCaptainTheme {
                 ViewerScreen(model, host, permission, testPattern = pattern != null, inPictureInPicture = inPip)
+                if (showSettings) Settings(onDone = { showSettings = false })
             }
         }
         lifecycleScope.launch {
@@ -110,7 +121,11 @@ class MainActivity : ComponentActivity() {
         permission = null
         if (captureStarted) return
         captureStarted = true
-        graph.controller.start()
+        lifecycleScope.launch {
+            // Come back to the card used last time (spec §12.2).
+            graph.controller.preferredKey = graph.prefs.appPrefs().lastCardKey
+            graph.controller.start()
+        }
         // Capture follows visibility (STARTED/STOPPED), not focus: split screen and PiP keep it live.
         lifecycle.addObserver(LifecycleEventObserver { _, event ->
             when (event) {
@@ -162,6 +177,26 @@ class MainActivity : ComponentActivity() {
 
     private fun enterPip() {
         runCatching { enterPictureInPictureMode(pipParams(graph.controller.phase.value)) }
+    }
+
+    @Composable
+    private fun Settings(onDone: () -> Unit) {
+        val preset by model.preset.collectAsState()
+        val cards by graph.catalog.cards.collectAsState()
+        val card by graph.controller.currentCard.collectAsState()
+        val formats by graph.controller.formatOptions.collectAsState()
+        val diagnostics by model.showDiagnostics.collectAsState()
+        SettingsScreen(
+            SettingsState(cards.map { it.key to it.name }, card?.key, formats, preset, diagnostics, BuildConfig.VERSION_NAME),
+            object : SettingsActions {
+                override fun selectCard(key: String) { graph.controller.select(key) }
+                override fun setFormat(format: FormatPreference) = model.updatePreset(model.preset.value.copy(format = format))
+                override fun update(preset: DevicePreset) = model.updatePreset(preset)
+                override fun setShowDiagnostics(on: Boolean) = model.setShowDiagnostics(on)
+                override fun showLicenses() = model.show(Feedback("Licenses: libusb (LGPL-2.1), libuvc (BSD), libjpeg-turbo (BSD/IJG), Oboe (Apache-2.0)"))
+            },
+            onDone,
+        )
     }
 
     private fun hasCapturePermissions() = capturePermissions.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }

@@ -83,6 +83,8 @@ class CaptureController(
     private val driver: CaptureDriver,
     private val audio: AudioPort?,
     private val nanoTime: () -> Long = System::nanoTime,
+    /** The card's saved format (its DevicePreset), asked for before each open. */
+    private val formatFor: suspend (Card) -> FormatPreference = { FormatPreference.Auto },
 ) {
     private val _phase = MutableStateFlow<ViewerPhase>(ViewerPhase.Scanning)
     val phase: StateFlow<ViewerPhase> = _phase.asStateFlow()
@@ -91,6 +93,14 @@ class CaptureController(
     var preferredKey: String? = null
     /** Settings → Format; Auto by default. */
     var formatPreference: FormatPreference = FormatPreference.Auto
+
+    private val _currentCard = MutableStateFlow<Card?>(null)
+    /** The card being shown (or waited for). */
+    val currentCard: StateFlow<Card?> = _currentCard.asStateFlow()
+
+    private val _formatOptions = MutableStateFlow<List<FormatPreference.Pinned>>(emptyList())
+    /** What the open card can do over this USB link, best first (Settings → Format). */
+    val formatOptions: StateFlow<List<FormatPreference.Pinned>> = _formatOptions.asStateFlow()
 
     private val machine = RecoveryMachine()
     private var card: Card? = null
@@ -171,7 +181,9 @@ class CaptureController(
     private suspend fun choose(next: Card) {
         if (card != null && card?.key != next.key) perform(machine.handle(CaptureEvent.Stop))
         card = next
+        _currentCard.value = next
         preferredKey = next.key
+        formatPreference = formatFor(next)
         if (!catalog.hasPermission(next)) {
             _phase.value = ViewerPhase.UsbPermission(next.name, denied = false)
             if (!catalog.requestPermission(next)) {
@@ -209,6 +221,7 @@ class CaptureController(
                 ?: throw IllegalStateException("The card offers no usable video format")
             driver.start(choice)
             opened = result
+            _formatOptions.value = FormatSelector.options(result.formats, result.link)
             pendingInfo = LiveInfo(target.name, choice.format.width, choice.format.height, choice.frameRate, choice.format.fourCC)
             openedAt = nanoTime()
             framesAtOpen = driver.progress().frames

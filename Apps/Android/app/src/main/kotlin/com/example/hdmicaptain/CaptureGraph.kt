@@ -9,6 +9,7 @@ import com.example.hdmicaptain.capture.Camera2Card
 import com.example.hdmicaptain.capture.Card
 import com.example.hdmicaptain.capture.CaptureController
 import com.example.hdmicaptain.capture.UsbCardCatalog
+import com.example.hdmicaptain.prefs.PrefsStore
 import com.example.hdmicaptain.render.VideoRenderer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +22,7 @@ class CaptureGraph(private val context: Context, scope: CoroutineScope) {
     val renderer = VideoRenderer()
     val catalog = UsbCardCatalog(context)
     val audio = CardAudioPort(context)
+    val prefs = PrefsStore(context)
     private val driver = AndroidCaptureDriver(context, catalog, renderer::ringHandle) { json ->
         if (BuildConfig.DEBUG) File(context.filesDir, "qa-descriptors.json").writeText(json)
     }
@@ -38,6 +40,7 @@ class CaptureGraph(private val context: Context, scope: CoroutineScope) {
 
             override fun stop() = audio.stop()
         },
+        formatFor = { card -> prefs.preset(card.key).format },
     )
 
     val audioLevels: CardAudio.Levels? get() = audio.levels
