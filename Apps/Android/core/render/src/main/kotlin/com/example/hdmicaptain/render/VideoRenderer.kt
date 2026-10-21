@@ -57,6 +57,9 @@ class VideoRenderer {
      */
     fun setEncoder(id: Int, surface: Surface?) = nativeSetEncoder(handle, id, surface)
 
+    /** An external display's surface (clean picture, fit, with the look); null removes it. */
+    fun setExternal(surface: Surface?) = nativeSetExternal(handle, surface)
+
     /** Scopes on: the renderer keeps a 320×180 Y/Cb/Cr sample grid of every 5th frame. */
     fun setScopes(on: Boolean) = nativeSetScopes(handle, on)
 
@@ -104,6 +107,7 @@ class VideoRenderer {
         @JvmStatic private external fun nativeSetLook(handle: Long, adjust: FloatArray, lut: FloatArray?, lutSize: Int, intensity: Float, domain: FloatArray?)
         @JvmStatic private external fun nativeSignal(handle: Long, out: DoubleArray)
         @JvmStatic private external fun nativeSetEncoder(handle: Long, id: Int, surface: Surface?)
+        @JvmStatic private external fun nativeSetExternal(handle: Long, surface: Surface?)
         @JvmStatic private external fun nativeSetScopes(handle: Long, on: Boolean)
         @JvmStatic private external fun nativeScopeSamples(handle: Long, out: ByteArray): Long
         @JvmStatic private external fun nativeStats(handle: Long, out: LongArray)

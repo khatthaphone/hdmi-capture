@@ -201,6 +201,7 @@ Research: `docs/research/android.md`. The stack is confirmed or changed by the s
 
 ### 12.8 Outputs & Pro
 - Screenshot (free): read the rendered frame from the GL framebuffer → PNG in MediaStore `Pictures/HDMI Captain`.
+- External display (free, like the iPad): a `Presentation` on any presentation display (USB-C DisplayPort, HDMI adapter, Miracast) shows the clean picture full screen; the phone keeps the controls. The renderer draws it as a second window without vsync so the phone never waits on it.
 - Recording and Save Recent (Pro): MediaCodec HEVC/H.264 from an encoder input surface fed the same frames + AAC → MP4 in `Movies/HDMI Captain`; Save Recent keeps an encoded ring like `RollingRecorder`.
 - Pro = one Play Billing one-time product (non-consumable: acknowledged, never consumed); purchases re-queried on launch; one gate equivalent to `EntitlementStore.gate`; free features never check it.
 

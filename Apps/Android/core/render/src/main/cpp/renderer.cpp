@@ -220,6 +220,15 @@ void Renderer::setEncoder(int id, ANativeWindow *window) {
     cv_.wait_for(lock, std::chrono::seconds(2), [this] { return !encodersChanged_ || !running_; });
 }
 
+void Renderer::setExternal(ANativeWindow *window) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (pendingExternal_) ANativeWindow_release(pendingExternal_);
+    pendingExternal_ = window;
+    externalChanged_ = true;
+    cv_.notify_all();
+    cv_.wait_for(lock, std::chrono::seconds(2), [this] { return !externalChanged_ || !running_; });
+}
+
 void Renderer::applyEncoderChanges(std::vector<std::pair<int, ANativeWindow *>> changes) {
     for (auto &[id, window] : changes) {
         auto existing = encoders_.find(id);
@@ -545,11 +554,13 @@ void Renderer::uploadLook(const Look &look) {
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 }
 
-void Renderer::present(int64_t arrivalNs) {
-    ATrace_beginSection("present");
+// Fits the picture (with the look) into a window surface and presents it.
+void Renderer::drawScaled(EGLSurface surface, bool vsync) {
     EGLint w = 0, h = 0;
-    eglQuerySurface(display_, surface_, EGL_WIDTH, &w);
-    eglQuerySurface(display_, surface_, EGL_HEIGHT, &h);
+    eglMakeCurrent(display_, surface, surface, context_);
+    eglSwapInterval(display_, vsync ? 1 : 0);
+    eglQuerySurface(display_, surface, EGL_WIDTH, &w);
+    eglQuerySurface(display_, surface, EGL_HEIGHT, &h);
     RenderGeometry g = RenderGeometry::compute(float(frameWidth_), float(frameHeight_), float(w), float(h), active_.scale);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, w, h);
@@ -574,7 +585,14 @@ void Renderer::present(int64_t arrivalNs) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
     glBindVertexArray(vao_);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    eglSwapBuffers(display_, surface_);
+    eglSwapBuffers(display_, surface);
+}
+
+void Renderer::present(int64_t arrivalNs) {
+    ATrace_beginSection("present");
+    // External display first, without vsync, so the phone's own picture never waits on it.
+    if (externalSurface_ != EGL_NO_SURFACE) drawScaled(externalSurface_, false);
+    if (surface_ != EGL_NO_SURFACE) drawScaled(surface_, true);
     ATrace_endSection();
 
     std::lock_guard<std::mutex> lock(mutex_);
@@ -616,7 +634,7 @@ void Renderer::run() {
         {
             std::unique_lock<std::mutex> lock(mutex_);
             cv_.wait(lock, [this] {
-                return !running_ || windowChanged_ || encodersChanged_ || optionsChanged_ || lookChanged_ || screenshotRequested_ ||
+                return !running_ || windowChanged_ || externalChanged_ || encodersChanged_ || optionsChanged_ || lookChanged_ || screenshotRequested_ ||
                        ring_.hasFresh() || patternRing_.hasFresh();
             });
             if (!running_) break;
@@ -635,6 +653,25 @@ void Renderer::run() {
                 if (lutChanged) uploadLook(activeLook_);
             }
             wantScreenshot = screenshotRequested_;
+            if (externalChanged_) {
+                if (externalSurface_ != EGL_NO_SURFACE) {
+                    eglMakeCurrent(display_, pbuffer_, pbuffer_, context_);
+                    eglDestroySurface(display_, externalSurface_);
+                    externalSurface_ = EGL_NO_SURFACE;
+                }
+                if (externalWindow_) ANativeWindow_release(externalWindow_);
+                externalWindow_ = pendingExternal_;
+                pendingExternal_ = nullptr;
+                if (externalWindow_) {
+                    externalSurface_ = eglCreateWindowSurface(display_, config_, externalWindow_, nullptr);
+                    if (externalSurface_ == EGL_NO_SURFACE) LOGE("external surface failed: 0x%x", eglGetError());
+                }
+                EGLSurface current = surface_ != EGL_NO_SURFACE ? surface_ : pbuffer_;
+                eglMakeCurrent(display_, current, current, context_);
+                externalChanged_ = false;
+                optionsChanged = true;  // draw the current frame on it right away
+                cv_.notify_all();
+            }
             if (encodersChanged_) {
                 applyEncoderChanges(std::move(pendingEncoders_));
                 pendingEncoders_.clear();
@@ -690,7 +727,7 @@ void Renderer::run() {
             cv_.notify_all();
         }
 
-        if (hasFrame_ && surface_ != EGL_NO_SURFACE && (fresh || windowChanged || optionsChanged)) {
+        if (hasFrame_ && (surface_ != EGL_NO_SURFACE || externalSurface_ != EGL_NO_SURFACE) && (fresh || windowChanged || optionsChanged)) {
             present(arrival);
             updateHint(interval > 0 ? 1.f / interval : 60.f, nowNs() - workStart);
             // Ask the display to match the source rate (60 fps on a 90/120 Hz panel), Android 11+.
@@ -709,6 +746,8 @@ void Renderer::run() {
         if (hintSession_) APerformanceHint_closeSession(static_cast<APerformanceHintSession *>(hintSession_));
     }
     detachWindow();
+    if (externalSurface_ != EGL_NO_SURFACE) eglDestroySurface(display_, externalSurface_);
+    if (externalWindow_) ANativeWindow_release(externalWindow_);
     std::vector<std::pair<int, ANativeWindow *>> removeAll;
     for (auto &[id, encoder] : encoders_) removeAll.emplace_back(id, nullptr);
     applyEncoderChanges(std::move(removeAll));

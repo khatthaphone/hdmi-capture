@@ -93,6 +93,11 @@ Java_com_example_hdmicaptain_render_VideoRenderer_nativeScopeSamples(JNIEnv *env
     return sequence;
 }
 
+JNIEXPORT void JNICALL
+Java_com_example_hdmicaptain_render_VideoRenderer_nativeSetExternal(JNIEnv *env, jclass, jlong handle, jobject surface) {
+    renderer(handle)->setExternal(surface ? ANativeWindow_fromSurface(env, surface) : nullptr);
+}
+
 // out = [meanY, meanCb, meanCr, rangeY, rangeChroma, fullRange, count]
 JNIEXPORT void JNICALL
 Java_com_example_hdmicaptain_render_VideoRenderer_nativeSignal(JNIEnv *env, jclass, jlong handle, jdoubleArray out) {

@@ -79,6 +79,9 @@ public:
     // A video encoder's input surface (MediaCodec): every new frame is drawn into it at source size,
     // clean (no UI, no look), stamped with its arrival time. nullptr removes it. Blocks until applied.
     void setEncoder(int id, ANativeWindow *window);
+    // An external display (Presentation): the clean picture, fit to it, with the current look.
+    // nullptr removes it. Blocks until applied.
+    void setExternal(ANativeWindow *window);
     SignalSample signal();
     // Scopes: while enabled, every 5th frame leaves a 320×180 grid of Y,Cb,Cr bytes (interleaved).
     void setScopesEnabled(bool on) { scopesEnabled_ = on; }
@@ -118,6 +121,8 @@ private:
     RenderOptions options_;
     std::vector<std::pair<int, ANativeWindow *>> pendingEncoders_;
     bool encodersChanged_ = false;
+    bool externalChanged_ = false;
+    ANativeWindow *pendingExternal_ = nullptr;
     bool lookChanged_ = false;
     Look look_;
     SignalSample signal_;
@@ -149,6 +154,9 @@ private:
         EGLSurface surface = EGL_NO_SURFACE;
     };
     std::map<int, Encoder> encoders_;
+    ANativeWindow *externalWindow_ = nullptr;
+    EGLSurface externalSurface_ = EGL_NO_SURFACE;
+    void drawScaled(EGLSurface surface, bool vsync);
     PFNEGLPRESENTATIONTIMEANDROIDPROC presentationTime_ = nullptr;
     void *hintSession_ = nullptr;  // APerformanceHintSession (Android 13+)
     int64_t hintTargetNs_ = 0;

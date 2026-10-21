@@ -60,6 +60,8 @@ class MainActivity : ComponentActivity() {
     // Product ID = <application id>.pro, as on Apple (ADR 0004).
     private val pro by lazy { ProStore(applicationContext, lifecycleScope, "${BuildConfig.APPLICATION_ID}.pro") }
 
+    private val externalDisplay by lazy { ExternalDisplay(this, graph.renderer) }
+
     private var permission by mutableStateOf<PermissionPhase?>(null)
     private var inPip by mutableStateOf(false)
     private var showSettings by mutableStateOf(false)
@@ -110,6 +112,7 @@ class MainActivity : ComponentActivity() {
         // DEBUG launch extras mirror the Apple QA arguments: --es testPattern smpteBars, --ez qaShowStats true.
         val pattern = TestPattern.fromKey(intent.getStringExtra("testPattern"))
         pro.start()
+        externalDisplay.start()
         if (BuildConfig.DEBUG) {
             pro.debugUnlock = intent.getBooleanExtra("debugUnlockPro", false)
             if (intent.getStringExtra("qaAction") == "upgrade") pro.requestUpgrade()
@@ -191,6 +194,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        externalDisplay.stop()
         graph.release()
         super.onDestroy()
     }
