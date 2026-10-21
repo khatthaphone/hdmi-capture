@@ -109,7 +109,7 @@ Data flow: `DeviceCatalog` → selected device → `CaptureEngine` (session queu
 | 0 | Confirm root cause, device inventory, project scaffold |
 | 1 | macOS MVP viewer (§5) |
 | 2 | Snapshot, recording (AVAssetWriter, HEVC/H.264), latency HUD, multi-device windows, Sparkle |
-| 3 | iPadOS target (USB-C iPads, iPadOS 17+) reusing CaptureCore + `Apps/Shared`; instant resume after backgrounding (OS-enforced), multitasking camera access in Stage Manager, external-display clean feed. Tasks 020–021, 049–058 |
+| 3 | iPadOS target (USB-C iPads, iPadOS 17+) reusing CaptureCore + `Apps/Shared`. **Shipped in code (2026-10-21):** live 1080p60 (420f) at ~30 ms on screen, HDMI audio only via the card's USB route, Paused screen + instant resume for OS interruptions (multitasking camera access where supported; not on A12Z), Settings sheet, iPadOS menu bar, screenshots/recordings/Save Recent to Files + Photos, external-display clean feed (untested), 30-min soak passed (`docs/research/devices/ipad-pro-11-2g.md`). Tasks 020–021, 049–058 |
 | 4 | Mini-OBS: scene schema, Metal compositor (HDMI, webcam, ScreenCaptureKit, image, text, browser, chroma key), audio mixer, RTMP/SRT via HaishinKit, CoreMediaIO **virtual camera** |
 | 5 | Android: Kotlin/Compose, UVC via USB Host + libuvc (Camera2 external where available), UAC audio, RootEncoder streaming |
 | 6 | Windows: WinUI 3 + Media Foundation `MediaCapture`, D3D11 render, MF/FFmpeg-LGPL encode |
