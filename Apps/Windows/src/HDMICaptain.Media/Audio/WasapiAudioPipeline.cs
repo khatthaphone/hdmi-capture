@@ -166,7 +166,7 @@ public sealed class WasapiAudioPipeline : IDisposable
         {
             client?.Dispose();
             if (device != null) Marshal.FinalReleaseComObject(device);
-            if (enumerator != null) Marshal.FinalReleaseComObject(enumerator);
+            if (enumerator != null) Marshal.ReleaseComObject(enumerator);
         }
     }
 
@@ -261,7 +261,7 @@ public sealed class WasapiAudioPipeline : IDisposable
         {
             client?.Dispose();
             if (device != null) Marshal.FinalReleaseComObject(device);
-            Marshal.FinalReleaseComObject(enumerator);
+            Marshal.ReleaseComObject(enumerator);
         }
     }
 
@@ -420,7 +420,7 @@ public sealed class WasapiAudioPipeline : IDisposable
         public void Dispose()
         {
             _enumerator.UnregisterEndpointNotificationCallback(this);
-            Marshal.FinalReleaseComObject(_enumerator);
+            Marshal.ReleaseComObject(_enumerator);
         }
     }
 }

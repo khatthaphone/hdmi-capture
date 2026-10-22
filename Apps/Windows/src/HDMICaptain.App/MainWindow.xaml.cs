@@ -3,6 +3,7 @@ using System.Diagnostics;
 using HDMICaptain.App.Video;
 using HDMICaptain.App.ViewModels;
 using HDMICaptain.App.Views;
+using HDMICaptain.App.Store;
 using HDMICaptain.App.Windowing;
 using HDMICaptain.Core;
 using HDMICaptain.Media.Audio;
@@ -37,6 +38,7 @@ public sealed partial class MainWindow : Window
     private readonly TrayIcon _tray;
     private readonly PrefsStore _prefs = new();
     private readonly SettingsModel _settings;
+    private readonly ProGate _pro;
     private readonly DispatcherTimer _statsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _idleTimer = new() { Interval = IdleDelay };
     private readonly DispatcherTimer _toastTimer = new() { Interval = TimeSpan.FromSeconds(2) };
@@ -90,6 +92,8 @@ public sealed partial class MainWindow : Window
         if (options.QaShowStats) Model.ShowDiagnostics = true;
         _settings.Changed += OnSettingsChanged;
         _settings.LutFailed += ShowToast;
+        _pro = new ProGate(CreateProStore(options));
+        _ = _pro.RefreshAsync();
         _settings.ApplyTo(_renderer);
         _audioSettings = _settings.AudioSettings;
         Model.PropertyChanged += OnModelChanged;
@@ -423,6 +427,7 @@ public sealed partial class MainWindow : Window
         items.Add(new MenuFlyoutSeparator());
         items.Add(Toggle("Show Diagnostics", Model.ShowDiagnostics, v => Model.ShowDiagnostics = v));
         items.Add(Item("Settings…", "\uE713", OpenSettings, "Ctrl+,"));
+        items.Add(Item(_pro.IsPro ? "HDMI Captain Pro" : "Upgrade to Pro…", "\uE734", () => _ = ShowUpgradeAsync(null)));
         items.Add(Item("Connection Help…", "\uE897", async () => await ConnectionHelp.ShowAsync(Content.XamlRoot)));
         items.Add(Toggle("Keep Window on Top", Model.AlwaysOnTop, v => Model.AlwaysOnTop = v, "Ctrl+T"));
         items.Add(Toggle("Clean Mode", Model.CleanMode, v => Model.CleanMode = v));
@@ -669,6 +674,33 @@ public sealed partial class MainWindow : Window
 
     private void OpenSettings() => SettingsWindow.Show(_settings, _capture);
 
+    /// <summary>The Store add-on; DEBUG builds without package identity (or with -debugUnlockPro) use the fake store.</summary>
+    private IProStore CreateProStore(LaunchOptions options)
+    {
+#if DEBUG
+        if (options.DebugUnlockPro || !HasPackageIdentity()) return new FakeProStore(options.DebugUnlockPro);
+#endif
+        return new MicrosoftStoreProStore(_hwnd);
+    }
+
+    private static bool HasPackageIdentity()
+    {
+        try
+        {
+            return Windows.ApplicationModel.Package.Current is not null;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Pro features call this first; true when unlocked (possibly after buying in the dialog).</summary>
+    private async Task<bool> RequireProAsync(ProFeature feature) =>
+        _pro.IsUnlocked(feature) || await UpgradeDialog.ShowAsync(Content.XamlRoot, _pro, feature);
+
+    private Task<bool> ShowUpgradeAsync(ProFeature? feature) => UpgradeDialog.ShowAsync(Content.XamlRoot, _pro, feature);
+
     private void ShowFromTray()
     {
         AppWindow.Show();
@@ -692,6 +724,7 @@ public sealed partial class MainWindow : Window
                 case "actualPixels": SizeToVideo(1); break;
                 case "fullScreen": ToggleFullScreen(); break;
                 case "settings": OpenSettings(); break;
+                case "upgrade": _ = ShowUpgradeAsync(ProFeature.Recording); break;
             }
         };
         timer.Start();

@@ -49,10 +49,15 @@ public static class AudioEndpoints
         }
         finally
         {
-            Marshal.FinalReleaseComObject(enumerator);
+            Marshal.ReleaseComObject(enumerator);
         }
     }
 
+    /// <summary>
+    /// The enumerator is one process-wide COM object, so every call shares a single cached RCW: release it with
+    /// <see cref="Marshal.ReleaseComObject"/>, never FinalReleaseComObject, or other holders (the default-device
+    /// listener) lose theirs.
+    /// </summary>
     internal static IMMDeviceEnumerator CreateEnumerator() => (IMMDeviceEnumerator)new MMDeviceEnumerator();
 
     internal static unsafe IMMDevice Open(IMMDeviceEnumerator enumerator, string id)
@@ -89,7 +94,7 @@ public static class AudioEndpoints
         }
         finally
         {
-            Marshal.FinalReleaseComObject(enumerator);
+            Marshal.ReleaseComObject(enumerator);
         }
     }
 
