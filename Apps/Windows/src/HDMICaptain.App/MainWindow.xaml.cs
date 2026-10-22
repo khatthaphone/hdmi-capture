@@ -36,15 +36,15 @@ public sealed partial class MainWindow : Window
     private readonly AspectLock _aspectLock;
     private readonly PrefsStore _prefs = new();
     private readonly DispatcherTimer _statsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
-    private readonly DispatcherTimer _retryTimer = new() { Interval = TimeSpan.FromSeconds(3) };
     private readonly DispatcherTimer _idleTimer = new() { Interval = IdleDelay };
     private readonly DispatcherTimer _toastTimer = new() { Interval = TimeSpan.FromSeconds(2) };
-    private DeviceWatcher? _watcher;
-    private ICaptureSource? _source;
+    private CaptureController? _capture;
+    private TestPatternSource? _testPattern;
     private WasapiAudioPipeline? _audio;
-    private int _opening;
+    private string? _audioDeviceKey;
+    private AudioSettings _audioSettings = new();
+    private bool _hadCard;
     private int _frames;
-    private int _firstFrame;
     private long _lastStatsTicks = Stopwatch.GetTimestamp();
     private bool _barHovered;
     private int _openFlyouts;
@@ -101,169 +101,92 @@ public sealed partial class MainWindow : Window
         if (options.TestPattern is { } pattern)
         {
             Model.InputName = "Test Pattern";
-            StartSource(new TestPatternSource(pattern, ParseFormat(options.TestPatternFormat)));
+            _testPattern = new TestPatternSource(pattern, ParseFormat(options.TestPatternFormat));
+            _testPattern.FrameArrived += OnFrame;
+            _testPattern.Start();
             Model.Phase = new ViewerPhase.Live();
         }
         else
         {
-            _watcher = new DeviceWatcher();
-            _watcher.Arrived += _ => DispatcherQueue.TryEnqueue(OpenCard);
-            _watcher.Removed += OnCameraRemoved;
-            // Covers a card that is busy, blocked by privacy settings or not plugged in yet: try again until it opens.
-            _retryTimer.Tick += (_, _) => OpenCard();
-            _retryTimer.Start();
-            OpenCard();
+            // The controller owns discovery, open, recovery, privacy/in-use retries, sleep and power (task 093).
+            _capture = CaptureController.CreateDefault(_prefs.State.PreferredDeviceKey);
+            _capture.Log += line => AppLog.Write($"[capture] {line}");
+            _capture.FrameArrived += OnFrame;
+            _capture.StateChanged += state => DispatcherQueue.TryEnqueue(() => OnCaptureState(state));
+            _capture.Catalog.PreferredChanged += key => DispatcherQueue.TryEnqueue(() => _prefs.UpdateState(s => s with { PreferredDeviceKey = key }));
+            _capture.Start();
         }
     }
 
     // MARK: - Capture
 
-    private void StartSource(ICaptureSource source)
+    // UI thread: CaptureState → what the window shows, and audio that follows the live card.
+    private void OnCaptureState(CaptureState state)
     {
-        _source = source;
-        source.FrameArrived += OnFrame;
-        source.Start();
-    }
-
-    /// <summary>
-    /// Opens the first external card (the built-in webcam only as a last resort) on a pool thread: MF objects
-    /// live in the MTA, and opening can take a second. The controller from task 093 replaces this policy.
-    /// </summary>
-    private void OpenCard()
-    {
-        if (_source != null || Interlocked.Exchange(ref _opening, 1) == 1) return;
-        var previous = Model.Phase;
-        Task.Run(() =>
+        var device = _capture?.CurrentDevice;
+        if (device != null) Model.InputName = device.Name;
+        Model.Phase = state switch
         {
-            ViewerPhase phase;
-            MfSource? opened = null;
-            string? name = null;
-            try
-            {
-                var device = MfDevices.Video().OrderBy(d => d.Usb?.VendorId is null).FirstOrDefault();
-                if (device is null)
-                {
-                    phase = previous is ViewerPhase.Waiting ? previous : new ViewerPhase.Scanning();
-                }
-                else
-                {
-                    name = device.Name;
-                    if (previous is not ViewerPhase.Paused) DispatcherQueue.TryEnqueue(() => SetConnecting(device.Name));
-                    var source = new MfSource(device.SymbolicLink, link: device.Usb?.Link);
-                    source.Log += line => AppLog.Write($"[{device.Name}] {line}");
-                    source.Failed += error => DispatcherQueue.TryEnqueue(() => OnCaptureFailed(source, error));
-                    source.FrameArrived += OnFrame;
-                    try
-                    {
-                        Volatile.Write(ref _firstFrame, 0);
-                        source.Start();
-                        opened = source;
-                        StartAudio(device);
-                        phase = new ViewerPhase.Connecting(device.Name); // Live on the first frame
-                    }
-                    catch (System.Runtime.InteropServices.COMException e)
-                    {
-                        AppLog.Write($"[{device.Name}] open failed: {MfErrors.Name(e.HResult)}");
-                        phase = e.HResult switch
-                        {
-                            MfErrors.AccessDenied => new ViewerPhase.PermissionDenied(),
-                            MfErrors.DevicePreempted or MfErrors.SharingViolation or MfErrors.HwMftFailedStartStreaming
-                                => new ViewerPhase.Paused(PauseReason.InUseByAnotherApp),
-                            _ => new ViewerPhase.Failed(MfErrors.Name(e.HResult)),
-                        };
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                AppLog.Write($"open failed: {e}");
-                phase = new ViewerPhase.Failed(e.Message);
-            }
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                Volatile.Write(ref _opening, 0);
-                if (opened != null)
-                {
-                    _source = opened;
-                    Model.InputName = name!;
-                    if (Volatile.Read(ref _firstFrame) == 0) Model.Phase = phase;
-                }
-                else
-                {
-                    Model.Phase = phase;
-                }
-            });
-        });
+            CaptureState.Live => new ViewerPhase.Live(),
+            CaptureState.Connecting c => new ViewerPhase.Connecting(c.DeviceName),
+            CaptureState.Recovering { Reason: RecoveryReason.Waiting or RecoveryReason.Disconnected } when _hadCard
+                => new ViewerPhase.Waiting(Model.InputName),
+            CaptureState.Recovering { Reason: RecoveryReason.Waiting } => new ViewerPhase.Scanning(),
+            CaptureState.Recovering r => new ViewerPhase.Recovering(r.Reason),
+            CaptureState.Paused { Reason: PauseReason.PrivacyToggle } => new ViewerPhase.PermissionDenied(),
+            CaptureState.Paused p => new ViewerPhase.Paused(p.Reason),
+            CaptureState.Failed f => new ViewerPhase.Failed(f.Message),
+            _ => new ViewerPhase.Scanning(),
+        };
+        if (state is CaptureState.Live live)
+        {
+            _hadCard = true;
+            _aspectLock.Aspect = _prefs.Prefs.LockAspect ? (double)live.Info.Width / live.Info.Height : null;
+            if (device != null && _audioDeviceKey != device.Key) StartAudio(device);
+        }
+        else if (state is CaptureState.Recovering { Reason: RecoveryReason.Waiting or RecoveryReason.Disconnected } or CaptureState.Failed)
+        {
+            StopAudio();
+            _renderer.Clear();
+        }
     }
 
-    /// <summary>The card's own capture endpoint (same ContainerId as its video). Pool thread.</summary>
-    private void StartAudio(VideoDevice device)
+    /// <summary>The card's own capture endpoint (same ContainerId as its video).</summary>
+    private void StartAudio(CaptureDevice device)
     {
         StopAudio();
-        if (device.Usb?.ContainerId is not { } container || AudioEndpoints.CaptureFor(container) is not { } endpoint)
+        _audioDeviceKey = device.Key;
+        var settings = _audioSettings;
+        Task.Run(() =>
         {
-            AppLog.Write($"[{device.Name}] no audio endpoint in its container");
-            return;
-        }
-        var audio = new WasapiAudioPipeline(endpoint.Id);
-        audio.Settings = CurrentAudioSettings();
-        audio.Log += line => AppLog.Write($"[audio] {line}");
-        audio.AccessDenied += () => DispatcherQueue.TryEnqueue(() =>
-            ShowToast("Sound is blocked. Allow desktop apps in Settings › Privacy & security › Microphone."));
-        audio.Start();
-        _audio = audio;
+            if (device.Usb?.ContainerId is not { } container || AudioEndpoints.CaptureFor(container) is not { } endpoint)
+            {
+                AppLog.Write($"[{device.Name}] no audio endpoint in its container");
+                return;
+            }
+            var audio = new WasapiAudioPipeline(endpoint.Id) { Settings = settings };
+            audio.Log += line => AppLog.Write($"[audio] {line}");
+            audio.AccessDenied += () => DispatcherQueue.TryEnqueue(() =>
+                ShowToast("Sound is blocked. Allow desktop apps in Settings › Privacy & security › Microphone."));
+            audio.Start();
+            Interlocked.Exchange(ref _audio, audio)?.Dispose();
+        });
     }
 
     private void StopAudio()
     {
+        _audioDeviceKey = null;
         var audio = Interlocked.Exchange(ref _audio, null);
         if (audio != null) Task.Run(audio.Dispose);
     }
 
-    private AudioSettings CurrentAudioSettings() => new(Volume: (float)(Model.Volume / 100), Muted: Model.Muted);
-
-    private void SetConnecting(string name)
-    {
-        if (_source == null) Model.Phase = new ViewerPhase.Connecting(name);
-    }
-
-    private void OnCameraRemoved(string link)
-    {
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            if (_source is MfSource source && DeviceWatcher.SameLink(source.SymbolicLink, link))
-                OnCaptureFailed(source, new CaptureError(MfErrors.DeviceRemoved, "interface removal"));
-        });
-    }
-
-    // UI thread. The reader already stopped delivering; release it off the UI thread and look again.
-    private void OnCaptureFailed(MfSource source, CaptureError error)
-    {
-        if (!ReferenceEquals(_source, source)) return;
-        AppLog.Write($"[capture] {error}");
-        _source = null;
-        Task.Run(source.Dispose);
-        StopAudio();
-        Model.Phase = error.HResult == MfErrors.DevicePreempted
-            ? new ViewerPhase.Paused(PauseReason.InUseByAnotherApp)
-            : new ViewerPhase.Waiting(Model.InputName);
-        _renderer.Clear();
-    }
+    private void Reconnect() => _capture?.Retry();
 
     // Source thread: render straight away, no UI-thread hop (CLAUDE.md conventions).
     private void OnFrame(in VideoFrame frame)
     {
         _renderer.Render(in frame);
         Interlocked.Increment(ref _frames);
-        if (Interlocked.Exchange(ref _firstFrame, 1) == 0)
-        {
-            var aspect = (double)frame.Width / frame.Height;
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                if (_source != null) Model.Phase = new ViewerPhase.Live();
-                _aspectLock.Aspect = _prefs.Prefs.LockAspect ? aspect : null;
-            });
-        }
     }
 
     // MARK: - Status card
@@ -284,7 +207,8 @@ public sealed partial class MainWindow : Window
                 _renderer.Redraw();
                 break;
             case nameof(ViewerModel.Muted) or nameof(ViewerModel.Volume):
-                if (_audio is { } audio) audio.Settings = audio.Settings with { Volume = (float)(Model.Volume / 100), Muted = Model.Muted };
+                _audioSettings = _audioSettings with { Volume = (float)(Model.Volume / 100), Muted = Model.Muted };
+                if (_audio is { } audio) audio.Settings = _audioSettings;
                 break;
             case nameof(ViewerModel.ShowDiagnostics):
                 _prefs.Update(p => p.ShowStats = Model.ShowDiagnostics);
@@ -336,17 +260,6 @@ public sealed partial class MainWindow : Window
                 Reconnect();
                 break;
         }
-    }
-
-    private void Reconnect()
-    {
-        if (_source is MfSource source)
-        {
-            _source = null;
-            Task.Run(source.Dispose);
-            StopAudio();
-        }
-        if (_source == null) OpenCard();
     }
 
     // MARK: - Control bar and cursor
@@ -423,15 +336,12 @@ public sealed partial class MainWindow : Window
 
     private void FillInputItems(IList<MenuFlyoutItemBase> items)
     {
-        var current = (_source as MfSource)?.SymbolicLink;
-        foreach (var device in MfDevices.Video())
+        var current = _capture?.CurrentDevice?.Key;
+        foreach (var device in _capture?.Catalog.Devices ?? [])
         {
-            items.Add(new RadioMenuFlyoutItem
-            {
-                Text = device.Name,
-                GroupName = "input",
-                IsChecked = current != null && DeviceWatcher.SameLink(current, device.SymbolicLink),
-            });
+            var item = new RadioMenuFlyoutItem { Text = device.Name, GroupName = "input", IsChecked = device.Key == current };
+            item.Click += (_, _) => _capture?.Select(device.Key);
+            items.Add(item);
         }
         if (items.Count == 0) items.Add(new MenuFlyoutItem { Text = "No capture card connected", IsEnabled = false });
         items.Add(new MenuFlyoutSeparator());
@@ -583,7 +493,7 @@ public sealed partial class MainWindow : Window
     /// <summary>Last size and position, if that spot is still on a connected display; else 1280×760.</summary>
     private void RestoreFrame()
     {
-        if (_prefs.LoadFrame() is { Width: > 200, Height: > 150 } frame)
+        if (_prefs.State.Frame is { Width: > 200, Height: > 150 } frame)
         {
             var rect = new Windows.Graphics.RectInt32(frame.X, frame.Y, frame.Width, frame.Height);
             var area = DisplayArea.GetFromRect(rect, DisplayAreaFallback.None);
@@ -600,7 +510,7 @@ public sealed partial class MainWindow : Window
     {
         if (AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored }) return;
         var (position, size) = (AppWindow.Position, AppWindow.Size);
-        _prefs.SaveFrame(new WindowFrame(position.X, position.Y, size.Width, size.Height));
+        _prefs.UpdateState(state => state with { Frame = new WindowFrame(position.X, position.Y, size.Width, size.Height) });
     }
 
     private void ApplyAlwaysOnTop()
@@ -703,8 +613,8 @@ public sealed partial class MainWindow : Window
         var (w, h) = _renderer.SourceSize;
         var surface = _childWindow != null ? "HWND" : "SwapChainPanel";
         var sound = _audio is { } a ? $"\naudio buffered {a.BufferedMs:F0} ms" : "";
-        var capture = _source is MfSource { CurrentType: { } type } mf
-            ? $"\n{type.FourCC} {type.Width}×{type.Height} @ {type.FrameRate:F2}{(type.DecodedByWindows ? " (Windows MJPEG decode)" : "")}, {mf.Stats.Dropped} dropped"
+        var capture = _capture is { CurrentType: { } type } c
+            ? $"\n{type.FourCC} {type.Width}×{type.Height} @ {type.FrameRate:F2}{(type.DecodedByWindows ? " (Windows MJPEG decode)" : "")}, {c.Stats?.Dropped ?? 0} dropped"
             : "";
         Model.StatsText = $"{Model.InputName}\n{w}×{h}  {fps:F1} fps{capture}\n{_renderer.AdapterName}\n{surface}, tearing {(_target.Tearing ? "on" : "off")}{sound}";
     }
@@ -713,12 +623,11 @@ public sealed partial class MainWindow : Window
     {
         SaveFrame();
         _statsTimer.Stop();
-        _retryTimer.Stop();
         _idleTimer.Stop();
         ShowCursor();
-        _watcher?.Dispose();
         _audio?.Dispose();
-        _source?.Dispose();
+        _capture?.Dispose();
+        _testPattern?.Dispose();
         _aspectLock.Dispose();
         _panelHost?.Dispose();
         _renderer.Dispose();

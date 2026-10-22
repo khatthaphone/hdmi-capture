@@ -4,72 +4,76 @@ using HDMICaptain.Core;
 namespace HDMICaptain.App;
 
 /// <summary>
-/// <see cref="ViewerPrefs"/> as JSON in %LOCALAPPDATA%\HDMICaptain\prefs.json, the same keys as the Mac (spec §13.7).
+/// <see cref="ViewerPrefs"/> as JSON in %LOCALAPPDATA%\HDMICaptain\prefs.json, the same keys as the Mac (spec §13.7),
+/// plus app state that isn't a preference (window frame, preferred card) in state.json beside it.
 /// Inside the MSIX, LocalAppData is the package's own folder. UI thread only.
 /// </summary>
 public sealed class PrefsStore
 {
-    private readonly string _path = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HDMICaptain", "prefs.json");
+    private readonly string _folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HDMICaptain");
 
     public PrefsStore()
     {
+        Prefs = ViewerPrefs.Decode(ReadText("prefs.json"));
         try
         {
-            Prefs = ViewerPrefs.Decode(File.Exists(_path) ? File.ReadAllText(_path) : null);
+            State = ReadText("state.json") is { } text ? JsonSerializer.Deserialize(text, AppJsonContext.Default.AppState) ?? new() : new();
         }
-        catch (IOException)
+        catch (JsonException)
         {
-            Prefs = new ViewerPrefs();
+            State = new AppState();
         }
     }
 
     public ViewerPrefs Prefs { get; }
 
-    /// <summary>Main window frame in physical pixels, saved on close (window.json beside prefs.json).</summary>
-    public WindowFrame? LoadFrame()
+    public AppState State { get; private set; }
+
+    public void Update(Action<ViewerPrefs> change)
+    {
+        change(Prefs);
+        WriteText("prefs.json", Prefs.Encode());
+    }
+
+    public void UpdateState(Func<AppState, AppState> change)
+    {
+        State = change(State);
+        WriteText("state.json", JsonSerializer.Serialize(State, AppJsonContext.Default.AppState));
+    }
+
+    private string? ReadText(string name)
     {
         try
         {
-            return File.Exists(FramePath) ? JsonSerializer.Deserialize(File.ReadAllText(FramePath), AppJsonContext.Default.WindowFrame) : null;
+            var path = Path.Combine(_folder, name);
+            return File.Exists(path) ? File.ReadAllText(path) : null;
         }
-        catch (Exception e) when (e is IOException or JsonException)
+        catch (IOException)
         {
             return null;
         }
     }
 
-    public void SaveFrame(WindowFrame frame)
+    private void WriteText(string name, string text)
     {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(FramePath)!);
-            File.WriteAllText(FramePath, JsonSerializer.Serialize(frame, AppJsonContext.Default.WindowFrame));
+            Directory.CreateDirectory(_folder);
+            File.WriteAllText(Path.Combine(_folder, name), text);
         }
         catch (IOException e)
         {
-            AppLog.Write($"couldn't save the window frame: {e.Message}");
-        }
-    }
-
-    private string FramePath => Path.Combine(Path.GetDirectoryName(_path)!, "window.json");
-
-    public void Update(Action<ViewerPrefs> change)
-    {
-        change(Prefs);
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            File.WriteAllText(_path, Prefs.Encode());
-        }
-        catch (IOException e)
-        {
-            AppLog.Write($"couldn't save prefs: {e.Message}");
+            AppLog.Write($"couldn't save {name}: {e.Message}");
         }
     }
 }
 
+/// <summary>Main window frame in physical pixels.</summary>
 public sealed record WindowFrame(int X, int Y, int Width, int Height);
 
-[System.Text.Json.Serialization.JsonSerializable(typeof(WindowFrame))]
+/// <summary>Remembered between launches: where the window was and which card the user picked last (DeviceKey).</summary>
+public sealed record AppState(WindowFrame? Frame = null, string? PreferredDeviceKey = null);
+
+[System.Text.Json.Serialization.JsonSourceGenerationOptions(PropertyNamingPolicy = System.Text.Json.Serialization.JsonKnownNamingPolicy.CamelCase)]
+[System.Text.Json.Serialization.JsonSerializable(typeof(AppState))]
 internal sealed partial class AppJsonContext : System.Text.Json.Serialization.JsonSerializerContext;
