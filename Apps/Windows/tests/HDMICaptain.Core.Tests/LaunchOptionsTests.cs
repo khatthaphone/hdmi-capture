@@ -22,12 +22,17 @@ public class LaunchOptionsTests
     [Fact]
     public void QaSwitchesAreIgnoredOutsideDebug()
     {
-        var o = LaunchOptions.Parse(["-testPattern", "grid", "-debugUnlockPro", "YES", "-qaAction", "screenshot"], allowQa: false);
+        var o = LaunchOptions.Parse(["-testPattern", "grid", "-debugUnlockPro", "YES", "-qaAction", "screenshot", "-qaPhase", "failed"], allowQa: false);
 
         Assert.Equal(TestPatternKind.Grid, o.TestPattern);
         Assert.False(o.DebugUnlockPro);
         Assert.Null(o.QaAction);
+        Assert.Null(o.QaPhase);
     }
+
+    [Fact]
+    public void QaPhaseNamesAStatusScreen() =>
+        Assert.Equal("noSignal", LaunchOptions.Parse(["-qaPhase", "noSignal"], allowQa: true).QaPhase);
 
     [Theory]
     [InlineData("NO", false)]

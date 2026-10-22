@@ -72,6 +72,31 @@ public sealed record StatusCopy(string Glyph, string Title, string Message, stri
     };
 }
 
+/// <summary>DEBUG <c>-qaPhase</c> names → the screen to show (every status screen, for screenshots and Narrator checks).</summary>
+public static class QaPhases
+{
+    public static readonly string[] All =
+        ["welcome", "scanning", "permission", "connecting", "waiting", "noSignal", "black", "reconnecting", "disconnected", "inUse", "sleep", "privacyOff", "failed"];
+
+    public static (ViewerPhase Phase, SignalContent Signal)? Parse(string name) => name switch
+    {
+        "welcome" => (new ViewerPhase.Welcome(), new SignalContent.Picture()),
+        "scanning" => (new ViewerPhase.Scanning(), new SignalContent.Picture()),
+        "permission" => (new ViewerPhase.PermissionDenied(), new SignalContent.Picture()),
+        "connecting" => (new ViewerPhase.Connecting("UGREEN-25854"), new SignalContent.Picture()),
+        "waiting" => (new ViewerPhase.Waiting("UGREEN-25854"), new SignalContent.Picture()),
+        "noSignal" => (new ViewerPhase.Live(), new SignalContent.Solid(0, 0, 255)),
+        "black" => (new ViewerPhase.Live(), new SignalContent.Black()),
+        "reconnecting" => (new ViewerPhase.Recovering(RecoveryReason.NoFrames), new SignalContent.Picture()),
+        "disconnected" => (new ViewerPhase.Recovering(RecoveryReason.Disconnected), new SignalContent.Picture()),
+        "inUse" => (new ViewerPhase.Paused(PauseReason.InUseByAnotherApp), new SignalContent.Picture()),
+        "sleep" => (new ViewerPhase.Paused(PauseReason.Sleep), new SignalContent.Picture()),
+        "privacyOff" => (new ViewerPhase.Paused(PauseReason.PrivacyToggle), new SignalContent.Picture()),
+        "failed" => (new ViewerPhase.Failed("MF_E_HW_MFT_FAILED_START_STREAMING (0xC00D3704)"), new SignalContent.Picture()),
+        _ => null,
+    };
+}
+
 public sealed record StatusAction(string Title, string Id)
 {
     public static readonly StatusAction Help = new("Connection Help…", "help");
@@ -100,7 +125,7 @@ public sealed partial class ViewerModel : ObservableObject
     public partial string InputName { get; set; } = "No Input";
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(MuteGlyph))]
+    [NotifyPropertyChangedFor(nameof(MuteGlyph), nameof(MuteName))]
     public partial bool Muted { get; set; }
 
     [ObservableProperty]
@@ -138,6 +163,9 @@ public sealed partial class ViewerModel : ObservableObject
     public bool DiagnosticsShown => ShowDiagnostics || QaDiagnostics;
 
     public Visibility StatsVisibility => DiagnosticsShown ? Visibility.Visible : Visibility.Collapsed;
+    /// <summary>What the mute button does now (Narrator name and tooltip).</summary>
+    public string MuteName => Muted ? "Unmute" : "Mute";
+
     public string MuteGlyph => Muted ? "\uE74F" : "\uE767";
     public string FullScreenGlyph => IsFullScreen ? "\uE73F" : "\uE740";
 

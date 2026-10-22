@@ -12,6 +12,8 @@ public sealed record LaunchOptions
 
     public TestPatternKind? TestPattern { get; init; }
     public string? QaAction { get; init; }
+    /// <summary>Shows one status screen without a card (screenshots of every state, task 094); capture doesn't start.</summary>
+    public string? QaPhase { get; init; }
     public bool QaShowStats { get; init; }
     public bool QaPinControls { get; init; }
     public bool QaBuiltInCameras { get; init; }
@@ -41,6 +43,7 @@ public sealed record LaunchOptions
         return options with
         {
             QaAction = values.GetValueOrDefault("qaAction"),
+            QaPhase = values.GetValueOrDefault("qaPhase"),
             QaShowStats = Flag(values, "qaShowStats"),
             QaPinControls = Flag(values, "qaPinControls"),
             QaBuiltInCameras = Flag(values, "qaBuiltInCameras"),

@@ -87,8 +87,8 @@
                     </DropDownButton.Flyout>
                 </DropDownButton>
                 <Rectangle Style="{StaticResource BarDivider}" />
-                <Button Style="{StaticResource BarButton}" Click="OnMuteClick" ToolTipService.ToolTip="Mute (Ctrl+M)"
-                        AutomationProperties.Name="Mute">
+                <Button Style="{StaticResource BarButton}" Click="OnMuteClick" ToolTipService.ToolTip="{x:Bind Model.MuteName, Mode=OneWay}"
+                        AutomationProperties.Name="{x:Bind Model.MuteName, Mode=OneWay}">
                     <FontIcon Glyph="{x:Bind Model.MuteGlyph, Mode=OneWay}" FontSize="15" />
                 </Button>
                 <Slider x:Name="VolumeSlider" Width="80" Minimum="0" Maximum="100" VerticalAlignment="Center" Margin="2,0,6,0"

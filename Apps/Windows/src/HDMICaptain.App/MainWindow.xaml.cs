@@ -15,6 +15,7 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -161,12 +162,21 @@ public sealed partial class MainWindow : Window
         _idleTimer.Tick += (_, _) => OnIdle();
         _toastTimer.Tick += (_, _) => { _toastTimer.Stop(); Toast.Opacity = 0; };
         ControlBar.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(200) };
+        // Keyboard users (Tab, Narrator) bring the bar up and keep it while focus is inside it.
+        ControlBar.GotFocus += (_, _) => { _barFocused = true; ShowControls(); };
+        ControlBar.LostFocus += (_, _) => { _barFocused = false; RestartIdle(); };
         Toast.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(200) };
         if (options.QaPinControls) ShowControls();
         if (IsPrimary && options.QaAction is { } qaAction) RunQaActionSoon(qaAction);
         if (options.QaSoakMinutes is > 0) _soakNext = DateTime.Now.AddSeconds(5);
 
-        if (options.TestPattern is { } pattern)
+        if (options.QaPhase is { } qaPhase && QaPhases.Parse(qaPhase) is { } fake)
+        {
+            Model.InputName = "UGREEN-25854";
+            Model.Phase = fake.Phase;
+            Model.Signal = fake.Signal;
+        }
+        else if (options.TestPattern is { } pattern)
         {
             Model.InputName = "Test Pattern";
             _testPattern = new TestPatternSource(pattern, ParseFormat(options.TestPatternFormat));
@@ -340,7 +350,7 @@ public sealed partial class MainWindow : Window
     {
         switch (e.PropertyName)
         {
-            case nameof(ViewerModel.Phase):
+            case nameof(ViewerModel.Status): // phase or signal (the no-signal card covers a live picture)
                 ShowStatus();
                 break;
             case nameof(ViewerModel.Scale):
@@ -397,6 +407,7 @@ public sealed partial class MainWindow : Window
         StatusDetail.Visibility = copy.Detail is null ? Visibility.Collapsed : Visibility.Visible;
         SetAction(StatusPrimary, copy.Primary);
         SetAction(StatusSecondary, copy.Secondary);
+        Announce($"{copy.Title}. {copy.Message}", "status");
 
         static void SetAction(Button button, StatusAction? action)
         {
@@ -439,6 +450,8 @@ public sealed partial class MainWindow : Window
 
     private void OnRootPointerExited(object sender, PointerRoutedEventArgs e) => RestartIdle();
 
+    private bool _barFocused;
+
     private void OnBarPointerEntered(object sender, PointerRoutedEventArgs e) => _barHovered = true;
 
     private void OnBarPointerExited(object sender, PointerRoutedEventArgs e)
@@ -471,7 +484,7 @@ public sealed partial class MainWindow : Window
     private void OnIdle()
     {
         _idleTimer.Stop();
-        if (_barHovered || _openFlyouts > 0) return;
+        if (_barHovered || _barFocused || _openFlyouts > 0) return;
         if (!_options.QaPinControls)
         {
             ControlBar.Opacity = 0;
@@ -1164,9 +1177,18 @@ public sealed partial class MainWindow : Window
     private void ShowToast(string text)
     {
         ToastText.Text = text;
+        Announce(text, "toast");
         Toast.Opacity = 1;
         _toastTimer.Stop();
         _toastTimer.Start();
+    }
+
+    /// <summary>Narrator reads <paramref name="text"/> (status changes and toasts aren't focusable, so they are announced).</summary>
+    private void Announce(string text, string activity)
+    {
+        if (Content is not UIElement root) return;
+        var peer = FrameworkElementAutomationPeer.FromElement(root) ?? FrameworkElementAutomationPeer.CreatePeerForElement(root);
+        peer?.RaiseNotificationEvent(AutomationNotificationKind.Other, AutomationNotificationProcessing.ImportantMostRecent, text, activity);
     }
 
     // MARK: - Diagnostics
