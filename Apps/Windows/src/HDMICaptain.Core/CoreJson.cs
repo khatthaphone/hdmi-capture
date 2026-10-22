@@ -16,6 +16,7 @@ namespace HDMICaptain.Core;
         typeof(CamelCaseEnumConverter<FilterMode>),
         typeof(CamelCaseEnumConverter<ColorRange>),
         typeof(CamelCaseEnumConverter<ChannelMode>),
+        typeof(CamelCaseEnumConverter<ColorMatrix>),
         typeof(CamelCaseEnumConverter<GuideMask>),
     ])]
 [JsonSerializable(typeof(DevicePreset))]

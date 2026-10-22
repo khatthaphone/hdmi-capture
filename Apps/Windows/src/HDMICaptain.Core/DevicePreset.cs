@@ -28,6 +28,8 @@ public sealed record DevicePreset
     public ScaleMode Scale { get; set; } = ScaleMode.Fit;
     public FilterMode Filter { get; set; } = FilterMode.Linear;
     public ColorRange ColorRange { get; set; } = ColorRange.Auto;
+    /// <summary>Windows-only extra; Apple and Android presets ignore the key.</summary>
+    public ColorMatrix Matrix { get; set; } = ColorMatrix.Auto;
     public int AudioDelayMs { get; set; }
     public ChannelMode ChannelMode { get; set; } = ChannelMode.Auto;
     public ImageAdjustments Adjustments { get; set; } = new();
@@ -37,11 +39,11 @@ public sealed record DevicePreset
     public string? LutName { get; set; }
     public double LutIntensity { get; set; } = 1.0;
 
-    public RenderOptions RenderOptions => new(Scale, Filter, ColorRange);
+    public RenderOptions RenderOptions => new(Scale, Filter, ColorRange, Matrix);
 
     public AudioSettings AudioSettings => new(AudioDelayMs, ChannelMode, Volume, Muted);
 
-    public DevicePreset With(RenderOptions options) => this with { Scale = options.Scale, Filter = options.Filter, ColorRange = options.ColorRange };
+    public DevicePreset With(RenderOptions options) => this with { Scale = options.Scale, Filter = options.Filter, ColorRange = options.ColorRange, Matrix = options.Matrix };
 
     public DevicePreset With(AudioSettings audio) =>
         this with { AudioDelayMs = audio.DelayMs, ChannelMode = audio.ChannelMode, Volume = audio.Volume, Muted = audio.Muted };
