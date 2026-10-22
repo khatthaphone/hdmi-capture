@@ -43,7 +43,7 @@ public sealed class CaptureStats
 /// MF_LOW_LATENCY, no converters, the native type set directly, one ReadSample in flight. Frames are handed
 /// to <see cref="FrameArrived"/> on MF's work-queue thread while the buffer is locked; no copy, no UI hop.
 /// </summary>
-public sealed class MfSource : ICaptureSource
+public sealed class MfSource : ICaptureSession
 {
     private const uint VideoStream = unchecked((uint)MF_SOURCE_READER_CONSTANTS.MF_SOURCE_READER_FIRST_VIDEO_STREAM);
     private const uint AllStreams = unchecked((uint)MF_SOURCE_READER_CONSTANTS.MF_SOURCE_READER_ALL_STREAMS);

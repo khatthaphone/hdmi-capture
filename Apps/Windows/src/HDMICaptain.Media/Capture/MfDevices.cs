@@ -7,8 +7,8 @@ namespace HDMICaptain.Media.Capture;
 /// <summary>A video capture source as MFEnumDeviceSources reports it, plus where it sits on USB.</summary>
 public sealed record VideoDevice(string Name, string SymbolicLink, UsbDetails? Usb);
 
-/// <summary>An audio capture endpoint (WASAPI endpoint id) from MFEnumDeviceSources.</summary>
-public sealed record AudioDevice(string Name, string EndpointId);
+/// <summary>An audio capture endpoint (WASAPI endpoint id) from MFEnumDeviceSources, with the container its device node belongs to.</summary>
+public sealed record AudioDevice(string Name, string EndpointId, string SymbolicLink = "", Guid? ContainerId = null);
 
 /// <summary>One native media type of the first video stream, in the reader's own index order.</summary>
 public sealed record NativeVideoType(
@@ -45,9 +45,15 @@ public static class MfDevices
         });
 
     public static IReadOnlyList<AudioDevice> Audio() =>
-        Enumerate(PInvoke.MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_AUDCAP_GUID, a => new AudioDevice(
-            a.GetStringOrNull(PInvoke.MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME) ?? "Microphone",
-            a.GetStringOrNull(PInvoke.MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_AUDCAP_ENDPOINT_ID) ?? ""));
+        Enumerate(PInvoke.MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_AUDCAP_GUID, a =>
+        {
+            var link = a.GetStringOrNull(PInvoke.MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_AUDCAP_SYMBOLIC_LINK) ?? "";
+            return new AudioDevice(
+                a.GetStringOrNull(PInvoke.MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME) ?? "Microphone",
+                a.GetStringOrNull(PInvoke.MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_AUDCAP_ENDPOINT_ID) ?? "",
+                link,
+                link.Length > 0 ? UsbTopology.ContainerOfInterface(link) : null);
+        });
 
     private static unsafe List<T> Enumerate<T>(Guid sourceType, Func<IMFAttributes, T> describe)
     {

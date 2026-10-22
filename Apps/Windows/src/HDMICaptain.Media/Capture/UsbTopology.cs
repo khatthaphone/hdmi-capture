@@ -66,6 +66,20 @@ public static partial class UsbTopology
         return new UsbDetails(instanceId, usbId, vid, pid, serial, container, busName, link, speed);
     }
 
+    /// <summary>
+    /// The PnP container of the device behind an interface path. The video and audio interfaces of one capture card
+    /// report the same container, which is how the audio endpoint is paired with its camera.
+    /// </summary>
+    public static unsafe Guid? ContainerOfInterface(string symbolicLink)
+    {
+        if (InterfaceString(symbolicLink, PInvoke.DEVPKEY_Device_InstanceId) is not { } instanceId) return null;
+        fixed (char* id = instanceId)
+        {
+            return PInvoke.CM_Locate_DevNode(out var node, id, CM_LOCATE_DEVNODE_FLAGS.CM_LOCATE_DEVNODE_NORMAL) == CONFIGRET.CR_SUCCESS
+                ? NodeGuid(node, PInvoke.DEVPKEY_Device_ContainerId) : null;
+        }
+    }
+
     /// <summary>Asks the parent hub about the port (DEVPKEY_Device_Address) the device is plugged into.</summary>
     private static unsafe (UsbLink?, string?) LinkSpeed(uint usbNode)
     {
