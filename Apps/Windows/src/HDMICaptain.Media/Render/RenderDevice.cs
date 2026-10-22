@@ -34,9 +34,8 @@ internal sealed class RenderDevice : IDisposable
     private readonly ID3D11SamplerState _nearest;
     private readonly ID3D11ShaderResourceView[] _convertViews = new ID3D11ShaderResourceView[4];
     private readonly ID3D11SamplerState[] _convertSamplers = new ID3D11SamplerState[2];
-    private ID3D11Texture3D _lutTexture = null!;
-    private ID3D11ShaderResourceView _lutView = null!;
-    private (float Intensity, int Size, Vector3 Min, Vector3 Max) _lut;
+    private readonly ID3D11Texture3D _identityLut;
+    private readonly ID3D11ShaderResourceView _identityLutView;
 
     public RenderDevice(bool warp, Luid? adapterLuid)
     {
@@ -87,7 +86,7 @@ internal sealed class RenderDevice : IDisposable
         _params = Device.CreateBuffer((uint)Marshal.SizeOf<ShaderParams>(), BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write);
         _linear = Device.CreateSamplerState(SamplerDescription.LinearClamp);
         _nearest = Device.CreateSamplerState(SamplerDescription.PointClamp);
-        CreateLutTexture(2, IdentityLut2);
+        (_identityLut, _identityLutView) = CreateLutTexture(2, IdentityLut2);
     }
 
     public bool Warp { get; }
@@ -115,19 +114,6 @@ internal sealed class RenderDevice : IDisposable
 
     // MARK: - LUT
 
-    /// <summary>Uploads a 3D LUT (size³ RGBA, red fastest) applied at <paramref name="intensity"/>.</summary>
-    public void SetLut(int size, float[] rgba, Vector3 domainMin, Vector3 domainMax, float intensity)
-    {
-        CreateLutTexture(size, rgba);
-        _lut = (intensity, size, domainMin, domainMax);
-    }
-
-    public void ClearLut()
-    {
-        CreateLutTexture(2, IdentityLut2);
-        _lut = default;
-    }
-
     private static float[] BuildIdentityLut2()
     {
         var data = new float[2 * 2 * 2 * 4];
@@ -141,22 +127,22 @@ internal sealed class RenderDevice : IDisposable
         return data;
     }
 
-    private void CreateLutTexture(int size, float[] rgba)
+    /// <summary>A size³ RGBA float 3D texture and its view (LUTs live on the surface that uses them).</summary>
+    internal (ID3D11Texture3D Texture, ID3D11ShaderResourceView View) CreateLutTexture(int size, float[] rgba)
     {
-        _lutView?.Dispose();
-        _lutTexture?.Dispose();
+        ID3D11Texture3D texture;
         var desc = new Texture3DDescription(Format.R32G32B32A32_Float, (uint)size, (uint)size, (uint)size, 1, BindFlags.ShaderResource);
         var handle = GCHandle.Alloc(rgba, GCHandleType.Pinned);
         try
         {
             var data = new SubresourceData(handle.AddrOfPinnedObject(), (uint)(size * 16), (uint)(size * size * 16));
-            _lutTexture = Device.CreateTexture3D(desc, [data]);
+            texture = Device.CreateTexture3D(desc, [data]);
         }
         finally
         {
             handle.Free();
         }
-        _lutView = Device.CreateShaderResourceView(_lutTexture);
+        return (texture, Device.CreateShaderResourceView(texture));
     }
 
     // MARK: - Swap chains
@@ -277,9 +263,10 @@ internal sealed class RenderDevice : IDisposable
         var a = adjustments;
         p.Adjust = new Vector4(a.Brightness, a.Contrast, a.Saturation, 1 / Math.Max(0.1f, a.Gamma));
         p.Sharpen = new Vector4(a.Sharpness, 0, 0, 0);
-        p.Lut = new Vector4(_lut.Intensity, Math.Max(2, _lut.Size), 0, 0);
-        p.LutMin = new Vector4(_lut.Min, 0);
-        p.LutMax = _lut.Size == 0 ? new Vector4(1, 1, 1, 0) : new Vector4(_lut.Max, 0);
+        var lut = surface.Lut;
+        p.Lut = lut is null ? new Vector4(0, 2, 0, 0) : new Vector4(lut.Intensity, lut.Size, 0, 0);
+        p.LutMin = lut is null ? Vector4.Zero : new Vector4(lut.Min, 0);
+        p.LutMax = lut is null ? new Vector4(1, 1, 1, 0) : new Vector4(lut.Max, 0);
         p.Input = frame.Format switch
         {
             PixelFormat.Nv12 => 0,
@@ -298,7 +285,7 @@ internal sealed class RenderDevice : IDisposable
         Context.PSSetConstantBuffer(0, _params);
         // Reused arrays: this runs per frame and must not allocate (task 101).
         var planes = surface.Planes;
-        (_convertViews[0], _convertViews[1], _convertViews[2], _convertViews[3]) = (planes[0].View!, planes[1].View!, planes[2].View!, _lutView);
+        (_convertViews[0], _convertViews[1], _convertViews[2], _convertViews[3]) = (planes[0].View!, planes[1].View!, planes[2].View!, surface.LutView(this) ?? _identityLutView);
         (_convertSamplers[0], _convertSamplers[1]) = (_linear, _linear);
         Context.PSSetShaderResources(0, _convertViews);
         Context.PSSetSamplers(0, _convertSamplers);
@@ -346,8 +333,8 @@ internal sealed class RenderDevice : IDisposable
 
     public void Dispose()
     {
-        _lutView?.Dispose();
-        _lutTexture?.Dispose();
+        _identityLutView.Dispose();
+        _identityLut.Dispose();
         _linear.Dispose();
         _nearest.Dispose();
         _params.Dispose();
@@ -361,9 +348,51 @@ internal sealed class RenderDevice : IDisposable
     }
 }
 
-/// <summary>One card's planes and its pass-1 RGBA texture at source size, on a <see cref="RenderDevice"/>.</summary>
+/// <summary>A 3D LUT (size³ RGBA, red fastest) and the strength it applies at; uploaded by the surface that uses it.</summary>
+public sealed record LutData(int Size, float[] Rgba, Vector3 Min, Vector3 Max, float Intensity)
+{
+    /// <summary>From .cube order RGB triples (CubeLUT.Entries).</summary>
+    public static LutData FromRgb(int size, ReadOnlySpan<float> rgb, Vector3 min, Vector3 max, float intensity)
+    {
+        var rgba = new float[size * size * size * 4];
+        for (var i = 0; i < size * size * size; i++)
+        {
+            rgba[i * 4] = rgb[i * 3];
+            rgba[i * 4 + 1] = rgb[i * 3 + 1];
+            rgba[i * 4 + 2] = rgb[i * 3 + 2];
+            rgba[i * 4 + 3] = 1;
+        }
+        return new LutData(size, rgba, min, max, intensity);
+    }
+}
+
+/// <summary>One card's planes, its pass-1 RGBA texture at source size and its LUT, on a <see cref="RenderDevice"/>.</summary>
 internal sealed class SourceSurface
 {
+    private (float[]? Rgba, ID3D11Texture3D? Texture, ID3D11ShaderResourceView? View) _lutTexture;
+
+    /// <summary>The LUT pass 1 applies (null: none). Uploaded at the next convert when its table changes.</summary>
+    public LutData? Lut { get; set; }
+
+    public ID3D11ShaderResourceView? LutView(RenderDevice gpu)
+    {
+        if (Lut is not { } lut) return null;
+        if (!ReferenceEquals(_lutTexture.Rgba, lut.Rgba))
+        {
+            ReleaseLut();
+            var (texture, view) = gpu.CreateLutTexture(lut.Size, lut.Rgba);
+            _lutTexture = (lut.Rgba, texture, view);
+        }
+        return _lutTexture.View;
+    }
+
+    private void ReleaseLut()
+    {
+        _lutTexture.View?.Dispose();
+        _lutTexture.Texture?.Dispose();
+        _lutTexture = default;
+    }
+
     public PlaneTexture[] Planes { get; } = [new(), new(), new()];
     public ID3D11Texture2D? Texture { get; private set; }
     public ID3D11RenderTargetView? Target { get; private set; }
@@ -416,10 +445,12 @@ internal sealed class SourceSurface
         Size = default;
     }
 
+    /// <summary>Releases every GPU object (device loss or teardown); <see cref="Lut"/> is kept and re-uploaded.</summary>
     public void Release()
     {
         foreach (var p in Planes) p.Release();
         ReleaseTexture();
+        ReleaseLut();
     }
 }
 

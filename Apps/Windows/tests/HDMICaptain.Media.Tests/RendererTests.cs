@@ -171,6 +171,29 @@ public class RendererTests
     }
 
     [Fact]
+    public void GridTilesKeepTheirOwnLook()
+    {
+        using var grid = GridRenderer.CreateWarp();
+        grid.TileCount = 2;
+        // Inverting 2³ LUT on card 1 only; card 2 is brightened instead.
+        var rgb = new float[2 * 2 * 2 * 3];
+        for (var i = 0; i < 8; i++)
+            (rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]) = (1 - (i & 1), 1 - ((i >> 1) & 1), 1 - ((i >> 2) & 1));
+        var invert = LutData.FromRgb(2, rgb, System.Numerics.Vector3.Zero, System.Numerics.Vector3.One, 1);
+        grid.SetLook(0, new TileLook(new RenderOptions(), (0, 1, 1, 1, 0), invert));
+        grid.SetLook(1, new TileLook(new RenderOptions(), (0.2f, 1, 1, 1, 0), null));
+        var gray = Uniform(126, out var keepAlive, fullRange: false); // limited-range 126 = 50 % gray
+
+        grid.Render(0, in gray);
+        grid.Render(1, in gray);
+        var pixels = grid.ReadComposedPixels(66, 32);
+
+        AssertPixel(pixels, 66, 16, 16, 128, 128, 128, "card 1 inverted (1 - 0.5)");
+        AssertPixel(pixels, 66, 50, 16, 179, 179, 179, "card 2 brightened (0.5 + 0.2)");
+        GC.KeepAlive(keepAlive);
+    }
+
+    [Fact]
     public void GridPresentsFromItsComposeThread()
     {
         var grid = GridRenderer.CreateWarp();

@@ -27,7 +27,6 @@ public sealed class D3DRenderer : IDisposable
     private readonly bool _warp;
     private readonly SourceSurface _surface = new();
     private RenderDevice _gpu;
-    private (int Size, float[] Rgba, Vector3 Min, Vector3 Max, float Intensity)? _lut;
 
     private D3DRenderer(bool warp, Luid? adapter)
     {
@@ -148,28 +147,13 @@ public sealed class D3DRenderer : IDisposable
     /// <summary>Uploads a 3D LUT (size³ RGB triples, red fastest, as .cube files list them) applied at <paramref name="intensity"/>.</summary>
     public void SetLut(int size, ReadOnlySpan<float> rgb, Vector3 domainMin, Vector3 domainMax, float intensity)
     {
-        lock (_gate)
-        {
-            var rgba = new float[size * size * size * 4];
-            for (var i = 0; i < size * size * size; i++)
-            {
-                rgba[i * 4] = rgb[i * 3];
-                rgba[i * 4 + 1] = rgb[i * 3 + 1];
-                rgba[i * 4 + 2] = rgb[i * 3 + 2];
-                rgba[i * 4 + 3] = 1;
-            }
-            _lut = (size, rgba, domainMin, domainMax, intensity);
-            _gpu.SetLut(size, rgba, domainMin, domainMax, intensity);
-        }
+        var lut = LutData.FromRgb(size, rgb, domainMin, domainMax, intensity);
+        lock (_gate) _surface.Lut = lut;
     }
 
     public void ClearLut()
     {
-        lock (_gate)
-        {
-            _lut = null;
-            _gpu.ClearLut();
-        }
+        lock (_gate) _surface.Lut = null;
     }
 
     /// <summary>Copies <see cref="SourceTexture"/> to the CPU as tightly packed RGBA8 (screenshots, tests).</summary>
@@ -230,7 +214,6 @@ public sealed class D3DRenderer : IDisposable
         _surface.Release();
         _gpu.Dispose();
         _gpu = new RenderDevice(_warp, adapter);
-        if (_lut is { } lut) _gpu.SetLut(lut.Size, lut.Rgba, lut.Min, lut.Max, lut.Intensity);
         foreach (var t in _targets) _gpu.CreateSwapChain(t);
         DeviceRecreated?.Invoke();
     }

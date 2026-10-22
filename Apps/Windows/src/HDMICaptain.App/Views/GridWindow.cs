@@ -1,4 +1,5 @@
 using HDMICaptain.App.Video;
+using HDMICaptain.App.ViewModels;
 using HDMICaptain.Core;
 using HDMICaptain.Media.Audio;
 using HDMICaptain.Media.Capture;
@@ -125,6 +126,9 @@ public sealed class GridWindow : Window
         public double Fps;
         public volatile int Width;
         public volatile int Height;
+        public DevicePreset? Preset;
+        public int LookIndex = -1;
+        public (string? Path, CubeLUT? Lut) LutCache;
 
         public void CloseOwn()
         {
@@ -173,6 +177,7 @@ public sealed class GridWindow : Window
             _tiles[i].Index = i;
         }
         _renderer.TileCount = _tiles.Count;
+        foreach (var tile in _tiles) ApplyLook(tile);
 
         var claimsChanged = false;
         foreach (var tile in _tiles)
@@ -227,6 +232,44 @@ public sealed class GridWindow : Window
         UpdateAudio();
         _empty.Visibility = _tiles.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         Layout();
+    }
+
+    /// <summary>
+    /// The card's saved preset (the one its window edits), so a tile looks like that card's own window:
+    /// scale, filter, range, matrix, adjustments and LUT. Re-read every second, applied when it changed.
+    /// </summary>
+    private void ApplyLook(Tile tile)
+    {
+        if (tile.Pattern != null) return;
+        var store = App.Prefs.Presets;
+        var preset = store.Has(tile.Key) ? store.Get(tile.Key) : store.Get(SettingsModel.DefaultKey);
+        if (tile.LookIndex == tile.Index && preset == tile.Preset) return;
+        tile.Preset = preset;
+        tile.LookIndex = tile.Index;
+        var a = preset.Adjustments;
+        _renderer.SetLook(tile.Index, new TileLook(preset.RenderOptions,
+            ((float)a.Brightness, (float)a.Contrast, (float)a.Saturation, (float)a.Gamma, (float)a.Sharpness), LutFor(tile, preset)));
+    }
+
+    // Parses each tile's .cube once per path; a file that fails just leaves the tile without a LUT.
+    private static LutData? LutFor(Tile tile, DevicePreset preset)
+    {
+        if (preset.LutPath is not { } path) return null;
+        if (tile.LutCache.Path != path)
+        {
+            try
+            {
+                tile.LutCache = (path, CubeLUT.Parse(File.ReadAllText(path), System.IO.Path.GetFileNameWithoutExtension(path)));
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or CubeLUT.ParseException)
+            {
+                AppLog.Write($"[grid] LUT {path}: {e.Message}");
+                tile.LutCache = (path, null);
+            }
+        }
+        if (tile.LutCache.Lut is not { } lut) return null;
+        return LutData.FromRgb(lut.Size, lut.Entries, new System.Numerics.Vector3(lut.DomainMin[0], lut.DomainMin[1], lut.DomainMin[2]),
+            new System.Numerics.Vector3(lut.DomainMax[0], lut.DomainMax[1], lut.DomainMax[2]), (float)preset.LutIntensity);
     }
 
     private List<Tile> WantedTiles()

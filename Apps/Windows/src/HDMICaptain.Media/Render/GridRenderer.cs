@@ -14,16 +14,16 @@ namespace HDMICaptain.Media.Render;
 /// Multi-View grid (task 098): every card converted on one device and drawn into its <see cref="TileLayout"/> cell
 /// of a single swap chain. Frames are converted on their sources' threads; a compose thread presents the latest
 /// picture of every tile once the swap chain can take a frame, so two 60 fps cards never queue behind each other.
-/// Tiles use the default picture (fit, auto range and matrix); per-card looks stay in the card windows.
+/// Each tile draws with its card's look (<see cref="SetLook"/>): scale, filter, range, matrix, adjustments and LUT.
 /// </summary>
 public sealed class GridRenderer : IDisposable
 {
-    private static readonly RenderOptions TileOptions = new();
-    private static readonly (float, float, float, float, float) Identity = (0, 1, 1, 1, 0);
+    private static readonly TileLook DefaultLook = new(new RenderOptions(), (0, 1, 1, 1, 0), null);
 
     private readonly object _gate = new();
     private readonly bool _warp;
     private readonly List<SourceSurface> _tiles = [];
+    private readonly List<TileLook> _looks = [];
     private readonly AutoResetEvent _dirty = new(false);
     private readonly Thread _thread;
     private volatile bool _running = true;
@@ -56,11 +56,16 @@ public sealed class GridRenderer : IDisposable
         {
             lock (_gate)
             {
-                while (_tiles.Count < value) _tiles.Add(new SourceSurface());
+                while (_tiles.Count < value)
+                {
+                    _tiles.Add(new SourceSurface());
+                    _looks.Add(DefaultLook);
+                }
                 while (_tiles.Count > value)
                 {
                     _tiles[^1].Release();
                     _tiles.RemoveAt(_tiles.Count - 1);
+                    _looks.RemoveAt(_looks.Count - 1);
                 }
             }
             _dirty.Set();
@@ -81,13 +86,26 @@ public sealed class GridRenderer : IDisposable
         return target;
     }
 
+    /// <summary>A card's picture settings for cell <paramref name="tile"/>; applies from its next frame (and redraws the scale now).</summary>
+    public void SetLook(int tile, TileLook look)
+    {
+        lock (_gate)
+        {
+            if ((uint)tile >= (uint)_tiles.Count) return;
+            _looks[tile] = look;
+            _tiles[tile].Lut = look.Lut;
+        }
+        _dirty.Set();
+    }
+
     /// <summary>Converts <paramref name="frame"/> into cell <paramref name="tile"/>; the compose thread presents it.</summary>
     public void Render(int tile, in VideoFrame frame)
     {
         lock (_gate)
         {
             if ((uint)tile >= (uint)_tiles.Count) return;
-            _gpu.Convert(_tiles[tile], frame, TileOptions, Identity);
+            var look = _looks[tile];
+            _gpu.Convert(_tiles[tile], frame, look.Options, look.Adjustments);
         }
         _dirty.Set();
     }
@@ -152,7 +170,7 @@ public sealed class GridRenderer : IDisposable
     {
         var cells = TileLayout.Compute(_tiles.Count, width, height, Gap);
         for (var i = 0; i < cells.Length; i++)
-            _gpu.DrawScaled(_tiles[i], cells[i], TileOptions.Scale, TileOptions.Filter);
+            _gpu.DrawScaled(_tiles[i], cells[i], _looks[i].Options.Scale, _looks[i].Options.Filter);
     }
 
     private void ComposeLoop()
@@ -216,8 +234,12 @@ public sealed class GridRenderer : IDisposable
             _target = null;
             foreach (var tile in _tiles) tile.Release();
             _tiles.Clear();
+            _looks.Clear();
             _gpu.Dispose();
         }
         _dirty.Dispose();
     }
 }
+
+/// <summary>One grid tile's picture: options, adjustments (brightness, contrast, saturation, gamma, sharpness) and LUT.</summary>
+public sealed record TileLook(RenderOptions Options, (float Brightness, float Contrast, float Saturation, float Gamma, float Sharpness) Adjustments, LutData? Lut);
