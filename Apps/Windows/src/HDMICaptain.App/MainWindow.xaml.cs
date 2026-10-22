@@ -5,6 +5,7 @@ using HDMICaptain.App.ViewModels;
 using HDMICaptain.App.Views;
 using HDMICaptain.App.Windowing;
 using HDMICaptain.Core;
+using HDMICaptain.Media.Audio;
 using HDMICaptain.Media.Capture;
 using HDMICaptain.Media.Render;
 using HDMICaptain.Media.Video;
@@ -40,6 +41,7 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherTimer _toastTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private DeviceWatcher? _watcher;
     private ICaptureSource? _source;
+    private WasapiAudioPipeline? _audio;
     private int _opening;
     private int _frames;
     private int _firstFrame;
@@ -56,7 +58,7 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         ExtendsContentIntoTitleBar = true;
         AppWindow.SetIcon("Assets/AppIcon.ico");
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 760));
+        RestoreFrame();
         SystemBackdrop = new MicaBackdrop();
 
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
@@ -156,6 +158,7 @@ public sealed partial class MainWindow : Window
                         Volatile.Write(ref _firstFrame, 0);
                         source.Start();
                         opened = source;
+                        StartAudio(device);
                         phase = new ViewerPhase.Connecting(device.Name); // Live on the first frame
                     }
                     catch (System.Runtime.InteropServices.COMException e)
@@ -193,6 +196,32 @@ public sealed partial class MainWindow : Window
         });
     }
 
+    /// <summary>The card's own capture endpoint (same ContainerId as its video). Pool thread.</summary>
+    private void StartAudio(VideoDevice device)
+    {
+        StopAudio();
+        if (device.Usb?.ContainerId is not { } container || AudioEndpoints.CaptureFor(container) is not { } endpoint)
+        {
+            AppLog.Write($"[{device.Name}] no audio endpoint in its container");
+            return;
+        }
+        var audio = new WasapiAudioPipeline(endpoint.Id);
+        audio.Settings = CurrentAudioSettings();
+        audio.Log += line => AppLog.Write($"[audio] {line}");
+        audio.AccessDenied += () => DispatcherQueue.TryEnqueue(() =>
+            ShowToast("Sound is blocked. Allow desktop apps in Settings › Privacy & security › Microphone."));
+        audio.Start();
+        _audio = audio;
+    }
+
+    private void StopAudio()
+    {
+        var audio = Interlocked.Exchange(ref _audio, null);
+        if (audio != null) Task.Run(audio.Dispose);
+    }
+
+    private AudioSettings CurrentAudioSettings() => new(Volume: (float)(Model.Volume / 100), Muted: Model.Muted);
+
     private void SetConnecting(string name)
     {
         if (_source == null) Model.Phase = new ViewerPhase.Connecting(name);
@@ -214,6 +243,7 @@ public sealed partial class MainWindow : Window
         AppLog.Write($"[capture] {error}");
         _source = null;
         Task.Run(source.Dispose);
+        StopAudio();
         Model.Phase = error.HResult == MfErrors.DevicePreempted
             ? new ViewerPhase.Paused(PauseReason.InUseByAnotherApp)
             : new ViewerPhase.Waiting(Model.InputName);
@@ -252,6 +282,9 @@ public sealed partial class MainWindow : Window
                     Filter = Model.SharpPixels ? FilterMode.Nearest : FilterMode.Linear,
                 };
                 _renderer.Redraw();
+                break;
+            case nameof(ViewerModel.Muted) or nameof(ViewerModel.Volume):
+                if (_audio is { } audio) audio.Settings = audio.Settings with { Volume = (float)(Model.Volume / 100), Muted = Model.Muted };
                 break;
             case nameof(ViewerModel.ShowDiagnostics):
                 _prefs.Update(p => p.ShowStats = Model.ShowDiagnostics);
@@ -311,6 +344,7 @@ public sealed partial class MainWindow : Window
         {
             _source = null;
             Task.Run(source.Dispose);
+            StopAudio();
         }
         if (_source == null) OpenCard();
     }
@@ -546,6 +580,29 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>Last size and position, if that spot is still on a connected display; else 1280×760.</summary>
+    private void RestoreFrame()
+    {
+        if (_prefs.LoadFrame() is { Width: > 200, Height: > 150 } frame)
+        {
+            var rect = new Windows.Graphics.RectInt32(frame.X, frame.Y, frame.Width, frame.Height);
+            var area = DisplayArea.GetFromRect(rect, DisplayAreaFallback.None);
+            if (area != null)
+            {
+                AppWindow.MoveAndResize(rect);
+                return;
+            }
+        }
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 760));
+    }
+
+    private void SaveFrame()
+    {
+        if (AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored }) return;
+        var (position, size) = (AppWindow.Position, AppWindow.Size);
+        _prefs.SaveFrame(new WindowFrame(position.X, position.Y, size.Width, size.Height));
+    }
+
     private void ApplyAlwaysOnTop()
     {
         if (AppWindow.Presenter is OverlappedPresenter presenter) presenter.IsAlwaysOnTop = Model.AlwaysOnTop;
@@ -645,19 +702,22 @@ public sealed partial class MainWindow : Window
         if (!Model.ShowDiagnostics) return;
         var (w, h) = _renderer.SourceSize;
         var surface = _childWindow != null ? "HWND" : "SwapChainPanel";
+        var sound = _audio is { } a ? $"\naudio buffered {a.BufferedMs:F0} ms" : "";
         var capture = _source is MfSource { CurrentType: { } type } mf
             ? $"\n{type.FourCC} {type.Width}×{type.Height} @ {type.FrameRate:F2}{(type.DecodedByWindows ? " (Windows MJPEG decode)" : "")}, {mf.Stats.Dropped} dropped"
             : "";
-        Model.StatsText = $"{Model.InputName}\n{w}×{h}  {fps:F1} fps{capture}\n{_renderer.AdapterName}\n{surface}, tearing {(_target.Tearing ? "on" : "off")}";
+        Model.StatsText = $"{Model.InputName}\n{w}×{h}  {fps:F1} fps{capture}\n{_renderer.AdapterName}\n{surface}, tearing {(_target.Tearing ? "on" : "off")}{sound}";
     }
 
     private void Shutdown()
     {
+        SaveFrame();
         _statsTimer.Stop();
         _retryTimer.Stop();
         _idleTimer.Stop();
         ShowCursor();
         _watcher?.Dispose();
+        _audio?.Dispose();
         _source?.Dispose();
         _aspectLock.Dispose();
         _panelHost?.Dispose();

@@ -89,8 +89,7 @@
                     <FontIcon Glyph="{x:Bind Model.MuteGlyph, Mode=OneWay}" FontSize="15" />
                 </Button>
                 <Slider x:Name="VolumeSlider" Width="80" Minimum="0" Maximum="100" VerticalAlignment="Center" Margin="2,0,6,0"
-                        Value="{x:Bind Model.Volume, Mode=TwoWay}" IsEnabled="False" AutomationProperties.Name="Volume"
-                        ToolTipService.ToolTip="Sound arrives in a later update" />
+                        Value="{x:Bind Model.Volume, Mode=TwoWay}" AutomationProperties.Name="Volume" />
                 <Rectangle Style="{StaticResource BarDivider}" />
                 <Button Style="{StaticResource BarButton}" Click="OnScreenshotClick" ToolTipService.ToolTip="Save Screenshot (Ctrl+Shift+S)"
                         AutomationProperties.Name="Screenshot">

@@ -75,6 +75,7 @@ foreach (var device in MfDevices.Video().Where(d => Matches(d.Name)))
         })]),
         ["windows"] = new JsonObject
         {
+            ["audioEndpoint"] = usb?.ContainerId is { } container ? HDMICaptain.Media.Audio.AudioEndpoints.CaptureFor(container)?.Name : null,
             ["busReportedName"] = usb?.BusReportedName,
             ["containerId"] = usb?.ContainerId?.ToString("B"),
             ["error"] = error,
@@ -96,9 +97,10 @@ foreach (var device in MfDevices.Video().Where(d => Matches(d.Name)))
     }
 }
 
-var audio = new JsonArray([.. MfDevices.Audio().Where(a => Matches(a.Name)).Select(a => (JsonNode)new JsonObject
+var audio = new JsonArray([.. HDMICaptain.Media.Audio.AudioEndpoints.Captures().Where(a => Matches(a.Name)).Select(a => (JsonNode)new JsonObject
 {
-    ["id"] = a.EndpointId,
+    ["containerId"] = a.ContainerId?.ToString("B"),
+    ["id"] = a.Id,
     ["kind"] = "endpoint",
     ["name"] = a.Name,
     ["transport"] = "wasapi",

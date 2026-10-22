@@ -1,3 +1,4 @@
+using System.Text.Json;
 using HDMICaptain.Core;
 
 namespace HDMICaptain.App;
@@ -25,6 +26,34 @@ public sealed class PrefsStore
 
     public ViewerPrefs Prefs { get; }
 
+    /// <summary>Main window frame in physical pixels, saved on close (window.json beside prefs.json).</summary>
+    public WindowFrame? LoadFrame()
+    {
+        try
+        {
+            return File.Exists(FramePath) ? JsonSerializer.Deserialize(File.ReadAllText(FramePath), AppJsonContext.Default.WindowFrame) : null;
+        }
+        catch (Exception e) when (e is IOException or JsonException)
+        {
+            return null;
+        }
+    }
+
+    public void SaveFrame(WindowFrame frame)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(FramePath)!);
+            File.WriteAllText(FramePath, JsonSerializer.Serialize(frame, AppJsonContext.Default.WindowFrame));
+        }
+        catch (IOException e)
+        {
+            AppLog.Write($"couldn't save the window frame: {e.Message}");
+        }
+    }
+
+    private string FramePath => Path.Combine(Path.GetDirectoryName(_path)!, "window.json");
+
     public void Update(Action<ViewerPrefs> change)
     {
         change(Prefs);
@@ -39,3 +68,8 @@ public sealed class PrefsStore
         }
     }
 }
+
+public sealed record WindowFrame(int X, int Y, int Width, int Height);
+
+[System.Text.Json.Serialization.JsonSerializable(typeof(WindowFrame))]
+internal sealed partial class AppJsonContext : System.Text.Json.Serialization.JsonSerializerContext;
