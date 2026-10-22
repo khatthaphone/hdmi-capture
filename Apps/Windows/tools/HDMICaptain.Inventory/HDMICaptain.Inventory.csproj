@@ -5,8 +5,18 @@
     <TargetFramework>$(WindowsTargetFramework)</TargetFramework>
     <SupportedOSPlatformVersion>$(WindowsMinVersion)</SupportedOSPlatformVersion>
     <Platforms>x64;ARM64</Platforms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\HDMICaptain.Media\HDMICaptain.Media.csproj" />
+  </ItemGroup>
+  <!-- libjpeg-turbo from native/ (make win-deps), next to the exe for MJPEG capture and the MJPEG benchmark (task 090). -->
+  <PropertyGroup>
+    <VcpkgTriplet Condition="'$(Platform)' == 'ARM64'">arm64-windows</VcpkgTriplet>
+    <VcpkgTriplet Condition="'$(VcpkgTriplet)' == ''">x64-windows</VcpkgTriplet>
+    <TurboJpegDll>$(MSBuildThisFileDirectory)..\..\native\vcpkg_installed\$(VcpkgTriplet)\bin\turbojpeg.dll</TurboJpegDll>
+  </PropertyGroup>
+  <ItemGroup Condition="Exists('$(TurboJpegDll)')">
+    <Content Include="$(TurboJpegDll)" Link="turbojpeg.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

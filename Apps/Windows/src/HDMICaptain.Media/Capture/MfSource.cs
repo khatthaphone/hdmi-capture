@@ -60,15 +60,28 @@ public sealed class MfSource : ICaptureSession
     private double _period;
     private volatile bool _running;
     private bool _warnedShortBuffer;
+    private readonly MjpegPolicy _mjpegPolicy;
+    private MjpegDecoder? _decoder;
+    private string? _lastDecodeError;
+    private int _decodeCount;
+    private double _decodeSum, _decodeMax;
 
-    public MfSource(string symbolicLink, FormatPreference? preference = null, UsbLink? link = null)
+    public MfSource(string symbolicLink, FormatPreference? preference = null, UsbLink? link = null,
+        MjpegPolicy mjpegPolicy = MjpegPolicy.Auto)
     {
         _symbolicLink = symbolicLink;
         _preference = preference;
         _link = link;
+        _mjpegPolicy = mjpegPolicy;
     }
 
     public event FrameHandler? FrameArrived;
+
+    /// <summary>Each raw MJPEG frame before it is decoded, while the sample is locked (benchmarks, passthrough). MF thread.</summary>
+    public event CompressedFrameHandler? CompressedFrameArrived;
+
+    /// <summary>MJPG frames that failed to decode and were dropped.</summary>
+    public long DecodeFailures { get; private set; }
 
     /// <summary>Raised once when capture stops on its own (unplug, preemption, privacy). On an MF thread.</summary>
     public event Action<CaptureError>? Failed;
@@ -122,8 +135,8 @@ public sealed class MfSource : ICaptureSession
         }
 
         NativeTypes = MfDevices.ReadNativeTypes(_reader);
-        _type = MfDevices.Choose(NativeTypes, _preference, _link)
-            ?? throw new COMException("No native type the renderer can upload (MJPEG needs task 090).", MfErrors.NoMoreTypes);
+        _type = MfDevices.Choose(NativeTypes, _preference, _link, _mjpegPolicy)
+            ?? throw new COMException("No native type we can show (MJPEG needs turbojpeg.dll).", MfErrors.NoMoreTypes);
 
         _reader.GetNativeMediaType(VideoStream, (uint)_type.Index, out var mediaType);
         try
@@ -155,6 +168,8 @@ public sealed class MfSource : ICaptureSession
         }
         _period = _type.FrameRate > 0 ? 10_000_000 / _type.FrameRate : 0;
         Stats = new CaptureStats();
+        DecodeFailures = 0;
+        if (_type.FourCC == "MJPG") _decoder = new MjpegDecoder();
         Log?.Invoke($"type #{_type.Index}: {_type.Width}x{_type.Height} {_type.FourCC} @ {_type.FrameRate:F3} " +
                     $"range={_type.FullRange?.ToString() ?? "unset"} matrix={_type.Matrix} decodedByWindows={_type.DecodedByWindows}");
     }
@@ -201,6 +216,8 @@ public sealed class MfSource : ICaptureSession
         MfInterop.Release(_source);
         _source = null;
         _callback = null;
+        _decoder?.Dispose();
+        _decoder = null;
     }
 
     public void Dispose() => Stop();
@@ -244,6 +261,11 @@ public sealed class MfSource : ICaptureSession
     {
         var type = _type!;
         Stats.Count(timestamp, _period);
+        if (_decoder != null)
+        {
+            DeliverMjpeg(sample, timestamp);
+            return;
+        }
         sample.GetBufferByIndex(0, out var buffer);
         try
         {
@@ -296,6 +318,53 @@ public sealed class MfSource : ICaptureSession
         {
             MfInterop.Release(buffer);
         }
+    }
+
+    /// <summary>
+    /// Raw MJPG: decode on this MF thread into the decoder's reused planes, then hand the planar frame on. One
+    /// ReadSample is in flight, so a slow decode delays the next read instead of queueing (newest frame wins).
+    /// </summary>
+    private unsafe void DeliverMjpeg(IMFSample sample, long timestamp)
+    {
+        sample.ConvertToContiguousBuffer(out var buffer);
+        try
+        {
+            byte* data;
+            uint length;
+            buffer.Lock(&data, null, &length);
+            try
+            {
+                CompressedFrameArrived?.Invoke(new ReadOnlySpan<byte>(data, (int)length), timestamp);
+                if (!_decoder!.TryDecode(data, (nint)length, timestamp, out var frame))
+                {
+                    DecodeFailures++;
+                    if (_decoder.LastError != _lastDecodeError) Log?.Invoke($"mjpeg decode failed: {_decoder.LastError}");
+                    _lastDecodeError = _decoder.LastError;
+                    return;
+                }
+                NoteDecode(_decoder.LastDecodeMilliseconds, frame);
+                FrameArrived?.Invoke(in frame);
+            }
+            finally
+            {
+                buffer.Unlock();
+            }
+        }
+        finally
+        {
+            MfInterop.Release(buffer);
+        }
+    }
+
+    /// <summary>Logs mean/max decode time every 600 frames (10 s at 60 fps).</summary>
+    private void NoteDecode(double ms, in VideoFrame frame)
+    {
+        _decodeSum += ms;
+        _decodeMax = Math.Max(_decodeMax, ms);
+        if (++_decodeCount < 600) return;
+        Log?.Invoke($"mjpeg decode {frame.Width}x{frame.Height} {frame.Format}: mean {_decodeSum / _decodeCount:F2} ms, " +
+                    $"max {_decodeMax:F2} ms over {_decodeCount} frames, {_decoder!.Warnings} warnings, {DecodeFailures} failed");
+        (_decodeCount, _decodeSum, _decodeMax) = (0, 0, 0);
     }
 
     private void OnMediaEvent(uint stream, IMFMediaEvent mediaEvent)
