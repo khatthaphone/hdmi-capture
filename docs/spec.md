@@ -1,6 +1,6 @@
 # HDMI Captain — Product & Technical Spec
 
-_Status: draft v0.3 · 2026-10-21 (Mac + iPad in code; Android plan added, §12)_
+_Status: draft v0.4 · 2026-10-22 (Mac + iPad in code; Android in progress, §12; Windows plan added, §13)_
 
 ## 1. Problem
 
@@ -35,7 +35,7 @@ HDMI-to-USB capture dongles (UVC video + UAC audio) let a Mac/iPad act as a moni
 
 - The core work — capture, GPU rendering, encoding, virtual camera — is platform-native everywhere (AVFoundation/Metal/VideoToolbox/CoreMediaIO; Camera2/USB-host/MediaCodec; Media Foundation/D3D11). KMP would only wrap these via `expect/actual`; Compose Multiplatform on Windows is JVM-based, a poor fit for low-latency video.
 - One Swift codebase serves **macOS + iPadOS (+ visionOS later)** via a shared Swift package (~80 % shared). iPhone is out: Apple supports external (UVC) cameras on iPad only (`docs/research/ipados.md`).
-- **Android:** Kotlin + Jetpack Compose shell over a C++ (NDK) media core: libusb + libuvc capture, libjpeg-turbo MJPEG decode, GLES 3 render, Oboe audio (§12, `docs/research/android.md`). Pure logic is ported to Kotlin, not shared; shared JSON test fixtures keep Swift and Kotlin behaviour in step. **Windows:** C# WinUI 3 (or C++/WinRT) + Media Foundation.
+- **Android:** Kotlin + Jetpack Compose shell over a C++ (NDK) media core: libusb + libuvc capture, libjpeg-turbo MJPEG decode, GLES 3 render, Oboe audio (§12, `docs/research/android.md`). Pure logic is ported to Kotlin, not shared; shared JSON test fixtures keep Swift and Kotlin behaviour in step. **Windows:** C# (.NET 10) + WinUI (Windows App SDK 2.x) shell; engine in C# over Media Foundation (Source Reader), D3D11 and WASAPI, libjpeg-turbo for MJPEG; pure logic ported to C# against the same fixtures (§13, `docs/research/windows.md`). A Rust core + Win32 shell was considered and rejected (2026-10-22): far more UI work, and it would share nothing with Android's C++ engine.
 - Cross-platform sharing is **specs as data**: scene/layout JSON schema, settings keys, stream presets (in `docs/`). If shared logic later becomes substantial, extract a **Rust core with UniFFI** bindings (Swift/Kotlin/C#).
 - Licensing: avoid GPL dependencies (e.g. libobs) unless we decide to ship GPL. Preferred: HaishinKit (BSD), RootEncoder (Apache-2.0), FFmpeg LGPL builds.
 
@@ -95,6 +95,7 @@ Apps/macOS/                      SwiftUI app shell, windowing, menus, entitlemen
 Apps/Shared/                     app-layer code shared by macOS + iPadOS (phase 3)
 Apps/iPadOS/                     iPad shell (phase 3)
 Apps/Android/                    Gradle project (phase 5, §12.9)
+Apps/Windows/                    .NET solution (phase 6, §13.9)
 docs/spec.md                     this file
 docs/tasks/                      task plan
 docs/scene-schema.json           (phase 4) cross-platform scene contract
@@ -113,7 +114,7 @@ Data flow: `DeviceCatalog` → selected device → `CaptureEngine` (session queu
 | 3 | iPadOS target (USB-C iPads, iPadOS 17+) reusing CaptureCore + `Apps/Shared`. **Shipped in code (2026-10-21):** live 1080p60 (420f) at ~30 ms on screen, HDMI audio only via the card's USB route, Paused screen + instant resume for OS interruptions (multitasking camera access where supported; not on A12Z), Settings sheet, iPadOS menu bar, screenshots/recordings/Save Recent to Files + Photos, external-display clean feed (untested), 30-min soak passed (`docs/research/devices/ipad-pro-11-2g.md`). Tasks 020–021, 049–058 |
 | 4 | Mini-OBS: scene schema, Metal compositor (HDMI, webcam, ScreenCaptureKit, image, text, browser, chroma key), audio mixer, RTMP/SRT via HaishinKit, CoreMediaIO **virtual camera** |
 | 5 | Android (§12): Kotlin/Compose shell, native libusb + libuvc capture (Camera2 external where available), libjpeg-turbo, GLES 3, Oboe UAC audio, Play Billing Pro, MediaCodec recording. Spikes 069–076 → ADR 0002 (027); MVP 077–085 (028). Streaming stays hidden, as on Apple |
-| 6 | Windows: WinUI 3 + Media Foundation `MediaCapture`, D3D11 render, MF/FFmpeg-LGPL encode |
+| 6 | Windows (§13): C# .NET 10 + WinUI, MF Source Reader capture, libjpeg-turbo, D3D11 flip-model render, WASAPI audio, Store MSIX + `StoreContext` Pro, MF Sink Writer recording. Spikes 086–092 → ADR 0003 (029); MVP 093–103 (030). Streaming and virtual camera hidden, as on Android |
 | 7 | Free viewer features from competitor research (§11) |
 | 8 | Pro unlock (StoreKit 2), Pro features, Mac App Store (§10) |
 
@@ -232,3 +233,117 @@ docs/fixtures/           shared JSON test vectors read by Swift and Kotlin tests
 4. 30-min soak at the best format: no growing drops, memory flat, audio buffer flat, thermal logged.
 5. Latency measured with a 240 fps camera and recorded in `docs/research/devices/`.
 6. Recording + Save Recent play back with A/V in sync; screenshots and recordings contain no UI.
+
+## 13. Windows v1 (phase 6)
+
+Research: `docs/research/windows.md`. ADR 0003 (task 029) confirms the stack or changes it, based on the spike results. Product scope is the same as Android: a free viewer plus Pro recording and Save Recent. Streaming and the virtual camera stay hidden.
+
+### 13.1 Devices & OS
+- Windows 11 22H2+ on x64 and ARM64 is supported and tested. Windows 10 22H2 should run (Windows App SDK supports 1809+) but isn't tested. Windows 11-only APIs (virtual camera, DXVA MJPEG on 24H2) are feature-detected.
+- Desktops and laptops, including hybrid-GPU machines. Mouse, keyboard, pen and touch. Several monitors with mixed DPI and refresh rates.
+
+### 13.2 Discovery & permissions
+- Video: `MFEnumDeviceSources` (VIDCAP). Hot-plug: `CM_Register_Notification` on `KSCATEGORY_VIDEO_CAMERA`, matching symbolic links case-insensitively.
+- Audio: pair each card's video interface with its WASAPI capture endpoint by **USB ContainerId**; the user can override the pairing. Listen for endpoint changes with `IMMNotificationClient`.
+- Auto-select the remembered device if present, otherwise the most recently attached one.
+  - Stable key: VID:PID + serial, or VID:PID + name when there is no serial. The symbolic link changes from port to port.
+- Privacy:
+  - `E_ACCESSDENIED` on the camera → status card with a button to `ms-settings:privacy-webcam`.
+  - Microphone denied → the picture still works and an audio badge links to `ms-settings:privacy-microphone`. Never fail capture because audio is missing.
+- Camera in use by another app (0xC00D3EA3 / 0xC00D3704) → an "In use" state that keeps retrying with backoff.
+- Windows 11 "Allow multiple apps to use camera" → show the format we actually got (requested vs actual).
+
+### 13.3 Capture
+- `IMFSourceReader` in async mode with one `ReadSample` outstanding, `MF_LOW_LATENCY`, and `MF_READWRITE_DISABLE_CONVERTERS`. Video processing stays off, so MF never inserts a converter.
+- `FormatSelector` (C# port, same fixtures) picks from the native types. It prefers uncompressed (NV12/YUY2) when the type exists at the target frame rate, and applies the USB link-speed rule when the hub reports the speed. The user can pin a format.
+- The capture/decode thread runs under MMCSS "Capture". No allocation per frame: pooled native buffers.
+- Dev/CI: `TestPatternSource` (SMPTE bars, full bars, grid, gray ramp) behind the same `ICaptureSource` interface. Optional: our own virtual camera as a test device (task 104).
+
+### 13.4 Decode & render
+- MJPEG: libjpeg-turbo (native DLL, P/Invoke) to planar YCbCr, with 2 threads at ≥ 1080p60; the newest frame wins. Optional fast paths, used only when a probe succeeds: DXVA MJPEG (Windows 11 24H2+) or the MF MJPEG MFT.
+- Render: D3D11 on the adapter that drives the window's monitor; the device is recreated when the window moves to another adapter. Our own HLSL shader uses the same maths and options as `MetalRenderer`: fit/fill/stretch/integer, linear/nearest, auto/limited/full, BT.601/709, adjustments, `.cube` LUT, guides.
+  - Two passes, like Android: convert at source size, then scale. The pass-1 texture is the clean source for screenshots and recordings.
+- Present: flip-model swap chain (`FLIP_DISCARD`, waitable object, `SetMaximumFrameLatency(1)`, `ALLOW_TEARING`), presenting as each frame arrives. Full screen is borderless.
+- Start in a WinUI `SwapChainPanel`. If PresentMon shows it never reaches independent flip in full screen (092), viewer windows switch to an HWND swap chain with the control bar in a separate popup (ADR 0003).
+- Multi-View composes every tile into **one** swap chain.
+
+### 13.5 Always-on & lifecycle
+- Never stop capture for focus loss, minimize, occlusion, virtual-desktop switches, DPI or monitor changes, or the lock screen. Pause presenting when hidden; capture and audio keep running (§5.3 rule).
+- While live:
+  - a `PowerRequestDisplayRequired` power request with a reason string;
+  - EcoQoS opt-out (`SetProcessInformation` ProcessPowerThrottling, execution speed + timer resolution);
+  - audio threads under MMCSS "Pro Audio".
+- Recovery is the same as on Apple. These events → `recovering` with backoff 0.25 s → 4 s and automatic re-attach of the remembered device:
+  - unplug/replug;
+  - reader errors;
+  - "in use" by another app;
+  - sleep/resume (`RegisterSuspendResumeNotification`).
+- Frames are pushed by MF callbacks, audio by WASAPI events, and presents are paced by the swap chain. There are no timers in the frame path.
+
+### 13.6 Audio
+- WASAPI shared mode, event-driven, on both sides; `IAudioClient3` small periods where the engine allows them. The output follows the default device unless the user picks one.
+- A ring buffer plus drift controller (adaptive resample) keeps latency flat over hours.
+- The same features as §11 #1: volume, mute, delay 0–500 ms, L/R swap, mono fix, meters.
+- MS2109 quirk: when the card reports 96 kHz mono 16-bit, reinterpret the stream as 48 kHz stereo.
+
+### 13.7 UI
+- C# + WinUI with Mica and a dark theme around the video. Same structure and copy as the Apple apps (`docs/copy.md`): status cards, connect illustration, no-signal/HDCP help, Connection Help, hover control bar, right-click menu.
+- Window behaviour:
+  - aspect-locked resize (`WM_SIZING`);
+  - borderless clean mode;
+  - always on top;
+  - double-click toggles full screen;
+  - the cursor hides after 3 s;
+  - window size presets.
+- Shortcuts: F11 / Alt+Enter full screen · Ctrl+M mute · Ctrl+1/2/3/4 scale modes · Ctrl+T always on top · Ctrl+, settings · Ctrl+Shift+S screenshot.
+- A notification-area (tray) icon stands in for the Mac menu-bar extra.
+- Settings window: video device, audio device, format, scale/filter/colour, image adjustments, profiles, per-device presets. Prefs are JSON in LocalAppData and use the same keys as `ViewerPrefs`.
+- Accessibility (UI Automation names for every control, keyboard navigation, high contrast) and per-monitor DPI v2.
+- Overlays are XAML above the video and never reach screenshots, recordings or Save Recent (§6 rule).
+
+### 13.8 Outputs & Pro
+- Screenshot (free): WIC PNG from the pass-1 texture → `Pictures\HDMI Captain`, plus a copy to the clipboard.
+- Recording and Save Recent (Pro):
+  - MF Sink Writer with a hardware encoder MFT (NVENC/AMF/QSV) for H.264/HEVC, falling back to software H.264, plus AAC → fragmented MP4 in `Videos\HDMI Captain`.
+  - Save Recent keeps an encoded ring trimmed at keyframes and remuxes it on save, like `RollingRecorder`.
+- Pro is one Microsoft Store **durable add-on** (`StoreContext`, `InitializeWithWindow`).
+  - The licence is re-checked on launch and cached for offline use.
+  - One gate, the equivalent of `EntitlementStore.gate`; free features never check it.
+  - DEBUG builds use a fake store (`-debugUnlockPro YES`).
+
+### 13.9 Code layout
+```
+Apps/Windows/                    .NET 10 solution (HDMICaptain.Windows.slnx), Directory.Packages.props
+  src/HDMICaptain.Core/          net10.0, pure: FormatSelector, RecoveryMachine, SignalAnalyzer/Monitor, RenderGeometry, presets/profiles, CubeLUT, ProFeature
+  src/HDMICaptain.Media/         net10.0-windows: DeviceCatalog, CaptureController, MfSource, TestPatternSource, MjpegDecoder (libjpeg-turbo), D3DRenderer + HLSL, AudioPipeline (WASAPI), Recorder/RollingRecorder, LatencyProbe
+  src/HDMICaptain.App/           WinUI app (MSIX): AppModel/ViewerModel, windows, control bar, settings, tray, ProStore, .resw strings
+  native/                        vcpkg manifest (libjpeg-turbo); later VirtualCamera (C++ COM media source)
+  tests/HDMICaptain.Core.Tests/  xUnit, reads docs/fixtures/
+  tests/HDMICaptain.Media.Tests/ renderer on WARP, decoder and audio DSP tests
+```
+- Interop: CsWin32 (Win32, MF, WASAPI, power) and Vortice.Windows (D3D11/DXGI/D3DCompiler).
+- `make win-build | win-test | win-run WIN_ARGS="-testPattern smpteBars" | win-package`. DEBUG builds accept the Apple QA arguments (`-testPattern`, `-qaAction`, `-qaShowStats`, `-qaPinControls`, `-qaSoakMinutes`, `-debugUnlockPro`).
+
+### 13.10 Performance
+- Targets:
+  - 1080p60 shown at 60 fps with no drops (MJPEG and uncompressed);
+  - 4K30 on the RTX/Ryzen dev PC;
+  - glass-to-glass no worse than the Mac app on the same card, and ≤ 1 frame above OBS preview;
+  - a 30-min soak with flat memory and a flat audio buffer.
+- Means:
+  - a native-memory frame path;
+  - no GC allocation per frame (`SustainedLowLatency` while live);
+  - MMCSS;
+  - the display's adapter;
+  - independent flip in full screen;
+  - ReadyToRun (Native AOT if clean);
+  - PresentMon and ETW traces for the capture, decode, render and present stages.
+
+### 13.11 Acceptance tests (Windows v1, on the dev PC + one laptop if available)
+1. Plug in a card → picture and sound within 1 s on later plug-ins (the first plug-in may include privacy prompts).
+2. Minimize, occlude, switch virtual desktops, move between monitors (DPI and adapter change), lock 5 min → no capture restart in the logs.
+3. Unplug/replug, sleep/resume, another app taking the camera and then releasing it → recovers without user action.
+4. 30-min soak at 1080p60: no growing drops, memory and audio buffer flat.
+5. Latency measured with the latency probe and a 240 fps camera, windowed and full screen, with the PresentMon present mode recorded in `docs/research/devices/`.
+6. Recording and Save Recent play back with A/V in sync. Screenshots and recordings contain no UI.
+7. Camera privacy off → the right status card. Microphone off → picture with an audio badge.
