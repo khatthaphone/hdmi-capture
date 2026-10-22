@@ -1,0 +1,74 @@
+namespace HDMICaptain.Core.Audio;
+
+/// <summary>
+/// Keeps the ring fill near a target by nudging the resample ratio. The capture and render clocks differ by tens of ppm;
+/// a PI loop on the smoothed fill absorbs that without dropping or repeating samples audibly.
+/// </summary>
+public sealed class DriftController
+{
+    public const double MaxPpm = 2000;
+    private const double SmoothingSeconds = 0.5;
+    private const double ProportionalPpmPerMs = 40;
+    private const double IntegralPpmPerMsSecond = 1;
+    private const double RetargetMsPerSecond = 200;
+
+    private readonly double _sampleRate;
+    private double _targetMs;
+    private double _currentTargetMs;
+    private double _smoothedFrames;
+    private double _integralPpm;
+    private bool _primed;
+
+    public DriftController(double sampleRate, double targetMs)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(sampleRate, 0);
+        _sampleRate = sampleRate;
+        _targetMs = _currentTargetMs = targetMs;
+    }
+
+    /// <summary>Desired fill in milliseconds (delay + base buffer). The loop slews toward a new value at 200 ms/s.</summary>
+    public double TargetMs
+    {
+        get => Volatile.Read(ref _targetMs);
+        set => Volatile.Write(ref _targetMs, value);
+    }
+
+    public double SmoothedFillMs => _smoothedFrames * 1000 / _sampleRate;
+
+    /// <summary>The target the loop is currently steering toward (follows <see cref="TargetMs"/> smoothly).</summary>
+    public double CurrentTargetMs => _currentTargetMs;
+
+    /// <summary>Clears loop state, e.g. after the ring was cleared or the stream restarted.</summary>
+    public void Reset()
+    {
+        _primed = false;
+        _integralPpm = 0;
+        _currentTargetMs = TargetMs;
+    }
+
+    /// <summary>
+    /// Render thread, once per period. Returns the correction (about 1.0) to multiply the nominal input/output ratio by:
+    /// above 1 consumes input faster (fill too high). No allocations.
+    /// </summary>
+    public double Update(int fillFrames, double elapsedSeconds)
+    {
+        if (!_primed)
+        {
+            _smoothedFrames = fillFrames;
+            _currentTargetMs = TargetMs;
+            _primed = true;
+        }
+        double dt = Math.Clamp(elapsedSeconds, 0, 1);
+        if (dt > 0)
+        {
+            _smoothedFrames += (fillFrames - _smoothedFrames) * (1 - Math.Exp(-dt / SmoothingSeconds));
+            double step = RetargetMsPerSecond * dt;
+            _currentTargetMs += Math.Clamp(TargetMs - _currentTargetMs, -step, step);
+        }
+
+        double errorMs = SmoothedFillMs - _currentTargetMs;
+        _integralPpm = Math.Clamp(_integralPpm + IntegralPpmPerMsSecond * errorMs * dt, -MaxPpm, MaxPpm);
+        double ppm = Math.Clamp(ProportionalPpmPerMs * errorMs + _integralPpm, -MaxPpm, MaxPpm);
+        return 1 + ppm * 1e-6;
+    }
+}
