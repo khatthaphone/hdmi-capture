@@ -210,7 +210,9 @@ public sealed class WasapiAudioPipeline : IDisposable
             var render = client.Service<IAudioRenderClient>();
             var scratch = new float[bufferFrames * 2];
             var clock = Stopwatch.StartNew();
+#if DEBUG
             var lastLog = 0L;
+#endif
             var primed = false;
             client.Audio.Start();
             while (_running && !_renderRestart)
