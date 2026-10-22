@@ -11,7 +11,7 @@ public sealed class DriftController
     private const double ProportionalPpmPerMs = 40;
     private const double IntegralPpmPerMsSecond = 1;
     private const double RetargetMsPerSecond = 200;
-    private const double HeadroomMs = 2;
+    private const double HeadroomMs = 3; // packets land ~1.3 ms after the ideal phase and jitter ~0.8 ms (task 102 log)
 
     private readonly double _sampleRate;
     private double _targetMs;

@@ -118,7 +118,7 @@ public class DriftControllerTests
     public void MinimumTargetCoversAPacketAndAPeriod()
     {
         // UGREEN-25854: 480-frame capture packets and render periods at 48 kHz.
-        Assert.Equal(22, DriftController.MinimumTargetMs(10, 10), 6);
+        Assert.Equal(23, DriftController.MinimumTargetMs(10, 10), 6);
         // Small packets and periods: the 20 ms base wins in the pipeline.
         Assert.True(DriftController.MinimumTargetMs(1, 3) < 20);
     }
