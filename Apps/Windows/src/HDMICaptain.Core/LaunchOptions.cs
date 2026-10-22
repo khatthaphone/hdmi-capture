@@ -17,6 +17,10 @@ public sealed record LaunchOptions
     public bool QaBuiltInCameras { get; init; }
     public int? QaSoakMinutes { get; init; }
     public bool DebugUnlockPro { get; init; }
+    /// <summary>Windows only (DEBUG): `-videoSurface hwnd` uses the HWND swap chain instead of the SwapChainPanel (task 092).</summary>
+    public string? VideoSurface { get; init; }
+    /// <summary>Windows only (DEBUG): `-testPatternFormat nv12|yuy2|i420|i422|i444|bgra` picks the pattern's pixel layout.</summary>
+    public string? TestPatternFormat { get; init; }
 
     public static LaunchOptions Parse(IReadOnlyList<string> args, bool allowQa)
     {
@@ -42,6 +46,8 @@ public sealed record LaunchOptions
             QaBuiltInCameras = Flag(values, "qaBuiltInCameras"),
             QaSoakMinutes = values.TryGetValue("qaSoakMinutes", out var m) && int.TryParse(m, out var n) && n > 0 ? n : null,
             DebugUnlockPro = Flag(values, "debugUnlockPro"),
+            VideoSurface = values.GetValueOrDefault("videoSurface"),
+            TestPatternFormat = values.GetValueOrDefault("testPatternFormat"),
         };
     }
 

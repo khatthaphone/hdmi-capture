@@ -4,6 +4,7 @@
     <SupportedOSPlatformVersion>$(WindowsMinVersion)</SupportedOSPlatformVersion>
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Platforms>x64;ARM64</Platforms>
   </PropertyGroup>
   <ItemGroup>

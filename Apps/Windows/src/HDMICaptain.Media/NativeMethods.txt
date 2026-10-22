@@ -3,3 +3,17 @@ MFStartup
 MFShutdown
 MF_VERSION
 MFSTARTUP_FULL
+CreateWaitableTimerEx
+SetWaitableTimer
+WaitForSingleObject
+CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+MonitorFromWindow
+GetModuleHandle
+RegisterClassEx
+CreateWindowEx
+DestroyWindow
+DefWindowProc
+SetWindowPos
+ShowWindow
+LoadCursor
+CloseHandle
