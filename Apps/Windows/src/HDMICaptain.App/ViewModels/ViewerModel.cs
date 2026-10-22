@@ -25,28 +25,35 @@ public sealed record StatusCopy(string Glyph, string Title, string Message, stri
 {
     public const string Device = "PC";
 
+    /// <summary>The card is live but shows no picture (its own "no signal" screen, or black): NoSignalOverlay.</summary>
+    public static StatusCopy NoSignal(SignalContent content) => new("\uE7F4", "No HDMI signal",
+        content is SignalContent.Black
+            ? "The card receives a black picture. If the source is a PlayStation or Apple TV, turn off HDCP in its settings."
+            : "Check that the source is on and the HDMI cable is plugged in.",
+        Secondary: StatusAction.Help);
+
     public static StatusCopy? For(ViewerPhase phase) => phase switch
     {
-        ViewerPhase.Scanning => new("", "Connect a capture card",
+        ViewerPhase.Scanning => new("\uE8EA", "Connect a capture card",
             $"Plug an HDMI capture card into this {Device}. The picture appears automatically.",
             Secondary: StatusAction.Help),
-        ViewerPhase.PermissionDenied => new("", "Camera access required",
+        ViewerPhase.PermissionDenied => new("\uE8A6", "Camera access required",
             "Turn on camera access for desktop apps in Settings › Privacy & security › Camera, then come back.",
             Primary: StatusAction.OpenPrivacySettings, Secondary: StatusAction.CheckAgain),
         ViewerPhase.Connecting c => new("", $"Connecting to {c.Name}…", "Starting the capture card.", Spinner: true),
-        ViewerPhase.Waiting w => new("", $"{w.Name} is disconnected", "Plug it back in to continue where you left off."),
+        ViewerPhase.Waiting w => new("\uE8CD", $"{w.Name} is disconnected", "Plug it back in to continue where you left off."),
         ViewerPhase.Recovering r => Recovering(r.Reason),
-        ViewerPhase.Paused p => new("", "Paused", PauseMessage(p.Reason)),
-        ViewerPhase.Failed f => new("", "The capture card stopped responding",
+        ViewerPhase.Paused p => new("\uE769", "Paused", PauseMessage(p.Reason)),
+        ViewerPhase.Failed f => new("\uE7BA", "The capture card stopped responding",
             "Try reconnecting. If that doesn't help, unplug the card and plug it back in.", f.Detail, Primary: StatusAction.Reconnect),
         _ => null,
     };
 
     private static StatusCopy Recovering(string reason) => reason switch
     {
-        RecoveryReason.NoSignal => new("", "No HDMI signal", "Check that the source is on and the HDMI cable is plugged in.",
+        RecoveryReason.NoSignal => new("\uE7F4", "No HDMI signal", "Check that the source is on and the HDMI cable is plugged in.",
             Secondary: StatusAction.Help),
-        RecoveryReason.Disconnected or RecoveryReason.Waiting => new("", "Capture card disconnected", "Plug it back in to continue."),
+        RecoveryReason.Disconnected or RecoveryReason.Waiting => new("\uE8CD", "Capture card disconnected", "Plug it back in to continue."),
         _ => new("", "Reconnecting…", "The capture card stopped sending video. Reconnecting automatically.", Spinner: true),
     };
 
@@ -76,6 +83,11 @@ public sealed partial class ViewerModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Status), nameof(StatusVisibility), nameof(IsLive))]
     public partial ViewerPhase Phase { get; set; } = new ViewerPhase.Scanning();
+
+    /// <summary>What the live picture shows; "no signal" covers the held last frame with the status card.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Status), nameof(StatusVisibility))]
+    public partial SignalContent Signal { get; set; } = new SignalContent.Picture();
 
     [ObservableProperty]
     public partial string InputName { get; set; } = "No Input";
@@ -110,12 +122,12 @@ public sealed partial class ViewerModel : ObservableObject
     [ObservableProperty]
     public partial string StatsText { get; set; } = "";
 
-    public StatusCopy? Status => StatusCopy.For(Phase);
+    public StatusCopy? Status => Phase is ViewerPhase.Live && Signal.IsNoSignal ? StatusCopy.NoSignal(Signal) : StatusCopy.For(Phase);
     public Visibility StatusVisibility => Status is null ? Visibility.Collapsed : Visibility.Visible;
     public bool IsLive => Phase is ViewerPhase.Live;
     public Visibility StatsVisibility => ShowDiagnostics ? Visibility.Visible : Visibility.Collapsed;
-    public string MuteGlyph => Muted ? "" : "";
-    public string FullScreenGlyph => IsFullScreen ? "" : "";
+    public string MuteGlyph => Muted ? "\uE74F" : "\uE767";
+    public string FullScreenGlyph => IsFullScreen ? "\uE73F" : "\uE740";
 
     public static string ScaleTitle(ScaleMode mode) => mode switch
     {

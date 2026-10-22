@@ -8,31 +8,31 @@ public static class ConnectionHelp
 {
     private static readonly (string Glyph, string Title, string[] Steps)[] Topics =
     [
-        ("", "No HDMI signal",
+        ("\uE7F4", "No HDMI signal",
         [
             "Turn the source on and make sure it isn't asleep.",
             "Unplug the HDMI cable at both ends and plug it back in.",
             "Pick the source's HDMI output (not its built-in screen) and a standard resolution such as 1080p.",
         ]),
-        ("", "Black picture from a PlayStation or Apple TV",
+        ("\uE72E", "Black picture from a PlayStation or Apple TV",
         [
             "These sources protect video with HDCP, and capture cards can't show protected video.",
             "PS5: Settings › System › HDMI › turn off Enable HDCP. PS4: Settings › System › turn off Enable HDCP.",
             "Apple TV and streaming apps always use HDCP for movies and TV; games and menus usually work.",
         ]),
-        ("", "No sound",
+        ("\uE74F", "No sound",
         [
             "Check that the source isn't muted and that sound is on in HDMI Captain (speaker button on the bar).",
             "Allow desktop apps in Settings › Privacy & security › Microphone; capture cards deliver sound as a microphone.",
             "Choose the audio output in Settings › System › Sound.",
         ]),
-        ("", "Capture card not found",
+        ("\uE8CD", "Capture card not found",
         [
             "Use a UVC capture card (most USB HDMI capture cards are). Cards that need a driver may not appear.",
             "Try another USB port or cable; some cables only charge.",
             "Allow desktop apps in Settings › Privacy & security › Camera.",
         ]),
-        ("", "Picture lags or stutters",
+        ("\uEC4A", "Picture lags or stutters",
         [
             "Plug the card straight into the PC, not through a hub, when you can.",
             "Two cards on one USB 2.0 bus share bandwidth; use separate ports or lower the format in Settings.",

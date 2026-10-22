@@ -40,6 +40,7 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherTimer _toastTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private CaptureController? _capture;
     private TestPatternSource? _testPattern;
+    private readonly SignalMonitor _signal = new();
     private WasapiAudioPipeline? _audio;
     private string? _audioDeviceKey;
     private AudioSettings _audioSettings = new();
@@ -84,6 +85,11 @@ public sealed partial class MainWindow : Window
         Model.AlwaysOnTop = prefs.FloatOnTop;
         Model.CleanMode = prefs.CleanMode;
         Model.PropertyChanged += OnModelChanged;
+        _signal.Changed += content =>
+        {
+            AppLog.Write($"[signal] {content}");
+            DispatcherQueue.TryEnqueue(() => Model.Signal = content);
+        };
         ApplyAlwaysOnTop();
         ApplyCleanMode();
         ShowStatus();
@@ -138,6 +144,11 @@ public sealed partial class MainWindow : Window
             CaptureState.Failed f => new ViewerPhase.Failed(f.Message),
             _ => new ViewerPhase.Scanning(),
         };
+        if (state is not CaptureState.Live)
+        {
+            _signal.Reset();
+            Model.Signal = new SignalContent.Picture();
+        }
         if (state is CaptureState.Live live)
         {
             _hadCard = true;
@@ -186,6 +197,7 @@ public sealed partial class MainWindow : Window
     private void OnFrame(in VideoFrame frame)
     {
         _renderer.Render(in frame);
+        _signal.Observe(in frame);
         Interlocked.Increment(ref _frames);
     }
 
@@ -345,7 +357,7 @@ public sealed partial class MainWindow : Window
         }
         if (items.Count == 0) items.Add(new MenuFlyoutItem { Text = "No capture card connected", IsEnabled = false });
         items.Add(new MenuFlyoutSeparator());
-        items.Add(Item("Reconnect", "", Reconnect));
+        items.Add(Item("Reconnect", "\uE72C", Reconnect));
     }
 
     private void OnOptionsMenuOpening(object? sender, object e)
@@ -356,7 +368,7 @@ public sealed partial class MainWindow : Window
 
     private void FillOptionsItems(IList<MenuFlyoutItemBase> items)
     {
-        var scale = new MenuFlyoutSubItem { Text = "Scale", Icon = new FontIcon { Glyph = "" } };
+        var scale = new MenuFlyoutSubItem { Text = "Scale", Icon = new FontIcon { Glyph = "\uE740" } };
         foreach (var mode in Enum.GetValues<ScaleMode>())
         {
             var item = new RadioMenuFlyoutItem
@@ -373,12 +385,12 @@ public sealed partial class MainWindow : Window
         items.Add(Toggle("Sharp Pixels", Model.SharpPixels, v => Model.SharpPixels = v));
         items.Add(new MenuFlyoutSeparator());
         items.Add(Toggle("Show Diagnostics", Model.ShowDiagnostics, v => Model.ShowDiagnostics = v));
-        items.Add(Item("Connection Help…", "", async () => await ConnectionHelp.ShowAsync(Content.XamlRoot)));
+        items.Add(Item("Connection Help…", "\uE897", async () => await ConnectionHelp.ShowAsync(Content.XamlRoot)));
         items.Add(Toggle("Keep Window on Top", Model.AlwaysOnTop, v => Model.AlwaysOnTop = v, "Ctrl+T"));
         items.Add(Toggle("Clean Mode", Model.CleanMode, v => Model.CleanMode = v));
         items.Add(new MenuFlyoutSeparator());
-        items.Add(Item("Save Screenshot", "", SaveScreenshot, "Ctrl+Shift+S"));
-        items.Add(Item("Copy Frame", "", CopyFrame));
+        items.Add(Item("Save Screenshot", "\uE722", SaveScreenshot, "Ctrl+Shift+S"));
+        items.Add(Item("Copy Frame", "\uE8C8", CopyFrame));
     }
 
     /// <summary>Right-click menu: the Mac's context menu (input, view options, full screen).</summary>
@@ -388,7 +400,7 @@ public sealed partial class MainWindow : Window
         menu.Opening += (_, _) =>
         {
             menu.Items.Clear();
-            var input = new MenuFlyoutSubItem { Text = "Video Input", Icon = new FontIcon { Glyph = "" } };
+            var input = new MenuFlyoutSubItem { Text = "Video Input", Icon = new FontIcon { Glyph = "\uE714" } };
             FillInputItems(input.Items);
             menu.Items.Add(input);
             menu.Items.Add(new MenuFlyoutSeparator());
