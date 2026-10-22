@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>$(WindowsTargetFramework)</TargetFramework>
+    <TargetPlatformMinVersion>$(WindowsMinVersion)</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>$(WindowsMinVersion)</SupportedOSPlatformVersion>
+    <RootNamespace>HDMICaptain.App</RootNamespace>
+    <AssemblyName>HDMICaptain</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifier Condition="'$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- Debug runs unpackaged from bin/; Release builds the Store MSIX (make win-package). -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <WindowsPackageType>None</WindowsPackageType>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <AppxBundle>Never</AppxBundle>
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HDMICaptain.Core\HDMICaptain.Core.csproj" />
+    <ProjectReference Include="..\HDMICaptain.Media\HDMICaptain.Media.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Assets\*" CopyToOutputDirectory="PreserveNewest" />
+    <Manifest Include="app.manifest" />
+  </ItemGroup>
+
+  <!-- libjpeg-turbo from the vcpkg manifest in native/ (make win-deps); copied next to the exe when built. -->
+  <PropertyGroup>
+    <VcpkgTriplet Condition="'$(Platform)' == 'ARM64'">arm64-windows</VcpkgTriplet>
+    <VcpkgTriplet Condition="'$(VcpkgTriplet)' == ''">x64-windows</VcpkgTriplet>
+    <TurboJpegDll>$(MSBuildThisFileDirectory)..\..\native\vcpkg_installed\$(VcpkgTriplet)\bin\turbojpeg.dll</TurboJpegDll>
+  </PropertyGroup>
+  <ItemGroup Condition="Exists('$(TurboJpegDll)')">
+    <Content Include="$(TurboJpegDll)" Link="turbojpeg.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

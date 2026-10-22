@@ -1,7 +1,7 @@
 DERIVED := .build/xcode
 APP := $(DERIVED)/Build/Products/Debug/HDMI Captain.app
 
-.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad run-ipad-profile install-mac ipad-snapshot ipad-soak android-build android-test android-run android-check16k android-soak inventory logs clean
+.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad run-ipad-profile install-mac ipad-snapshot ipad-soak android-build android-test android-run android-check16k android-soak win-deps win-build win-test win-run win-package win-cert inventory logs clean
 
 IOS_SIM ?= iPad Pro 11-inch (M5)
 IPAD_APP_SIM := $(DERIVED)/Build/Products/Debug-iphonesimulator/HDMI Captain.app
@@ -111,6 +111,42 @@ android-soak:
 android-run: android-build
 	adb install -r $(ANDROID_DIR)/app/build/outputs/apk/debug/app-debug.apk
 	adb shell am start -S -n com.example.hdmicaptain/.MainActivity $(ANDROID_ARGS)
+
+# Windows (Apps/Windows), run from Git Bash/GNU make on the Windows dev PC with the .NET 10 SDK.
+# WIN_ARGS are the Apple-style launch arguments, e.g. WIN_ARGS="-testPattern smpteBars".
+# WIN_PLATFORM is x64 or ARM64. win-deps builds libjpeg-turbo with vcpkg (VCPKG overrides its path).
+WIN_DIR := Apps/Windows
+WIN_PLATFORM ?= x64
+WIN_RID := $(if $(filter ARM64,$(WIN_PLATFORM)),win-arm64,win-x64)
+WIN_TRIPLET := $(if $(filter ARM64,$(WIN_PLATFORM)),arm64-windows,x64-windows)
+WIN_EXE := $(WIN_DIR)/src/HDMICaptain.App/bin/Debug/net10.0-windows10.0.22621.0/$(WIN_RID)/HDMICaptain.exe
+WIN_CERT := $(WIN_DIR)/.local/HDMICaptainDev.pfx
+VCPKG ?= C:/vcpkg/vcpkg
+WIN_ARGS ?=
+
+win-deps:
+	@test -f $(WIN_DIR)/native/vcpkg_installed/$(WIN_TRIPLET)/bin/turbojpeg.dll || \
+	  (cd $(WIN_DIR)/native && $(VCPKG) install --triplet $(WIN_TRIPLET))
+
+win-build: win-deps
+	cd $(WIN_DIR) && dotnet build HDMICaptain.Windows.slnx -c Debug -p:Platform=$(WIN_PLATFORM) -nologo
+
+win-test: win-deps
+	cd $(WIN_DIR) && dotnet test --solution HDMICaptain.Windows.slnx -p:Platform=$(WIN_PLATFORM)
+
+win-run: win-build
+	"$(WIN_EXE)" $(WIN_ARGS) > /dev/null 2>&1 &
+
+# Self-signed dev certificate for sideloading the MSIX; the script prints the one-time trust command (admin).
+win-cert:
+	@pwsh -NoProfile -File $(WIN_DIR)/tools/new-dev-cert.ps1 -Path "$(abspath $(WIN_CERT))"
+
+win-package: win-deps
+	cd $(WIN_DIR) && dotnet publish src/HDMICaptain.App/HDMICaptain.App.csproj -c Release -p:Platform=$(WIN_PLATFORM) \
+	  -p:GenerateAppxPackageOnBuild=true -p:AppxSymbolPackageEnabled=false -p:AppxPackageSigningEnabled=true \
+	  -p:PackageCertificateThumbprint=$$(pwsh -NoProfile -File tools/new-dev-cert.ps1 -Path "$(abspath $(WIN_CERT))") \
+	  -p:AppxPackageDir="$(abspath $(WIN_DIR))/AppPackages/" -nologo
+	@ls -t $(WIN_DIR)/AppPackages/*/*.msix | head -1
 
 inventory:
 	cd tools/device-inventory && swift run -q device-inventory

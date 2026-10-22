@@ -5,3 +5,9 @@ DerivedData/
 *.xcodeproj
 xcuserdata/
 Config/Local.xcconfig
+# Windows (Apps/Windows)
+bin/
+obj/
+vcpkg_installed/
+AppPackages/
+Apps/Windows/.local/

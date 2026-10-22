@@ -1,0 +1,15 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="ARM64" />
+  </Configurations>
+  <Folder Name="/src/">
+    <Project Path="src/HDMICaptain.Core/HDMICaptain.Core.csproj" />
+    <Project Path="src/HDMICaptain.Media/HDMICaptain.Media.csproj" />
+    <Project Path="src/HDMICaptain.App/HDMICaptain.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HDMICaptain.Core.Tests/HDMICaptain.Core.Tests.csproj" />
+    <Project Path="tests/HDMICaptain.Media.Tests/HDMICaptain.Media.Tests.csproj" />
+  </Folder>
+</Solution>
