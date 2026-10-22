@@ -24,10 +24,10 @@ public interface ICaptureSourceFactory
 }
 
 /// <summary>Opens cards through Media Foundation.</summary>
-public sealed class MfSourceFactory : ICaptureSourceFactory
+public sealed class MfSourceFactory(MjpegPolicy mjpegPolicy = MjpegPolicy.Auto) : ICaptureSourceFactory
 {
     public ICaptureSession Create(CaptureDevice device, FormatPreference? preference) =>
-        new MfSource(device.SymbolicLink, preference, device.Usb?.Link);
+        new MfSource(device.SymbolicLink, preference, device.Usb?.Link, mjpegPolicy);
 }
 
 /// <summary>Timing of the controller's watchdog and retries.</summary>
@@ -44,6 +44,14 @@ public sealed record CaptureControllerOptions
 
     /// <summary>Polling for "privacy off" and "in use by another app" to clear (neither has a reliable change event).</summary>
     public TimeSpan PauseRetryInterval { get; init; } = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Capture raw MJPG and decode it with libjpeg-turbo instead of taking Windows' decoded NV12 twin
+    /// (<see cref="MjpegPolicy.PreferOwnDecode"/>). Off by default until 092 measures which path has less latency.
+    /// </summary>
+    public bool PreferOwnMjpegDecode { get; init; }
+
+    public MjpegPolicy MjpegPolicy => PreferOwnMjpegDecode ? MjpegPolicy.PreferOwnDecode : MjpegPolicy.Auto;
 }
 
 /// <summary>How an HRESULT from MF is treated.</summary>
@@ -136,7 +144,7 @@ public sealed class CaptureController : IDisposable
         var watcher = new WatcherChangeSource();
         var catalog = new DeviceCatalog(new MfDeviceList(), scheduler, watcher, preferredKey);
         var power = new WindowsPower();
-        return new CaptureController(catalog, new MfSourceFactory(), scheduler, power, options,
+        return new CaptureController(catalog, new MfSourceFactory(options?.MjpegPolicy ?? MjpegPolicy.Auto), scheduler, power, options,
             new Disposables(power, catalog, watcher, scheduler));
     }
 

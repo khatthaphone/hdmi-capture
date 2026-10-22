@@ -93,6 +93,8 @@ Observed on the dev PC (Windows 11 26200, UGREEN-25854, 2026-10-22, task 089):
 
 **Windows decodes MJPEG for us.** The UGREEN-25854 negotiates USB 2 high speed on this PC, yet lists NV12 1080p60 next to every MJPEG type. Each NV12 twin carries an undocumented attribute `{EA031A62-8BBB-43C5-B5C4-572D2D231C18}` = 1, reports full range + BT.601 (JPEG's), and streams 60 fps steadily even with `MF_READWRITE_DISABLE_CONVERTERS`. So the camera pipeline decodes MJPEG upstream of the reader. `MfDevices.Choose` skips the USB-link bandwidth rule when such types exist. Whether our own libjpeg-turbo path (090) beats it on latency is a 092 question. The 30 fps modes on this card are irregular (17–25 fps); the 60 fps modes are clean. One Store competitor's top complaint is that "denying the mic silently breaks capture". We treat the microphone as optional.
 
+**The decoded twin blocks the raw MJPEG type for other readers** (090, 2026-10-22). While one process (our app) streams the Windows-decoded NV12 1080p60 twin, a second reader can open the same twin and share it (~60 fps after a short gap). But setting the raw `MJPG` type, at 1080p60 or 720p60, opens without error and then fails the first `ReadSample` with `MF_E_HW_MFT_FAILED_START_STREAMING` (0xC00D3704). With the card free, raw MJPG at 1080p60 streams a steady 60 fps after about 3 s of start-up, and the first 3 frames are not JPEG (`02 82 …`); the decoder drops them. So `PreferOwnMjpegDecode` can turn "another app uses the card" into "in use" where the twin would have worked. If 092 makes our decoder the default, fall back to the twin on that error.
+
 ## 3. MJPEG decode
 
 | Option | Verdict |
@@ -102,6 +104,23 @@ Observed on the dev PC (Windows 11 26200, UGREEN-25854, 2026-10-22, task 089):
 | DXVA MJPEG (D3D11/12 video decode, Windows 11 24H2+) | Optional fast path when `GetVideoDecoderProfile` lists it. Intel likely; NVIDIA/AMD support unknown, and this PC has both GPUs to check |
 
 Ship libjpeg-turbo as a native DLL (vcpkg `libjpeg-turbo:x64-windows` / `arm64-windows`) called through P/Invoke. No JNI-style copy is needed: decode into pinned or native plane buffers and map them into dynamic textures.
+
+**Measured (090, 2026-10-22, Ryzen 7 9700X, libjpeg-turbo 3.1.3 x64, `HDMICaptain.Inventory --bench-mjpeg N`):** we captured raw MJPG from the UGREEN-25854 and decoded it offline with `tj3DecompressToYUVPlanes8` into reused native planes. Times are per frame and include the header parse.
+
+| Input | Threads | Mean | p50 | p95 | Max | Throughput |
+|---|---|---|---|---|---|---|
+| UGREEN 1080p60, 600 real frames (4:2:0, ~73 KiB, desktop content) | 1 | 0.94 ms | 0.91 ms | 1.25 ms | 1.64 ms | 1055 fps |
+| same | 2 | 0.94 ms | 0.91 ms | 1.26 ms | 1.49 ms | 2098 fps |
+| UGREEN 720p60, 300 real frames | 1 | 0.63 ms | 0.59 ms | 0.84 ms | 1.33 ms | 1563 fps |
+| UGREEN 1080p60, 117 real frames (second run) | 1 | 1.08 ms | 1.00 ms | 1.48 ms | 2.13 ms | 894 fps |
+| 1080p 4:2:0 per-pixel noise, q85, 1.5 MiB (worst case, beyond USB 2's per-frame budget) | 1 | 9.14 ms | 8.99 ms | 9.99 ms | 11.0 ms | 108 fps |
+| same | 2 | 9.22 ms | 8.99 ms | 10.38 ms | 11.4 ms | 213 fps |
+
+- The card sends **4:2:0** MJPEG, full-range BT.601 (JFIF), so it decodes to `I420`.
+- Real 1080p frames take about 1 ms, roughly 3–8× under the estimate above. One decoder on the MF thread is enough for 1080p60. Even the noise worst case (about 9 ms) fits a 16.7 ms frame.
+- 4K30 MJPEG wasn't measured (this card has no 4K type). With about 4× the pixels, real content should take about 4–5 ms on one thread.
+- **Decision:** decode inline on the MF callback thread (one `ReadSample` in flight, so the newest frame wins and nothing queues). Keep Windows' decoded NV12 twin as the default (`MjpegPolicy.Auto`). Our decoder is used for MJPG types without a twin, and for every MJPG type when `CaptureControllerOptions.PreferOwnMjpegDecode` is set. 092 decides from glass-to-glass latency whether our decoder should win when a twin exists. A worker pool (task 090 step 1) is unnecessary at these numbers.
+- **DXVA MJPEG** (`HDMICaptain.Inventory --probe-dxva`, driver state 2026-10-22): the RTX 5070 Ti exposes 30 D3D11 decoder profiles and the Radeon iGPU (9700X) 20, but **neither lists any `MJPEG_VLD_*` profile**. On this PC the hardware fast path doesn't exist, so libjpeg-turbo stays the decoder.
 
 ## 4. Render
 

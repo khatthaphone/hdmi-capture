@@ -37,6 +37,9 @@ public readonly struct VideoFrame
 
 public delegate void FrameHandler(in VideoFrame frame);
 
+/// <summary>A compressed frame (one MJPEG image), borrowed for the duration of the call.</summary>
+public delegate void CompressedFrameHandler(ReadOnlySpan<byte> data, long timestamp);
+
 /// <summary>A frame producer: a capture card (MF) or a generated test pattern. Frames arrive on the source's own thread.</summary>
 public interface ICaptureSource : IDisposable
 {

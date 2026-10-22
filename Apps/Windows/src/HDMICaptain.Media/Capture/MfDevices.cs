@@ -1,4 +1,5 @@
 using HDMICaptain.Core;
+using HDMICaptain.Media.Video;
 using Windows.Win32;
 using Windows.Win32.Media.MediaFoundation;
 
@@ -24,6 +25,15 @@ public sealed record NativeVideoType(
     bool DecodedByWindows)
 {
     public double FrameRate => RateDenominator == 0 ? 0 : (double)RateNumerator / RateDenominator;
+}
+
+/// <summary>Who decodes MJPEG when a card offers both raw MJPG and Windows' decoded NV12 twin (windows.md §2d, §3).</summary>
+public enum MjpegPolicy
+{
+    /// <summary>Today: take Windows' decoded twin when there is one; our libjpeg-turbo path only for MJPG without a twin.</summary>
+    Auto,
+    /// <summary>Capture the raw MJPG and decode it ourselves (task 090), for the 092 latency comparison.</summary>
+    PreferOwnDecode,
 }
 
 /// <summary>Media Foundation device enumeration and format listing (spec §13.2, windows.md §2a–2c).</summary>
@@ -228,13 +238,24 @@ public static class MfDevices
                 [.. g.Select(t => t.FrameRate).Distinct().OrderDescending().Select(r => new FrameRateRange(r, r))]))];
 
     /// <summary>
-    /// The type to capture: the selector's pick among types the renderer can upload today (NV12, YUY2; MJPEG
-    /// waits for task 090). The link rule guards against uncompressed types the wire can't carry, so it is
-    /// skipped when Windows offers decoded MJPEG, which never crosses the link raw.
+    /// The type to capture: the selector's pick among types we can show: NV12 and YUY2 as they come, MJPG when
+    /// libjpeg-turbo loads (<paramref name="canDecodeMjpeg"/>, default <see cref="MjpegDecoder.IsAvailable"/>).
+    /// The selector ranks uncompressed over MJPG at the same size and rate, so with <see cref="MjpegPolicy.Auto"/>
+    /// Windows' decoded NV12 twin of an MJPG type wins and MJPG is only picked where it has no twin.
+    /// <see cref="MjpegPolicy.PreferOwnDecode"/> drops those twins so the raw MJPG goes through our decoder.
+    /// The link rule guards against uncompressed types the wire can't carry, so it is skipped when Windows
+    /// offers decoded MJPEG, which never crosses the link raw.
     /// </summary>
-    public static NativeVideoType? Choose(IReadOnlyList<NativeVideoType> types, FormatPreference? preference, UsbLink? link)
+    public static NativeVideoType? Choose(IReadOnlyList<NativeVideoType> types, FormatPreference? preference, UsbLink? link,
+        MjpegPolicy mjpeg = MjpegPolicy.Auto, bool? canDecodeMjpeg = null)
     {
-        var uploadable = types.Where(t => MfSource.ToPixelFormat(t.FourCC) != null).ToList();
+        var decode = canDecodeMjpeg ?? MjpegDecoder.IsAvailable;
+        var uploadable = types.Where(t => MfSource.ToPixelFormat(t.FourCC) != null || (decode && t.FourCC == "MJPG")).ToList();
+        if (decode && mjpeg == MjpegPolicy.PreferOwnDecode)
+        {
+            var raw = uploadable.Where(t => t.FourCC == "MJPG").Select(t => (t.Width, t.Height, Math.Round(t.FrameRate, 2))).ToHashSet();
+            uploadable.RemoveAll(t => t.DecodedByWindows && raw.Contains((t.Width, t.Height, Math.Round(t.FrameRate, 2))));
+        }
         var effectiveLink = uploadable.Any(t => t.DecodedByWindows) ? null : link;
         var choice = FormatSelector.Select(Descriptors(uploadable), preference, effectiveLink);
         return choice != null ? Match(uploadable, choice) : null;
