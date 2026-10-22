@@ -12,15 +12,29 @@ namespace HDMICaptain.App.Video;
 public sealed class SwapChainPanelHost : IDisposable
 {
     private readonly SwapChainPanel _panel;
-    private readonly D3DRenderer _renderer;
+    private readonly Action _redraw;
+    private readonly Action<SwapChainTarget> _remove;
     private readonly SwapChainTarget _target;
 
     public SwapChainPanelHost(SwapChainPanel panel, D3DRenderer renderer)
+        : this(panel, renderer.CreateCompositionTarget, renderer.Redraw, renderer.RemoveTarget)
+    {
+    }
+
+    /// <summary>The Multi-View grid's single swap chain; the grid renderer disposes it.</summary>
+    public SwapChainPanelHost(SwapChainPanel panel, GridRenderer grid)
+        : this(panel, grid.CreateCompositionTarget, grid.Redraw, _ => { })
+    {
+    }
+
+    private SwapChainPanelHost(SwapChainPanel panel, Func<int, int, Action<IDXGISwapChain1>, SwapChainTarget> create,
+        Action redraw, Action<SwapChainTarget> remove)
     {
         _panel = panel;
-        _renderer = renderer;
+        _redraw = redraw;
+        _remove = remove;
         var (w, h) = PixelSize();
-        _target = renderer.CreateCompositionTarget(w, h, Attach);
+        _target = create(w, h, Attach);
         panel.SizeChanged += (_, _) => UpdateSize();
         panel.CompositionScaleChanged += (_, _) => UpdateSize();
     }
@@ -34,7 +48,7 @@ public sealed class SwapChainPanelHost : IDisposable
     {
         var (w, h) = PixelSize();
         _target.Resize(w, h, _panel.CompositionScaleX);
-        _renderer.Redraw();
+        _redraw();
     }
 
     // Runs on the render thread at creation and after device loss; SetSwapChain must run on the UI thread.
@@ -69,5 +83,5 @@ public sealed class SwapChainPanelHost : IDisposable
         }
     }
 
-    public void Dispose() => _renderer.RemoveTarget(_target);
+    public void Dispose() => _remove(_target);
 }

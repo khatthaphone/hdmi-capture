@@ -113,6 +113,44 @@ public class RendererTests
         Assert.Equal((800, 800), (target.Width, target.Height));
     }
 
+    [Fact]
+    public void GridDrawsEachCardIntoItsCell()
+    {
+        using var grid = GridRenderer.CreateWarp();
+        grid.TileCount = 2;
+        var white = Uniform(235, out var keepAlive, fullRange: false);
+
+        grid.Render(0, in white);
+        var pixels = grid.ReadComposedPixels(66, 32);
+
+        AssertPixel(pixels, 66, 16, 16, 255, 255, 255, "card 1");
+        AssertPixel(pixels, 66, 32, 16, 0, 0, 0, "gap");
+        AssertPixel(pixels, 66, 50, 16, 0, 0, 0, "card 2 before its first frame");
+
+        grid.ClearTile(0);
+        AssertPixel(grid.ReadComposedPixels(66, 32), 66, 16, 16, 0, 0, 0, "card 1 after it stopped");
+        GC.KeepAlive(keepAlive);
+    }
+
+    [Fact]
+    public void GridPresentsFromItsComposeThread()
+    {
+        var grid = GridRenderer.CreateWarp();
+        var attached = 0;
+        var target = grid.CreateCompositionTarget(640, 360, _ => attached++);
+        grid.TileCount = 3;
+        var frame = TestPattern.Pack(TestPatternKind.Grid, PixelFormat.Nv12, 320, 180).AsFrame();
+
+        grid.Render(2, in frame);
+        target.Resize(800, 600);
+        grid.Redraw();
+        Thread.Sleep(300);
+        grid.Dispose();
+
+        Assert.Equal(1, attached);
+        Assert.Equal((800, 600), (target.Width, target.Height));
+    }
+
     private static unsafe VideoFrame Uniform(byte luma, out byte[][] planes, bool fullRange)
     {
         const int w = 16, h = 16;

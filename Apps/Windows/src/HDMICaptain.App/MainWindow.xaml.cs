@@ -78,6 +78,12 @@ public sealed partial class MainWindow : Window
     /// <summary>The card this viewer is capturing right now (any thread).</summary>
     public string? ShowingCard => _capture?.CurrentDevice?.Key;
 
+    /// <summary>The cards this window's catalog sees (the grid lists the main window's).</summary>
+    public IReadOnlyList<CaptureDevice> Devices => _capture?.Catalog.Devices ?? [];
+
+    /// <summary>Every frame this window renders, on the source thread (the Multi-View grid taps it instead of opening the card twice).</summary>
+    public event FrameHandler? FrameTap;
+
     /// <summary>A card window opened or closed: let the card policy avoid cards other viewers hold.</summary>
     public void OnClaimsChanged() => _capture?.ClaimsChanged();
 
@@ -279,6 +285,7 @@ public sealed partial class MainWindow : Window
     {
         var before = GC.GetAllocatedBytesForCurrentThread();
         _renderer.Render(in frame);
+        FrameTap?.Invoke(in frame);
         _signal.Observe(in frame);
         _scopes.Observe(in frame);
         Interlocked.Increment(ref _frames);
@@ -459,7 +466,11 @@ public sealed partial class MainWindow : Window
             item.Click += (_, _) =>
             {
                 if (App.CardWindowFor(device.Key) is { } window && !ReferenceEquals(window, this)) window.Activate();
-                else _capture?.Select(device.Key);
+                else
+                {
+                    App.ReleaseFromGrid(device.Key);
+                    _capture?.Select(device.Key);
+                }
             };
             items.Add(item);
         }
@@ -475,6 +486,7 @@ public sealed partial class MainWindow : Window
             }
             items.Add(new MenuFlyoutSeparator());
             items.Add(windows);
+            items.Add(Item("All Cards in a Grid", "\uF0E2", () => GridWindow.Show(), "Ctrl+G"));
         }
         items.Add(new MenuFlyoutSeparator());
         items.Add(Item("Reconnect", "\uE72C", Reconnect));
@@ -679,6 +691,7 @@ public sealed partial class MainWindow : Window
         Add(VirtualKey.Escape, VirtualKeyModifiers.None, () => { if (Model.IsFullScreen) ToggleFullScreen(); });
         Add(VirtualKey.M, VirtualKeyModifiers.Control, () => Model.Muted = !Model.Muted);
         Add(VirtualKey.T, VirtualKeyModifiers.Control, () => Model.AlwaysOnTop = !Model.AlwaysOnTop);
+        Add(VirtualKey.G, VirtualKeyModifiers.Control, () => GridWindow.Show());
         Add(VirtualKey.S, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift, SaveScreenshot);
         Add(VirtualKey.Number0, VirtualKeyModifiers.Control, () => SizeToVideo(1));
         Add(VirtualKey.R, VirtualKeyModifiers.Control, () => _ = ToggleRecordingAsync());
@@ -954,6 +967,7 @@ public sealed partial class MainWindow : Window
                     foreach (var device in _capture?.Catalog.Devices ?? []) App.OpenCardWindow(device.Key);
                     break;
                 case "scopes": ScopesWindow.Show(_scopes); break;
+                case "grid": GridWindow.Show(); break;
                 case "upgrade": _ = ShowUpgradeAsync(ProFeature.Recording); break;
             }
         };
