@@ -12,8 +12,8 @@ public static class UpgradeDialog
 
     private static string Summary(ProFeature feature) => feature switch
     {
-        ProFeature.Recording => "Save full-quality video of the HDMI input, with its sound.",
-        ProFeature.ReplayBuffer => "Missed a great moment? Save the last 15 seconds to 60 minutes after it happened.",
+        ProFeature.Recording => Strings.Get("Pro_RecordingSummary"),
+        ProFeature.ReplayBuffer => Strings.Get("Pro_ReplaySummary"),
         _ => "",
     };
 
@@ -23,16 +23,16 @@ public static class UpgradeDialog
     /// <summary>Shows the dialog; true when Pro is unlocked when it closes.</summary>
     public static async Task<bool> ShowAsync(XamlRoot root, ProGate gate, ProFeature? reason)
     {
-        var title = gate.IsPro ? "You have HDMI Captain Pro" : reason switch
+        var title = gate.IsPro ? Strings.Get("Pro_TitleOwned") : reason switch
         {
-            ProFeature.Recording => "Record with HDMI Captain Pro",
-            ProFeature.ReplayBuffer => "Save Recent with HDMI Captain Pro",
-            _ => "HDMI Captain Pro",
+            ProFeature.Recording => Strings.Get("Pro_TitleRecording"),
+            ProFeature.ReplayBuffer => Strings.Get("Pro_TitleReplay"),
+            _ => Strings.Get("Pro_Title"),
         };
         var panel = new StackPanel { Spacing = 14, MaxWidth = 420 };
         panel.Children.Add(new TextBlock
         {
-            Text = gate.IsPro ? "Thank you for supporting HDMI Captain." : "One-time purchase. No subscription.",
+            Text = gate.IsPro ? Strings.Get("Pro_Thanks") : Strings.Get("Pro_OneTime"),
             Opacity = 0.8,
         });
         foreach (var feature in Shown)
@@ -47,7 +47,7 @@ public static class UpgradeDialog
             row.Children.Add(text);
             panel.Children.Add(row);
         }
-        panel.Children.Add(new TextBlock { Text = "The live viewer, screenshots and every picture setting stay free.", TextWrapping = TextWrapping.WrapWholeWords, Opacity = 0.75 });
+        panel.Children.Add(new TextBlock { Text = Strings.Get("Pro_FreeNote"), TextWrapping = TextWrapping.WrapWholeWords, Opacity = 0.75 });
         var error = new TextBlock { Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.IndianRed), TextWrapping = TextWrapping.WrapWholeWords, Visibility = Visibility.Collapsed };
         panel.Children.Add(error);
 
@@ -60,20 +60,20 @@ public static class UpgradeDialog
         };
         if (gate.IsPro)
         {
-            dialog.CloseButtonText = "Done";
+            dialog.CloseButtonText = Strings.Get("Common_Done");
         }
         else
         {
-            dialog.PrimaryButtonText = gate.Price is { } price ? $"Buy Pro — {price}" : "Buy Pro";
-            dialog.SecondaryButtonText = "Restore Purchase";
-            dialog.CloseButtonText = "Not Now";
+            dialog.PrimaryButtonText = gate.Price is { } price ? Strings.Format("Pro_BuyPrice", price) : Strings.Get("Pro_Buy");
+            dialog.SecondaryButtonText = Strings.Get("Pro_Restore");
+            dialog.CloseButtonText = Strings.Get("Pro_NotNow");
             dialog.DefaultButton = ContentDialogButton.Primary;
             dialog.PrimaryButtonClick += async (_, args) =>
             {
                 var deferral = args.GetDeferral();
                 if (!await gate.PurchaseAsync())
                 {
-                    error.Text = "Couldn't complete the purchase. Check your connection and try again.";
+                    error.Text = Strings.Get("Pro_PurchaseFailed");
                     error.Visibility = Visibility.Visible;
                     args.Cancel = true;
                 }
@@ -85,7 +85,7 @@ public static class UpgradeDialog
                 await gate.RestoreAsync();
                 if (!gate.IsPro)
                 {
-                    error.Text = "No purchase found for this Microsoft account.";
+                    error.Text = Strings.Get("Pro_NothingToRestore");
                     error.Visibility = Visibility.Visible;
                     args.Cancel = true;
                 }

@@ -28,47 +28,46 @@ public sealed record StatusCopy(string Glyph, string Title, string Message, stri
     public const string Device = "PC";
 
     /// <summary>The card is live but shows no picture (its own "no signal" screen, or black): NoSignalOverlay.</summary>
-    public static StatusCopy NoSignal(SignalContent content) => new("\uE7F4", "No HDMI signal",
+    public static StatusCopy NoSignal(SignalContent content) => new("\uE7F4", Strings.Get("Status_NoSignalTitle"),
         content is SignalContent.Black
-            ? "The card receives a black picture. If the source is a PlayStation or Apple TV, turn off HDCP in its settings."
-            : "Check that the source is on and the HDMI cable is plugged in.",
+            ? Strings.Get("Status_NoSignalBlackMessage")
+            : Strings.Get("Status_NoSignalMessage"),
         Secondary: StatusAction.Help);
 
     public static StatusCopy? For(ViewerPhase phase) => phase switch
     {
-        ViewerPhase.Welcome => new("\uE714", "Welcome to HDMI Captain",
-            $"Your {Device} sees an HDMI capture card as a camera and a microphone, so Windows may ask for access next. " +
-            $"HDMI Captain uses it only to show the picture and play the sound, and nothing leaves your {Device}.",
+        ViewerPhase.Welcome => new("\uE714", Strings.Get("Status_WelcomeTitle"),
+            Strings.Format("Status_WelcomeMessage", Device),
             Primary: StatusAction.Continue),
-        ViewerPhase.Scanning => new("\uE714", "Connect a capture card",
-            $"Plug an HDMI capture card into this {Device}. The picture appears automatically.",
+        ViewerPhase.Scanning => new("\uE714", Strings.Get("Status_ScanningTitle"),
+            Strings.Format("Status_ScanningMessage", Device),
             Secondary: StatusAction.Help),
-        ViewerPhase.PermissionDenied => new("\uE8A6", "Camera access required",
-            "Turn on camera access for desktop apps in Settings › Privacy & security › Camera, then come back.",
+        ViewerPhase.PermissionDenied => new("\uE8A6", Strings.Get("Status_PermissionTitle"),
+            Strings.Get("Status_PermissionMessage"),
             Primary: StatusAction.OpenPrivacySettings, Secondary: StatusAction.CheckAgain),
-        ViewerPhase.Connecting c => new("", $"Connecting to {c.Name}…", "Starting the capture card.", Spinner: true),
-        ViewerPhase.Waiting w => new("\uE8CD", $"{w.Name} is disconnected", "Plug it back in to continue where you left off."),
+        ViewerPhase.Connecting c => new("", Strings.Format("Status_ConnectingTitle", c.Name), Strings.Get("Status_ConnectingMessage"), Spinner: true),
+        ViewerPhase.Waiting w => new("\uE8CD", Strings.Format("Status_WaitingTitle", w.Name), Strings.Get("Status_WaitingMessage")),
         ViewerPhase.Recovering r => Recovering(r.Reason),
-        ViewerPhase.Paused p => new("\uE769", "Paused", PauseMessage(p.Reason)),
-        ViewerPhase.Failed f => new("\uE7BA", "The capture card stopped responding",
-            "Try reconnecting. If that doesn't help, unplug the card and plug it back in.", f.Detail, Primary: StatusAction.Reconnect),
+        ViewerPhase.Paused p => new("\uE769", Strings.Get("Status_PausedTitle"), PauseMessage(p.Reason)),
+        ViewerPhase.Failed f => new("\uE7BA", Strings.Get("Status_FailedTitle"),
+            Strings.Get("Status_FailedMessage"), f.Detail, Primary: StatusAction.Reconnect),
         _ => null,
     };
 
     private static StatusCopy Recovering(string reason) => reason switch
     {
-        RecoveryReason.NoSignal => new("\uE7F4", "No HDMI signal", "Check that the source is on and the HDMI cable is plugged in.",
+        RecoveryReason.NoSignal => new("\uE7F4", Strings.Get("Status_NoSignalTitle"), Strings.Get("Status_NoSignalMessage"),
             Secondary: StatusAction.Help),
-        RecoveryReason.Disconnected or RecoveryReason.Waiting => new("\uE8CD", "Capture card disconnected", "Plug it back in to continue."),
-        _ => new("", "Reconnecting…", "The capture card stopped sending video. Reconnecting automatically.", Spinner: true),
+        RecoveryReason.Disconnected or RecoveryReason.Waiting => new("\uE8CD", Strings.Get("Status_DisconnectedTitle"), Strings.Get("Status_DisconnectedMessage")),
+        _ => new("", Strings.Get("Status_ReconnectingTitle"), Strings.Get("Status_ReconnectingMessage"), Spinner: true),
     };
 
     private static string PauseMessage(PauseReason reason) => reason switch
     {
-        PauseReason.InUseByAnotherApp => "Another app is using the capture card. The picture comes back when it lets go.",
-        PauseReason.Sleep => $"The {Device} is going to sleep. The picture comes back when it wakes.",
-        PauseReason.PrivacyToggle => "Camera access was turned off in Settings › Privacy & security › Camera.",
-        _ => "Capture is paused.",
+        PauseReason.InUseByAnotherApp => Strings.Get("Pause_InUse"),
+        PauseReason.Sleep => Strings.Format("Pause_Sleep", Device),
+        PauseReason.PrivacyToggle => Strings.Get("Pause_Privacy"),
+        _ => Strings.Get("Pause_Default"),
     };
 }
 
@@ -99,11 +98,11 @@ public static class QaPhases
 
 public sealed record StatusAction(string Title, string Id)
 {
-    public static readonly StatusAction Help = new("Connection Help…", "help");
-    public static readonly StatusAction Continue = new("Continue", "welcome");
-    public static readonly StatusAction OpenPrivacySettings = new("Open Settings", "privacy");
-    public static readonly StatusAction CheckAgain = new("Check Again", "retry");
-    public static readonly StatusAction Reconnect = new("Reconnect", "retry");
+    public static readonly StatusAction Help = new(Strings.Get("Action_Help"), "help");
+    public static readonly StatusAction Continue = new(Strings.Get("Action_Continue"), "welcome");
+    public static readonly StatusAction OpenPrivacySettings = new(Strings.Get("Action_OpenSettings"), "privacy");
+    public static readonly StatusAction CheckAgain = new(Strings.Get("Action_CheckAgain"), "retry");
+    public static readonly StatusAction Reconnect = new(Strings.Get("Action_Reconnect"), "retry");
 }
 
 /// <summary>
@@ -122,7 +121,7 @@ public sealed partial class ViewerModel : ObservableObject
     public partial SignalContent Signal { get; set; } = new SignalContent.Picture();
 
     [ObservableProperty]
-    public partial string InputName { get; set; } = "No Input";
+    public partial string InputName { get; set; } = Strings.Get("Input_None");
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(MuteGlyph), nameof(MuteName))]
@@ -164,16 +163,16 @@ public sealed partial class ViewerModel : ObservableObject
 
     public Visibility StatsVisibility => DiagnosticsShown ? Visibility.Visible : Visibility.Collapsed;
     /// <summary>What the mute button does now (Narrator name and tooltip).</summary>
-    public string MuteName => Muted ? "Unmute" : "Mute";
+    public string MuteName => Muted ? Strings.Get("Control_Unmute") : Strings.Get("Control_Mute");
 
     public string MuteGlyph => Muted ? "\uE74F" : "\uE767";
     public string FullScreenGlyph => IsFullScreen ? "\uE73F" : "\uE740";
 
     public static string ScaleTitle(ScaleMode mode) => mode switch
     {
-        ScaleMode.Fit => "Fit",
-        ScaleMode.Fill => "Fill (crop)",
-        ScaleMode.Stretch => "Stretch",
-        _ => "Integer (pixel-perfect)",
+        ScaleMode.Fit => Strings.Get("Scale_Fit"),
+        ScaleMode.Fill => Strings.Get("Scale_Fill"),
+        ScaleMode.Stretch => Strings.Get("Scale_Stretch"),
+        _ => Strings.Get("Scale_Integer"),
     };
 }

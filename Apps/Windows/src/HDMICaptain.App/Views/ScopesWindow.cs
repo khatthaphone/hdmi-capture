@@ -28,15 +28,15 @@ public sealed class ScopesWindow : Window
     private ScopesWindow(ScopeSampler sampler)
     {
         _sampler = sampler;
-        Title = "Scopes";
+        Title = Strings.Get("Scopes_Title");
         AppWindow.TitleBar.PreferredTheme = Microsoft.UI.Windowing.TitleBarTheme.Dark;
         SystemBackdrop = new MicaBackdrop();
         AppWindow.Resize(new Windows.Graphics.SizeInt32(560, 760));
 
         var panel = new StackPanel { Spacing = 10, Padding = new Thickness(16) };
-        panel.Children.Add(Section("Waveform", Scope(_waveform, 256, 200)));
-        panel.Children.Add(Section("Vectorscope", Vectorscope()));
-        panel.Children.Add(Section("Histogram", Scope(_histogram, 256, 90)));
+        panel.Children.Add(Section(Strings.Get("Scopes_Waveform"), Scope(_waveform, 256, 200)));
+        panel.Children.Add(Section(Strings.Get("Scopes_Vectorscope"), Vectorscope()));
+        panel.Children.Add(Section(Strings.Get("Scopes_Histogram"), Scope(_histogram, 256, 90)));
         Content = new Grid { RequestedTheme = ElementTheme.Dark, Children = { new ScrollViewer { Content = panel } } };
 
         _sampler.DataReady += OnData;

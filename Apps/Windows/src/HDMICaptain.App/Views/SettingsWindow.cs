@@ -48,7 +48,7 @@ public sealed class SettingsWindow : Window
     {
         _model = model;
         _capture = capture;
-        Title = "HDMI Captain Settings";
+        Title = Strings.Get("Settings_WindowTitle");
         AppWindow.TitleBar.PreferredTheme = Microsoft.UI.Windowing.TitleBarTheme.Dark;
         AppWindow.Resize(new SizeInt32(900, 680));
 
@@ -56,13 +56,13 @@ public sealed class SettingsWindow : Window
         _nav.IsSettingsVisible = false;
         _nav.IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed;
         _nav.OpenPaneLength = 200;
-        AutomationProperties.SetName(_nav, "Settings sections");
-        AddSection("General", "", General);
-        AddSection("Video", "", Video);
-        AddSection("Audio", "", Audio);
-        AddSection("Image", "", Image);
-        AddSection("Profiles", "", Profiles);
-        AddSection("About", "", About);
+        AutomationProperties.SetName(_nav, Strings.Get("Settings_SectionsName"));
+        AddSection(Strings.Get("Settings_General"), "", General);
+        AddSection(Strings.Get("Settings_Video"), "", Video);
+        AddSection(Strings.Get("Settings_Audio"), "", Audio);
+        AddSection(Strings.Get("Settings_Image"), "", Image);
+        AddSection(Strings.Get("Settings_Profiles"), "", Profiles);
+        AddSection(Strings.Get("Settings_About"), "", About);
         _nav.SelectionChanged += (_, e) =>
         {
             if (e.SelectedItemContainer?.Tag is Func<UIElement> build) ShowPage(build);
@@ -112,25 +112,25 @@ public sealed class SettingsWindow : Window
 
     private UIElement General()
     {
-        var page = Page("General");
-        page.Children.Add(Toggle("Show controls near the bottom edge", "The control bar appears when the pointer nears the bottom of the window.",
+        var page = Page(Strings.Get("Settings_General"));
+        page.Children.Add(Toggle(Strings.Get("Settings_ShowControls"), Strings.Get("Settings_ShowControlsNote"),
             () => _model.ShowControlsOnHover, v => _model.ShowControlsOnHover = v));
-        page.Children.Add(Toggle("Keep window on top", null, () => _model.FloatOnTop, v => _model.FloatOnTop = v));
-        page.Children.Add(Toggle("Hide window buttons (clean mode)", "Removes the title bar and borders for a clean picture.",
+        page.Children.Add(Toggle(Strings.Get("Settings_KeepOnTop"), null, () => _model.FloatOnTop, v => _model.FloatOnTop = v));
+        page.Children.Add(Toggle(Strings.Get("Settings_CleanMode"), Strings.Get("Settings_CleanModeNote"),
             () => _model.CleanMode, v => _model.CleanMode = v));
-        page.Children.Add(Toggle("Keep the window's aspect ratio", "Resizing keeps the picture's shape, so there are no black bars.",
+        page.Children.Add(Toggle(Strings.Get("Settings_LockAspect"), Strings.Get("Settings_LockAspectNote"),
             () => _model.LockAspect, v => _model.LockAspect = v));
-        page.Children.Add(Toggle("Show diagnostics", "Frame rate, dropped frames and the capture format over the picture.",
+        page.Children.Add(Toggle(Strings.Get("Settings_ShowDiagnostics"), Strings.Get("Settings_ShowDiagnosticsNote"),
             () => _model.ShowDiagnostics, v => _model.ShowDiagnostics = v));
         return page;
     }
 
     private UIElement Video()
     {
-        var page = Page("Video");
+        var page = Page(Strings.Get("Settings_Video"));
 
-        var cards = new ComboBox { Header = "Capture card", MinWidth = 320 };
-        AutomationProperties.SetName(cards, "Capture card");
+        var cards = new ComboBox { Header = Strings.Get("Settings_CaptureCard"), MinWidth = 320 };
+        AutomationProperties.SetName(cards, Strings.Get("Settings_CaptureCard"));
         var cardKeys = new List<string>();
         cards.SelectionChanged += (_, _) =>
         {
@@ -144,89 +144,89 @@ public sealed class SettingsWindow : Window
             cards.Items.Clear();
             foreach (var d in devices) cards.Items.Add(d.Name);
             cards.IsEnabled = devices.Count > 0;
-            cards.PlaceholderText = devices.Count == 0 ? "No capture card connected" : "Choose a capture card";
+            cards.PlaceholderText = devices.Count == 0 ? Strings.Get("Card_NoneConnected") : Strings.Get("Settings_ChooseCard");
             var current = _capture?.CurrentDevice?.Key;
             cards.SelectedIndex = current is null ? -1 : cardKeys.IndexOf(current);
         });
         page.Children.Add(cards);
-        page.Children.Add(Note("These settings are remembered for each capture card."));
+        page.Children.Add(Note(Strings.Get("Settings_PerCardNote")));
 
-        _formatBox = new ComboBox { Header = "Format", MinWidth = 320 };
-        AutomationProperties.SetName(_formatBox, "Format");
+        _formatBox = new ComboBox { Header = Strings.Get("Settings_Format"), MinWidth = 320 };
+        AutomationProperties.SetName(_formatBox, Strings.Get("Settings_Format"));
         _formatBox.SelectionChanged += (_, _) =>
         {
             if (_refreshing || _formatBox.SelectedIndex < 0 || _formatBox.SelectedIndex >= _formatItems.Count) return;
             _model.Format = _formatItems[_formatBox.SelectedIndex];
         };
-        _formatNote = Note("Changing the format reconnects the capture card for a moment.");
+        _formatNote = Note(Strings.Get("Settings_FormatNote"));
         page.Children.Add(_formatBox);
         page.Children.Add(_formatNote);
         _refresh.Add(SelectFormat);
         LoadFormats();
 
-        page.Children.Add(Combo("Scale", [.. Enum.GetValues<ScaleMode>().Select(m => (ViewerModel.ScaleTitle(m), m))],
+        page.Children.Add(Combo(Strings.Get("Settings_Scale"), [.. Enum.GetValues<ScaleMode>().Select(m => (ViewerModel.ScaleTitle(m), m))],
             () => _model.Scale, v => _model.Scale = v));
-        page.Children.Add(Toggle("Pixel-sharp", "Keeps hard edges when scaling up. Best for retro consoles.",
+        page.Children.Add(Toggle(Strings.Get("Settings_PixelSharp"), Strings.Get("Settings_PixelSharpNote"),
             () => _model.SharpPixels, v => _model.SharpPixels = v));
-        page.Children.Add(Combo("Color range", [("Automatic", ColorRange.Auto), ("Limited (16 to 235)", ColorRange.Limited), ("Full (0 to 255)", ColorRange.Full)],
+        page.Children.Add(Combo(Strings.Get("Settings_ColorRange"), [(Strings.Get("Common_Automatic"), ColorRange.Auto), (Strings.Get("Settings_RangeLimited"), ColorRange.Limited), (Strings.Get("Settings_RangeFull"), ColorRange.Full)],
             () => _model.ColorRange, v => _model.ColorRange = v));
-        page.Children.Add(Note("Pick Limited or Full if blacks look gray or crushed."));
-        page.Children.Add(Combo("Color matrix", [("Automatic", ColorMatrix.Auto), ("BT.601 (standard definition)", ColorMatrix.Bt601), ("BT.709 (high definition)", ColorMatrix.Bt709)],
+        page.Children.Add(Note(Strings.Get("Settings_ColorRangeNote")));
+        page.Children.Add(Combo(Strings.Get("Settings_ColorMatrix"), [(Strings.Get("Common_Automatic"), ColorMatrix.Auto), (Strings.Get("Settings_Bt601"), ColorMatrix.Bt601), (Strings.Get("Settings_Bt709"), ColorMatrix.Bt709)],
             () => _model.Matrix, v => _model.Matrix = v));
-        page.Children.Add(Note("Pick another matrix if colors look off, for example skin looks too green or too red."));
+        page.Children.Add(Note(Strings.Get("Settings_ColorMatrixNote")));
         return page;
     }
 
     private UIElement Audio()
     {
-        var page = Page("Audio");
+        var page = Page(Strings.Get("Settings_Audio"));
         var input = new TextBlock { TextWrapping = TextWrapping.Wrap };
         var output = new TextBlock { TextWrapping = TextWrapping.Wrap };
         _refresh.Add(() => input.Text = _capture?.CurrentDevice is { } d
-            ? $"Sound comes from {d.Audio?.Name ?? "the capture card"}."
-            : "Sound comes from the capture card once one is connected.");
+            ? Strings.Format("Settings_SoundFrom", d.Audio?.Name ?? Strings.Get("Settings_TheCaptureCard"))
+            : Strings.Get("Settings_SoundFromLater"));
         _refresh.Add(() =>
         {
             string? name = null;
             try { name = AudioEndpoints.DefaultRender()?.Name; }
             catch (Exception) { /* no audio service: say so below */ }
             output.Text = name is null
-                ? "No sound output found."
-                : $"Plays through {name}. Change the output in Windows sound settings.";
+                ? Strings.Get("Settings_NoOutput")
+                : Strings.Format("Settings_PlaysThrough", name);
         });
         page.Children.Add(input);
         page.Children.Add(output);
-        page.Children.Add(Slider("Audio delay", 0, 500, 10, () => _model.AudioDelayMs, v => _model.AudioDelayMs = (int)v, v => $"{v:0} ms"));
-        page.Children.Add(Note("Delays the sound to line it up with a slower display."));
-        page.Children.Add(Combo("Channels", [
-            ("Automatic", ChannelMode.Auto), ("Stereo", ChannelMode.Normal), ("Swap left and right", ChannelMode.Swap),
-            ("Left to both", ChannelMode.LeftToBoth), ("Right to both", ChannelMode.RightToBoth), ("Mono", ChannelMode.Mono)],
+        page.Children.Add(Slider(Strings.Get("Settings_AudioDelay"), 0, 500, 10, () => _model.AudioDelayMs, v => _model.AudioDelayMs = (int)v, v => Strings.Format("Settings_Milliseconds", v)));
+        page.Children.Add(Note(Strings.Get("Settings_AudioDelayNote")));
+        page.Children.Add(Combo(Strings.Get("Settings_Channels"), [
+            (Strings.Get("Common_Automatic"), ChannelMode.Auto), (Strings.Get("Channel_Stereo"), ChannelMode.Normal), (Strings.Get("Channel_Swap"), ChannelMode.Swap),
+            (Strings.Get("Channel_LeftToBoth"), ChannelMode.LeftToBoth), (Strings.Get("Channel_RightToBoth"), ChannelMode.RightToBoth), (Strings.Get("Channel_Mono"), ChannelMode.Mono)],
             () => _model.ChannelMode, v => _model.ChannelMode = v));
-        page.Children.Add(Slider("Volume", 0, 100, 1, () => _model.Volume, v => _model.Volume = v, v => $"{v:0}%"));
-        page.Children.Add(Toggle("Mute", null, () => _model.Muted, v => _model.Muted = v));
+        page.Children.Add(Slider(Strings.Get("Settings_Volume"), 0, 100, 1, () => _model.Volume, v => _model.Volume = v, v => $"{v:0}%"));
+        page.Children.Add(Toggle(Strings.Get("Control_Mute"), null, () => _model.Muted, v => _model.Muted = v));
         return page;
     }
 
     private UIElement Image()
     {
-        var page = Page("Image");
+        var page = Page(Strings.Get("Settings_Image"));
         var looks = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         foreach (var look in LookPreset.All)
         {
             var button = new Button { Content = look.Title };
-            AutomationProperties.SetName(button, $"{look.Title} look");
+            AutomationProperties.SetName(button, Strings.Format("Settings_LookName", look.Title));
             button.Click += (_, _) => _model.ApplyLook(look);
             looks.Children.Add(button);
         }
-        page.Children.Add(new TextBlock { Text = "Look" });
+        page.Children.Add(new TextBlock { Text = Strings.Get("Settings_Look") });
         page.Children.Add(looks);
-        page.Children.Add(Slider("Brightness", -0.5, 0.5, 0.01, () => _model.Brightness, v => _model.Brightness = v, v => $"{v:0.00}"));
-        page.Children.Add(Slider("Contrast", 0.5, 1.5, 0.01, () => _model.Contrast, v => _model.Contrast = v, v => $"{v:0.00}"));
-        page.Children.Add(Slider("Saturation", 0, 2, 0.01, () => _model.Saturation, v => _model.Saturation = v, v => $"{v:0.00}"));
-        page.Children.Add(Slider("Gamma", 0.5, 2, 0.01, () => _model.Gamma, v => _model.Gamma = v, v => $"{v:0.00}"));
-        page.Children.Add(Slider("Sharpness", 0, 1, 0.01, () => _model.Sharpness, v => _model.Sharpness = v, v => $"{v:0.00}"));
-        var reset = new Button { Content = "Reset" };
-        AutomationProperties.SetName(reset, "Reset picture adjustments");
+        page.Children.Add(Slider(Strings.Get("Settings_Brightness"), -0.5, 0.5, 0.01, () => _model.Brightness, v => _model.Brightness = v, v => $"{v:0.00}"));
+        page.Children.Add(Slider(Strings.Get("Settings_Contrast"), 0.5, 1.5, 0.01, () => _model.Contrast, v => _model.Contrast = v, v => $"{v:0.00}"));
+        page.Children.Add(Slider(Strings.Get("Settings_Saturation"), 0, 2, 0.01, () => _model.Saturation, v => _model.Saturation = v, v => $"{v:0.00}"));
+        page.Children.Add(Slider(Strings.Get("Settings_Gamma"), 0.5, 2, 0.01, () => _model.Gamma, v => _model.Gamma = v, v => $"{v:0.00}"));
+        page.Children.Add(Slider(Strings.Get("Settings_Sharpness"), 0, 1, 0.01, () => _model.Sharpness, v => _model.Sharpness = v, v => $"{v:0.00}"));
+        var reset = new Button { Content = Strings.Get("Settings_Reset") };
+        AutomationProperties.SetName(reset, Strings.Get("Settings_ResetName"));
         reset.Click += (_, _) => _model.ResetAdjustments();
         _refresh.Add(() => reset.IsEnabled = !_model.AdjustmentsAreIdentity);
         page.Children.Add(reset);
@@ -235,12 +235,12 @@ public sealed class SettingsWindow : Window
 
     private UIElement Profiles()
     {
-        var page = Page("Profiles");
-        page.Children.Add(Note("A profile bundles the format, scale, filter, color, image and delay settings, for example for an old console. Applying one changes the current capture card's settings."));
+        var page = Page(Strings.Get("Settings_Profiles"));
+        page.Children.Add(Note(Strings.Get("Settings_ProfilesNote")));
         _profileList = new StackPanel { Spacing = 4 };
         page.Children.Add(_profileList);
         RebuildProfiles();
-        var save = new Button { Content = "Save Current Settings as Profile…" };
+        var save = new Button { Content = Strings.Get("Settings_SaveProfileButton") };
         save.Click += async (_, _) => await SaveProfileAsync(save.XamlRoot);
         page.Children.Add(save);
         return page;
@@ -256,16 +256,16 @@ public sealed class SettingsWindow : Window
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.Children.Add(new TextBlock { Text = profile.IsBuiltIn ? $"{profile.Name} (built in)" : profile.Name, VerticalAlignment = VerticalAlignment.Center });
-            var apply = new Button { Content = "Apply" };
-            AutomationProperties.SetName(apply, $"Apply {profile.Name}");
+            row.Children.Add(new TextBlock { Text = profile.IsBuiltIn ? Strings.Format("Settings_BuiltIn", profile.Name) : profile.Name, VerticalAlignment = VerticalAlignment.Center });
+            var apply = new Button { Content = Strings.Get("Settings_Apply") };
+            AutomationProperties.SetName(apply, Strings.Format("Settings_ApplyName", profile.Name));
             apply.Click += (_, _) => _model.ApplyProfile(profile);
             Grid.SetColumn(apply, 1);
             row.Children.Add(apply);
             if (!profile.IsBuiltIn)
             {
-                var delete = new Button { Content = "Delete" };
-                AutomationProperties.SetName(delete, $"Delete {profile.Name}");
+                var delete = new Button { Content = Strings.Get("Settings_Delete") };
+                AutomationProperties.SetName(delete, Strings.Format("Settings_DeleteName", profile.Name));
                 delete.Click += (_, _) => { _model.DeleteProfile(profile); RebuildProfiles(); };
                 Grid.SetColumn(delete, 2);
                 row.Children.Add(delete);
@@ -276,15 +276,15 @@ public sealed class SettingsWindow : Window
 
     private async Task SaveProfileAsync(XamlRoot root)
     {
-        var name = new TextBox { PlaceholderText = "Profile name" };
-        AutomationProperties.SetName(name, "Profile name");
+        var name = new TextBox { PlaceholderText = Strings.Get("Settings_ProfileName") };
+        AutomationProperties.SetName(name, Strings.Get("Settings_ProfileName"));
         var dialog = new ContentDialog
         {
             XamlRoot = root,
-            Title = "Save Profile",
+            Title = Strings.Get("Settings_SaveProfileTitle"),
             Content = name,
-            PrimaryButtonText = "Save",
-            CloseButtonText = "Cancel",
+            PrimaryButtonText = Strings.Get("Settings_Save"),
+            CloseButtonText = Strings.Get("Settings_Cancel"),
             DefaultButton = ContentDialogButton.Primary,
             IsPrimaryButtonEnabled = false,
         };
@@ -298,12 +298,12 @@ public sealed class SettingsWindow : Window
 
     private UIElement About()
     {
-        var page = Page("About");
+        var page = Page(Strings.Get("Settings_About"));
         var version = Assembly.GetExecutingAssembly().GetName().Version;
-        page.Children.Add(new TextBlock { Text = "HDMI Captain", FontSize = 20, FontWeight = FontWeights.SemiBold });
-        page.Children.Add(new TextBlock { Text = $"Version {version?.ToString(3) ?? "1.0.0"}" });
-        page.Children.Add(Note("Shows the picture and plays the sound from your HDMI capture card. Nothing is recorded unless you record."));
-        page.Children.Add(new TextBlock { Text = "Third-party licenses", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 12, 0, 0) });
+        page.Children.Add(new TextBlock { Text = Strings.Get("App_Name"), FontSize = 20, FontWeight = FontWeights.SemiBold });
+        page.Children.Add(new TextBlock { Text = Strings.Format("Settings_Version", version?.ToString(3) ?? "1.0.0") });
+        page.Children.Add(Note(Strings.Get("Settings_AboutText")));
+        page.Children.Add(new TextBlock { Text = Strings.Get("Settings_ThirdParty"), FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 12, 0, 0) });
         var licences = new TextBox
         {
             IsReadOnly = true,
@@ -315,7 +315,7 @@ public sealed class SettingsWindow : Window
         };
         ScrollViewer.SetHorizontalScrollBarVisibility(licences, ScrollBarVisibility.Auto);
         ScrollViewer.SetVerticalScrollBarVisibility(licences, ScrollBarVisibility.Auto);
-        AutomationProperties.SetName(licences, "Third-party licenses");
+        AutomationProperties.SetName(licences, Strings.Get("Settings_ThirdParty"));
         page.Children.Add(licences);
         return page;
     }
@@ -325,9 +325,9 @@ public sealed class SettingsWindow : Window
         try
         {
             var path = Path.Combine(AppContext.BaseDirectory, "THIRD-PARTY.md");
-            return File.Exists(path) ? File.ReadAllText(path) : "The license list isn't included in this build.";
+            return File.Exists(path) ? File.ReadAllText(path) : Strings.Get("Settings_LicensesMissing");
         }
-        catch (IOException) { return "Couldn't read the license list."; }
+        catch (IOException) { return Strings.Get("Settings_LicensesUnreadable"); }
     }
 
     // MARK: - Format list
@@ -346,7 +346,7 @@ public sealed class SettingsWindow : Window
             SetFormatItems(cached);
             return;
         }
-        SetFormatItems([]); // "Automatic" only until the list arrives
+        SetFormatItems([]); // Strings.Get("Common_Automatic") only until the list arrives
         var queue = DispatcherQueue;
         var link = device.Usb?.Link;
         _ = Task.Run(() =>
@@ -391,9 +391,9 @@ public sealed class SettingsWindow : Window
 
     private static string FormatTitle(FormatPreference preference) => preference switch
     {
-        FormatPreference.Pinned p when p.FrameRate is { } rate => $"{p.Width} × {p.Height} at {rate:0.##} fps",
-        FormatPreference.Pinned p => $"{p.Width} × {p.Height}",
-        _ => "Automatic",
+        FormatPreference.Pinned p when p.FrameRate is { } rate => Strings.Format("Settings_FormatRate", p.Width, p.Height, rate),
+        FormatPreference.Pinned p => Strings.Format("Settings_FormatSize", p.Width, p.Height),
+        _ => Strings.Get("Common_Automatic"),
     };
 
     // MARK: - Control builders
@@ -415,7 +415,7 @@ public sealed class SettingsWindow : Window
 
     private UIElement Toggle(string header, string? note, Func<bool> get, Action<bool> set)
     {
-        var toggle = new ToggleSwitch { Header = header, OnContent = "On", OffContent = "Off" };
+        var toggle = new ToggleSwitch { Header = header, OnContent = Strings.Get("Common_On"), OffContent = Strings.Get("Common_Off") };
         AutomationProperties.SetName(toggle, header);
         toggle.Toggled += (_, _) => { if (!_refreshing) set(toggle.IsOn); };
         _refresh.Add(() => toggle.IsOn = get());

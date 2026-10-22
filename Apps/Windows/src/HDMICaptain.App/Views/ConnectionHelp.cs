@@ -8,35 +8,35 @@ public static class ConnectionHelp
 {
     private static readonly (string Glyph, string Title, string[] Steps)[] Topics =
     [
-        ("\uE7F4", "No HDMI signal",
+        ("\uE7F4", Strings.Get("Status_NoSignalTitle"),
         [
-            "Turn the source on and make sure it isn't asleep.",
-            "Unplug the HDMI cable at both ends and plug it back in.",
-            "Pick the source's HDMI output (not its built-in screen) and a standard resolution such as 1080p.",
+            Strings.Get("Help_NoSignal1"),
+            Strings.Get("Help_NoSignal2"),
+            Strings.Get("Help_NoSignal3"),
         ]),
-        ("\uE72E", "Black picture from a PlayStation or Apple TV",
+        ("\uE72E", Strings.Get("Help_BlackTitle"),
         [
-            "These sources protect video with HDCP, and capture cards can't show protected video.",
-            "PS5: Settings › System › HDMI › turn off Enable HDCP. PS4: Settings › System › turn off Enable HDCP.",
-            "Apple TV and streaming apps always use HDCP for movies and TV; games and menus usually work.",
+            Strings.Get("Help_Black1"),
+            Strings.Get("Help_Black2"),
+            Strings.Get("Help_Black3"),
         ]),
-        ("\uE74F", "No sound",
+        ("\uE74F", Strings.Get("Help_SoundTitle"),
         [
-            "Check that the source isn't muted and that sound is on in HDMI Captain (speaker button on the bar).",
-            "Allow desktop apps in Settings › Privacy & security › Microphone; capture cards deliver sound as a microphone.",
-            "Choose the audio output in Settings › System › Sound.",
+            Strings.Get("Help_Sound1"),
+            Strings.Get("Help_Sound2"),
+            Strings.Get("Help_Sound3"),
         ]),
-        ("\uE8CD", "Capture card not found",
+        ("\uE8CD", Strings.Get("Help_NotFoundTitle"),
         [
-            "Use a UVC capture card (most USB HDMI capture cards are). Cards that need a driver may not appear.",
-            "Try another USB port or cable; some cables only charge.",
-            "Allow desktop apps in Settings › Privacy & security › Camera.",
+            Strings.Get("Help_NotFound1"),
+            Strings.Get("Help_NotFound2"),
+            Strings.Get("Help_NotFound3"),
         ]),
-        ("\uEC4A", "Picture lags or stutters",
+        ("\uEC4A", Strings.Get("Help_LagTitle"),
         [
-            "Plug the card straight into the PC, not through a hub, when you can.",
-            "Two cards on one USB 2.0 bus share bandwidth; use separate ports or lower the format in Settings.",
-            "Turn on Show Diagnostics to see frame rate and dropped frames.",
+            Strings.Get("Help_Lag1"),
+            Strings.Get("Help_Lag2"),
+            Strings.Get("Help_Lag3"),
         ]),
     ];
 
@@ -51,15 +51,15 @@ public static class ConnectionHelp
             header.Children.Add(new TextBlock { Text = title, Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] });
             topic.Children.Add(header);
             for (var i = 0; i < steps.Length; i++)
-                topic.Children.Add(new TextBlock { Text = $"{i + 1}. {steps[i]}", TextWrapping = TextWrapping.WrapWholeWords, Margin = new Thickness(26, 0, 0, 0), Opacity = 0.85 });
+                topic.Children.Add(new TextBlock { Text = Strings.Format("Help_Step", i + 1, steps[i]), TextWrapping = TextWrapping.WrapWholeWords, Margin = new Thickness(26, 0, 0, 0), Opacity = 0.85 });
             panel.Children.Add(topic);
         }
         var dialog = new ContentDialog
         {
             XamlRoot = root,
-            Title = "Connection Help",
+            Title = Strings.Get("Help_Title"),
             Content = new ScrollViewer { Content = panel, MaxHeight = 480 },
-            CloseButtonText = "Done",
+            CloseButtonText = Strings.Get("Common_Done"),
             DefaultButton = ContentDialogButton.Close,
             RequestedTheme = ElementTheme.Dark,
         };

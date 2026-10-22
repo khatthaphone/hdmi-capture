@@ -37,7 +37,7 @@ public sealed class GridWindow : Window
 
     private GridWindow()
     {
-        Title = "HDMI Captain — All Cards";
+        Title = Strings.Get("Grid_Title");
         AppWindow.SetIcon("Assets/AppIcon.ico");
         AppWindow.TitleBar.PreferredTheme = Microsoft.UI.Windowing.TitleBarTheme.Dark;
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 760));
@@ -45,7 +45,7 @@ public sealed class GridWindow : Window
         _renderer = GridRenderer.Create(WinRT.Interop.WindowNative.GetWindowHandle(this));
         _empty = new TextBlock
         {
-            Text = "No capture cards\nConnect capture cards to see them here.",
+            Text = Strings.Get("Grid_Empty"),
             TextAlignment = TextAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
@@ -95,7 +95,7 @@ public sealed class GridWindow : Window
         if (_tiles.FirstOrDefault(t => t.Key == key) is not { Own: not null } tile) return;
         tile.CloseOwn();
         tile.HandOverUntil = DateTime.Now.AddSeconds(5);
-        tile.Status = "Opening in its window…";
+        tile.Status = Strings.Get("Grid_Opening");
     }
 
     /// <summary>"Play sound from the frontmost window": the grid is heard only while it has focus.</summary>
@@ -120,7 +120,7 @@ public sealed class GridWindow : Window
         public MainWindow? Tapped;
         public FrameHandler? Handler;
         public DateTime HandOverUntil;
-        public string Status = "Connecting…";
+        public string Status = Strings.Get("Grid_Connecting");
         public int Frames;
         public double Fps;
         public volatile int Width;
@@ -203,7 +203,7 @@ public sealed class GridWindow : Window
                     tile.Tapped = viewer;
                     viewer.FrameTap += tile.Handler;
                 }
-                tile.Status = tile.Fps > 0 ? "" : "No picture";
+                tile.Status = tile.Fps > 0 ? "" : Strings.Get("Grid_NoPicture");
                 continue;
             }
 
@@ -256,12 +256,12 @@ public sealed class GridWindow : Window
         tile.Status = state switch
         {
             CaptureState.Live => "",
-            CaptureState.Connecting => "Connecting…",
-            CaptureState.Recovering { Reason: RecoveryReason.Waiting or RecoveryReason.Disconnected } => "Disconnected",
-            CaptureState.Recovering => "Reconnecting…",
-            CaptureState.Paused { Reason: PauseReason.PrivacyToggle } => "Camera access is off",
-            CaptureState.Paused { Reason: PauseReason.InUseByAnotherApp } => "In use by another app",
-            CaptureState.Paused => "Paused",
+            CaptureState.Connecting => Strings.Get("Grid_Connecting"),
+            CaptureState.Recovering { Reason: RecoveryReason.Waiting or RecoveryReason.Disconnected } => Strings.Get("Grid_Disconnected"),
+            CaptureState.Recovering => Strings.Get("Grid_Reconnecting"),
+            CaptureState.Paused { Reason: PauseReason.PrivacyToggle } => Strings.Get("Grid_CameraOff"),
+            CaptureState.Paused { Reason: PauseReason.InUseByAnotherApp } => Strings.Get("Grid_InUse"),
+            CaptureState.Paused => Strings.Get("Grid_Paused"),
             CaptureState.Failed f => f.Message,
             _ => "",
         };

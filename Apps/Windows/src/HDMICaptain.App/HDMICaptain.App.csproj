@@ -16,6 +16,7 @@
     <EnableMsixTooling>true</EnableMsixTooling>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefaultLanguage>en-US</DefaultLanguage>
   </PropertyGroup>
 
   <!-- Debug runs unpackaged from bin/; Release builds the Store MSIX (make win-package). -->

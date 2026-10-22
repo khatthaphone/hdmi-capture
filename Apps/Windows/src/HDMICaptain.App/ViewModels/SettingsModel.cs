@@ -128,7 +128,7 @@ public sealed partial class SettingsModel : ObservableObject
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or CubeLUT.ParseException)
             {
                 _lutCache = (path, null);
-                LutFailed?.Invoke($"Can't use this LUT: {e.Message}");
+                LutFailed?.Invoke(Strings.Format("Toast_LutFailed", e.Message));
             }
         }
         if (_lutCache.Lut is { } lut)

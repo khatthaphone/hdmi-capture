@@ -107,6 +107,7 @@ public sealed partial class MainWindow : Window
         CardKey = cardKey;
         Model = new ViewerModel { QaDiagnostics = options.QaShowStats };
         InitializeComponent();
+        Title = Strings.Get("App_Name");
         ExtendsContentIntoTitleBar = true;
         AppWindow.SetIcon("Assets/AppIcon.ico");
         if (IsPrimary) RestoreFrame();
@@ -130,7 +131,7 @@ public sealed partial class MainWindow : Window
         _recording = new RecordingController(_renderer);
         _recording.Failed += message => DispatcherQueue.TryEnqueue(() => OnRecordingFailed(message));
         _recordTimer.Tick += (_, _) => UpdateRecordButton();
-        if (IsPrimary) _tray = new TrayIcon(_hwnd, Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"), "HDMI Captain", TrayMenu, ShowFromTray);
+        if (IsPrimary) _tray = new TrayIcon(_hwnd, Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"), Strings.Get("App_Name"), TrayMenu, ShowFromTray);
 
         AppWindow.Changed += OnAppWindowChanged;
         Closed += (_, _) => Shutdown();
@@ -178,7 +179,7 @@ public sealed partial class MainWindow : Window
         }
         else if (options.TestPattern is { } pattern)
         {
-            Model.InputName = "Test Pattern";
+            Model.InputName = Strings.Get("Menu_TestPattern");
             _testPattern = new TestPatternSource(pattern, ParseFormat(options.TestPatternFormat));
             _testPattern.FrameArrived += OnFrame;
             _testPattern.Start();
@@ -252,7 +253,7 @@ public sealed partial class MainWindow : Window
         }
         else if (state is CaptureState.Recovering { Reason: RecoveryReason.Waiting or RecoveryReason.Disconnected } or CaptureState.Failed)
         {
-            if (_recording.IsRecording) _ = StopRecordingAsync("Recording saved: the capture card was disconnected");
+            if (_recording.IsRecording) _ = StopRecordingAsync(Strings.Get("Toast_RecordingSavedDisconnected"));
             StopAudio();
             _renderer.Clear();
         }
@@ -274,7 +275,7 @@ public sealed partial class MainWindow : Window
             var audio = new WasapiAudioPipeline(endpoint.Id) { Settings = _silenced ? settings with { Muted = true } : settings };
             audio.Log += line => AppLog.Write($"[audio] {line}");
             audio.AccessDenied += () => DispatcherQueue.TryEnqueue(() =>
-                ShowToast("Sound is blocked. Allow desktop apps in Settings › Privacy & security › Microphone."));
+                ShowToast(Strings.Get("Toast_SoundBlocked")));
             audio.Start();
             Interlocked.Exchange(ref _audio, audio)?.Dispose();
             DispatcherQueue.TryEnqueue(() => { if (ReferenceEquals(_audio, audio)) _recording.AttachAudio(audio); });
@@ -311,12 +312,12 @@ public sealed partial class MainWindow : Window
         }
         if (kind is { } pattern)
         {
-            if (_recording.IsRecording) _ = StopRecordingAsync("Recording saved to Videos › HDMI Captain");
+            if (_recording.IsRecording) _ = StopRecordingAsync(Strings.Get("Toast_RecordingSaved"));
             _capture?.Stop();
             StopAudio();
             _signal.Reset();
             Model.Signal = new SignalContent.Picture();
-            Model.InputName = "Test Pattern";
+            Model.InputName = Strings.Get("Menu_TestPattern");
             _testPattern = new TestPatternSource(pattern, ParseFormat(_options.TestPatternFormat));
             _testPattern.FrameArrived += OnFrame;
             _testPattern.Start();
@@ -357,8 +358,8 @@ public sealed partial class MainWindow : Window
                 DrawGuides();
                 break;
             case nameof(ViewerModel.InputName):
-                _tray?.SetTip($"HDMI Captain — {Model.InputName}");
-                if (!IsPrimary) Title = $"HDMI Captain — {Model.InputName}";
+                _tray?.SetTip(Strings.Format("Window_TitleWithInput", Model.InputName));
+                if (!IsPrimary) Title = Strings.Format("Window_TitleWithInput", Model.InputName);
                 break;
             case nameof(ViewerModel.ShowDiagnostics):
                 UpdateStats();
@@ -529,10 +530,10 @@ public sealed partial class MainWindow : Window
             };
             items.Add(item);
         }
-        if (items.Count == 0) items.Add(new MenuFlyoutItem { Text = "No capture card connected", IsEnabled = false });
+        if (items.Count == 0) items.Add(new MenuFlyoutItem { Text = Strings.Get("Card_NoneConnected"), IsEnabled = false });
         if (_capture is { Catalog.Devices.Count: > 0 } capture)
         {
-            var windows = new MenuFlyoutSubItem { Text = "New Window for", Icon = new FontIcon { Glyph = "\uE78B" } };
+            var windows = new MenuFlyoutSubItem { Text = Strings.Get("Menu_NewWindowFor"), Icon = new FontIcon { Glyph = "\uE78B" } };
             foreach (var device in capture.Catalog.Devices)
             {
                 var item = new MenuFlyoutItem { Text = device.Name };
@@ -541,17 +542,17 @@ public sealed partial class MainWindow : Window
             }
             items.Add(new MenuFlyoutSeparator());
             items.Add(windows);
-            items.Add(Item("All Cards in a Grid", "\uF0E2", () => GridWindow.Show(), "Ctrl+G"));
+            items.Add(Item(Strings.Get("Menu_AllCardsGrid"), "\uF0E2", () => GridWindow.Show(), "Ctrl+G"));
         }
         items.Add(new MenuFlyoutSeparator());
         items.Add(TestPatternMenu());
-        items.Add(Item("Reconnect", "\uE72C", Reconnect));
+        items.Add(Item(Strings.Get("Action_Reconnect"), "\uE72C", Reconnect));
     }
 
     private MenuFlyoutSubItem TestPatternMenu()
     {
-        var menu = new MenuFlyoutSubItem { Text = "Test Pattern", Icon = new FontIcon { Glyph = "\uE91B" } };
-        var off = new RadioMenuFlyoutItem { Text = "Off (Live Input)", GroupName = "pattern", IsChecked = _testPattern == null, IsEnabled = _capture != null };
+        var menu = new MenuFlyoutSubItem { Text = Strings.Get("Menu_TestPattern"), Icon = new FontIcon { Glyph = "\uE91B" } };
+        var off = new RadioMenuFlyoutItem { Text = Strings.Get("Menu_TestPatternOff"), GroupName = "pattern", IsChecked = _testPattern == null, IsEnabled = _capture != null };
         off.Click += (_, _) => ShowTestPattern(null);
         menu.Items.Add(off);
         menu.Items.Add(new MenuFlyoutSeparator());
@@ -572,7 +573,7 @@ public sealed partial class MainWindow : Window
 
     private void FillOptionsItems(IList<MenuFlyoutItemBase> items)
     {
-        var scale = new MenuFlyoutSubItem { Text = "Scale", Icon = new FontIcon { Glyph = "\uE740" } };
+        var scale = new MenuFlyoutSubItem { Text = Strings.Get("Menu_Scale"), Icon = new FontIcon { Glyph = "\uE740" } };
         foreach (var mode in Enum.GetValues<ScaleMode>())
         {
             var item = new RadioMenuFlyoutItem
@@ -586,31 +587,31 @@ public sealed partial class MainWindow : Window
             scale.Items.Add(item);
         }
         items.Add(scale);
-        items.Add(Toggle("Sharp Pixels", Model.SharpPixels, v => Model.SharpPixels = v));
+        items.Add(Toggle(Strings.Get("Menu_SharpPixels"), Model.SharpPixels, v => Model.SharpPixels = v));
         items.Add(PictureLookMenu());
         items.Add(GuidesMenu());
         items.Add(LutMenu());
-        var size = new MenuFlyoutSubItem { Text = "Window Size", Icon = new FontIcon { Glyph = "\uE9A6" } };
-        size.Items.Add(Item("Half Size (50 %)", "\uE73F", () => SizeToVideo(0.5)));
-        size.Items.Add(Item("Actual Pixels (100 %)", "\uE9A6", () => SizeToVideo(1), "Ctrl+0"));
-        size.Items.Add(Item("Double Size (200 %)", "\uE740", () => SizeToVideo(2)));
+        var size = new MenuFlyoutSubItem { Text = Strings.Get("Menu_WindowSize"), Icon = new FontIcon { Glyph = "\uE9A6" } };
+        size.Items.Add(Item(Strings.Get("Menu_HalfSize"), "\uE73F", () => SizeToVideo(0.5)));
+        size.Items.Add(Item(Strings.Get("Menu_ActualPixels"), "\uE9A6", () => SizeToVideo(1), "Ctrl+0"));
+        size.Items.Add(Item(Strings.Get("Menu_DoubleSize"), "\uE740", () => SizeToVideo(2)));
         items.Add(size);
         items.Add(new MenuFlyoutSeparator());
-        items.Add(Toggle("Show Diagnostics", Model.ShowDiagnostics, v => Model.ShowDiagnostics = v));
-        items.Add(Item("Settings…", "\uE713", OpenSettings, "Ctrl+,"));
-        items.Add(Item(_pro.IsPro ? "HDMI Captain Pro" : "Upgrade to Pro…", "\uE734", () => _ = ShowUpgradeAsync(null)));
-        items.Add(Item("Connection Help…", "\uE897", async () => await ConnectionHelp.ShowAsync(Content.XamlRoot)));
-        items.Add(Toggle("Keep Window on Top", Model.AlwaysOnTop, v => Model.AlwaysOnTop = v, "Ctrl+T"));
-        items.Add(Toggle("Clean Mode", Model.CleanMode, v => Model.CleanMode = v));
+        items.Add(Toggle(Strings.Get("Menu_ShowDiagnostics"), Model.ShowDiagnostics, v => Model.ShowDiagnostics = v));
+        items.Add(Item(Strings.Get("Menu_Settings"), "\uE713", OpenSettings, "Ctrl+,"));
+        items.Add(Item(_pro.IsPro ? Strings.Get("Pro_Title") : Strings.Get("Menu_UpgradePro"), "\uE734", () => _ = ShowUpgradeAsync(null)));
+        items.Add(Item(Strings.Get("Action_Help"), "\uE897", async () => await ConnectionHelp.ShowAsync(Content.XamlRoot)));
+        items.Add(Toggle(Strings.Get("Menu_KeepOnTop"), Model.AlwaysOnTop, v => Model.AlwaysOnTop = v, "Ctrl+T"));
+        items.Add(Toggle(Strings.Get("Menu_CleanMode"), Model.CleanMode, v => Model.CleanMode = v));
         items.Add(new MenuFlyoutSeparator());
-        items.Add(Item("Show Scopes", "\uE9D2", () => ScopesWindow.Show(_scopes)));
-        items.Add(Item("Save Screenshot", "\uE722", SaveScreenshot, "Ctrl+Shift+S"));
-        items.Add(Item("Copy Frame", "\uE8C8", CopyFrame));
+        items.Add(Item(Strings.Get("Menu_ShowScopes"), "\uE9D2", () => ScopesWindow.Show(_scopes)));
+        items.Add(Item(Strings.Get("Menu_SaveScreenshot"), "\uE722", SaveScreenshot, "Ctrl+Shift+S"));
+        items.Add(Item(Strings.Get("Menu_CopyFrame"), "\uE8C8", CopyFrame));
     }
 
     private MenuFlyoutSubItem PictureLookMenu()
     {
-        var menu = new MenuFlyoutSubItem { Text = "Picture Look", Icon = new FontIcon { Glyph = "\uE790" } };
+        var menu = new MenuFlyoutSubItem { Text = Strings.Get("Menu_PictureLook"), Icon = new FontIcon { Glyph = "\uE790" } };
         var current = LookPreset.Of(_settings.Preset.Adjustments);
         foreach (var look in LookPreset.All)
         {
@@ -623,7 +624,7 @@ public sealed partial class MainWindow : Window
 
     private MenuFlyoutSubItem LutMenu()
     {
-        var menu = new MenuFlyoutSubItem { Text = "LUT", Icon = new FontIcon { Glyph = "\uE2B1" } };
+        var menu = new MenuFlyoutSubItem { Text = Strings.Get("Menu_Lut"), Icon = new FontIcon { Glyph = "\uE2B1" } };
         if (_settings.LutName is { } name)
         {
             menu.Items.Add(new ToggleMenuFlyoutItem { Text = name, IsChecked = true, IsEnabled = false });
@@ -631,7 +632,7 @@ public sealed partial class MainWindow : Window
             {
                 var item = new RadioMenuFlyoutItem
                 {
-                    Text = $"Strength {strength * 100:0} %",
+                    Text = Strings.Format("Menu_LutStrength", strength * 100),
                     GroupName = "lutStrength",
                     IsChecked = Math.Abs(_settings.LutIntensity - strength) < 0.01,
                 };
@@ -640,8 +641,8 @@ public sealed partial class MainWindow : Window
             }
             menu.Items.Add(new MenuFlyoutSeparator());
         }
-        menu.Items.Add(Item("Choose .cube File…", "\uE8E5", ChooseLut));
-        if (_settings.LutName != null) menu.Items.Add(Item("Remove LUT", "\uE711", () => _settings.SetLut(null)));
+        menu.Items.Add(Item(Strings.Get("Menu_ChooseCube"), "\uE8E5", ChooseLut));
+        if (_settings.LutName != null) menu.Items.Add(Item(Strings.Get("Menu_RemoveLut"), "\uE711", () => _settings.SetLut(null)));
         return menu;
     }
 
@@ -656,17 +657,17 @@ public sealed partial class MainWindow : Window
     private MenuFlyoutSubItem GuidesMenu()
     {
         var guides = _prefs.Prefs.Guides;
-        var menu = new MenuFlyoutSubItem { Text = "Guides", Icon = new FontIcon { Glyph = "\uE80A" } };
-        menu.Items.Add(Toggle("Rule of Thirds", guides.Thirds, v => UpdateGuides(g => g with { Thirds = v })));
-        menu.Items.Add(Toggle("Center Cross", guides.Center, v => UpdateGuides(g => g with { Center = v })));
-        menu.Items.Add(Toggle("Safe Areas (90 % / 80 %)", guides.SafeAreas, v => UpdateGuides(g => g with { SafeAreas = v })));
+        var menu = new MenuFlyoutSubItem { Text = Strings.Get("Menu_Guides"), Icon = new FontIcon { Glyph = "\uE80A" } };
+        menu.Items.Add(Toggle(Strings.Get("Menu_RuleOfThirds"), guides.Thirds, v => UpdateGuides(g => g with { Thirds = v })));
+        menu.Items.Add(Toggle(Strings.Get("Menu_CenterCross"), guides.Center, v => UpdateGuides(g => g with { Center = v })));
+        menu.Items.Add(Toggle(Strings.Get("Menu_SafeAreas"), guides.SafeAreas, v => UpdateGuides(g => g with { SafeAreas = v })));
         menu.Items.Add(new MenuFlyoutSeparator());
-        var none = new RadioMenuFlyoutItem { Text = "No Aspect Mask", GroupName = "mask", IsChecked = guides.Mask is null };
+        var none = new RadioMenuFlyoutItem { Text = Strings.Get("Menu_NoAspectMask"), GroupName = "mask", IsChecked = guides.Mask is null };
         none.Click += (_, _) => UpdateGuides(g => g with { Mask = null });
         menu.Items.Add(none);
         foreach (var mask in Enum.GetValues<GuideMask>())
         {
-            var item = new RadioMenuFlyoutItem { Text = $"Mask {GuideSettings.Title(mask)}", GroupName = "mask", IsChecked = guides.Mask == mask };
+            var item = new RadioMenuFlyoutItem { Text = Strings.Format("Menu_Mask", GuideSettings.Title(mask)), GroupName = "mask", IsChecked = guides.Mask == mask };
             item.Click += (_, _) => UpdateGuides(g => g with { Mask = mask });
             menu.Items.Add(item);
         }
@@ -693,13 +694,13 @@ public sealed partial class MainWindow : Window
         menu.Opening += (_, _) =>
         {
             menu.Items.Clear();
-            var input = new MenuFlyoutSubItem { Text = "Video Input", Icon = new FontIcon { Glyph = "\uE714" } };
+            var input = new MenuFlyoutSubItem { Text = Strings.Get("Menu_VideoInput"), Icon = new FontIcon { Glyph = "\uE714" } };
             FillInputItems(input.Items);
             menu.Items.Add(input);
             menu.Items.Add(new MenuFlyoutSeparator());
             FillOptionsItems(menu.Items);
             menu.Items.Add(new MenuFlyoutSeparator());
-            menu.Items.Add(Item(Model.IsFullScreen ? "Exit Full Screen" : "Full Screen", Model.FullScreenGlyph, ToggleFullScreen, "F11"));
+            menu.Items.Add(Item(Model.IsFullScreen ? Strings.Get("Menu_ExitFullScreen") : Strings.Get("Menu_FullScreen"), Model.FullScreenGlyph, ToggleFullScreen, "F11"));
         };
         menu.Opened += OnFlyoutOpened;
         menu.Closed += OnFlyoutClosed;
@@ -809,7 +810,7 @@ public sealed partial class MainWindow : Window
         var (w, h) = _renderer.SourceSize;
         if (w == 0)
         {
-            ShowToast("No picture to size to yet");
+            ShowToast(Strings.Get("Toast_NoPictureToSize"));
             return;
         }
         if (Model.IsFullScreen) ToggleFullScreen();
@@ -823,7 +824,7 @@ public sealed partial class MainWindow : Window
         var height = (int)Math.Round(h * factor);
         var fit = Math.Min(1.0, Math.Min((double)(work.Width - frameW) / width, (double)(work.Height - frameH) / height));
         AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(width * fit) + frameW, (int)(height * fit) + frameH));
-        if (fit < 1) ShowToast("Limited to the screen size");
+        if (fit < 1) ShowToast(Strings.Get("Toast_LimitedToScreen"));
     }
 
     // MARK: - Tray
@@ -832,18 +833,18 @@ public sealed partial class MainWindow : Window
     {
         var entries = new List<TrayIcon.MenuEntry>
         {
-            AppWindow.IsVisible ? new("Hide Window", () => AppWindow.Hide()) : new("Show Window", ShowFromTray),
+            AppWindow.IsVisible ? new(Strings.Get("Tray_HideWindow"), () => AppWindow.Hide()) : new(Strings.Get("Tray_ShowWindow"), ShowFromTray),
             TrayIcon.MenuEntry.Separator,
         };
         var current = _capture?.CurrentDevice?.Key;
         foreach (var device in _capture?.Catalog.Devices ?? [])
             entries.Add(new(device.Name, () => _capture?.Select(device.Key), Checked: device.Key == current));
         if (_capture is { Catalog.Devices.Count: > 0 }) entries.Add(TrayIcon.MenuEntry.Separator);
-        entries.Add(new("Mute", () => Model.Muted = !Model.Muted, Checked: Model.Muted));
-        entries.Add(new("Save Screenshot", SaveScreenshot, Enabled: Model.IsLive));
-        entries.Add(new("Settings…", OpenSettings));
+        entries.Add(new(Strings.Get("Control_Mute"), () => Model.Muted = !Model.Muted, Checked: Model.Muted));
+        entries.Add(new(Strings.Get("Menu_SaveScreenshot"), SaveScreenshot, Enabled: Model.IsLive));
+        entries.Add(new(Strings.Get("Menu_Settings"), OpenSettings));
         entries.Add(TrayIcon.MenuEntry.Separator);
-        entries.Add(new("Quit HDMI Captain", Close));
+        entries.Add(new(Strings.Get("Tray_Quit"), Close));
         return entries;
     }
 
@@ -857,17 +858,17 @@ public sealed partial class MainWindow : Window
     {
         if (_recording.IsRecording)
         {
-            await StopRecordingAsync("Recording saved to Videos › HDMI Captain");
+            await StopRecordingAsync(Strings.Get("Toast_RecordingSaved"));
             return;
         }
         if (_testPattern != null)
         {
-            ShowToast("Switch to the live input to record");
+            ShowToast(Strings.Get("Toast_SwitchToLive"));
             return;
         }
         if (!Model.IsLive)
         {
-            ShowToast("Connect a capture card to record");
+            ShowToast(Strings.Get("Toast_ConnectToRecord"));
             return;
         }
         if (!await RequireProAsync(ProFeature.Recording)) return;
@@ -877,7 +878,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception e) when (e is System.Runtime.InteropServices.COMException or InvalidOperationException or IOException)
         {
-            ShowToast($"Recording failed: {e.Message}");
+            ShowToast(Strings.Format("Toast_RecordingFailed", e.Message));
             return;
         }
         _recordTimer.Start();
@@ -902,7 +903,7 @@ public sealed partial class MainWindow : Window
         _recordTimer.Stop();
         _ = _recording.StopRecordingAsync();
         UpdateRecordButton();
-        ShowToast($"Recording failed: {message}");
+        ShowToast(Strings.Format("Toast_RecordingFailed", message));
     }
 
     private void UpdateRecordButton()
@@ -911,10 +912,10 @@ public sealed partial class MainWindow : Window
         RecordDot.Visibility = recording ? Visibility.Collapsed : Visibility.Visible;
         StopSquare.Visibility = recording ? Visibility.Visible : Visibility.Collapsed;
         var s = (int)_recording.RecordingDuration.TotalSeconds;
-        RecordText.Text = recording ? (s >= 3600 ? $"{s / 3600}:{s / 60 % 60:00}:{s % 60:00}" : $"{s / 60}:{s % 60:00}") : "Record";
+        RecordText.Text = recording ? (s >= 3600 ? $"{s / 3600}:{s / 60 % 60:00}:{s % 60:00}" : $"{s / 60}:{s % 60:00}") : Strings.Get("Record_Label");
         RecordButton.Background = recording ? new SolidColorBrush(Microsoft.UI.Colors.Red) : null;
-        ToolTipService.SetToolTip(RecordButton, recording ? "Stop Recording (Ctrl+R)" : "Record (Ctrl+R)");
-        AutomationProperties.SetName(RecordButton, recording ? "Stop recording" : "Record");
+        ToolTipService.SetToolTip(RecordButton, Strings.Get(recording ? "Record_StopTooltip" : "Record_Tooltip"));
+        AutomationProperties.SetName(RecordButton, Strings.Get(recording ? "Record_StopName" : "Record_Label"));
     }
 
     private void OnRecentMenuOpening(object? sender, object e)
@@ -923,7 +924,7 @@ public sealed partial class MainWindow : Window
         var unlocked = _pro.IsUnlocked(ProFeature.ReplayBuffer);
         var keep = new ToggleMenuFlyoutItem
         {
-            Text = $"Keep Recent Footage ({RecordingController.KeepRecent.TotalSeconds:0} s)",
+            Text = Strings.Format("Menu_KeepRecent", RecordingController.KeepRecent.TotalSeconds),
             IsChecked = _recording.IsKeepingRecent,
             Icon = new FontIcon { Glyph = unlocked ? "\uE81C" : "\uE72E" },
         };
@@ -948,7 +949,7 @@ public sealed partial class MainWindow : Window
             if (!await RequireProAsync(ProFeature.ReplayBuffer)) return;
             if (!Model.IsLive || _testPattern != null)
             {
-                ShowToast("Connect a capture card to keep recent footage");
+                ShowToast(Strings.Get("Toast_ConnectToKeepRecent"));
                 return;
             }
             _recording.StartKeepingRecent(_capture?.CurrentType?.FrameRate ?? 60);
@@ -965,22 +966,22 @@ public sealed partial class MainWindow : Window
     {
         if (!_recording.IsKeepingRecent)
         {
-            ShowToast("Turn on Keep Recent Footage in the Save Recent menu first");
+            ShowToast(Strings.Get("Toast_TurnOnKeepRecent"));
             return;
         }
-        ShowToast("Saving…");
+        ShowToast(Strings.Get("Toast_Saving"));
         try
         {
             var result = await _recording.SaveRecentAsync(span);
             AppLog.Write($"[recent] {result.Path}: {result.Duration.TotalSeconds:F1} s in {result.Elapsed.TotalMilliseconds:F0} ms");
-            ShowToast($"Saved the last {Describe(span)} to Videos › HDMI Captain");
+            ShowToast(Strings.Format("Toast_SavedRecent", Describe(span)));
         }
         catch (Exception e) when (e is InvalidOperationException or IOException or System.Runtime.InteropServices.COMException)
         {
-            ShowToast($"Couldn't save: {e.Message}");
+            ShowToast(Strings.Format("Toast_CouldntSave", e.Message));
         }
 
-        static string Describe(TimeSpan span) => span.TotalSeconds < 60 ? $"{span.TotalSeconds:0} seconds" : "minute";
+        static string Describe(TimeSpan span) => span.TotalSeconds < 60 ? Strings.Format("Unit_Seconds", span.TotalSeconds) : Strings.Get("Unit_Minute");
     }
 
     /// <summary>The Store add-on; DEBUG builds without package identity (or with -debugUnlockPro) use the fake store.</summary>
@@ -1130,7 +1131,7 @@ public sealed partial class MainWindow : Window
     {
         if (await EncodeFrameAsync() is not { } png)
         {
-            ShowToast("No picture to capture yet");
+            ShowToast(Strings.Get("Toast_NoPictureToCapture"));
             return;
         }
         try
@@ -1141,11 +1142,11 @@ public sealed partial class MainWindow : Window
             var path = Path.Combine(folder, $"HDMI Captain {now:yyyy-MM-dd} at {now:HH.mm.ss}.png");
             await using (var file = File.Create(path))
                 await png.AsStreamForRead().CopyToAsync(file);
-            ShowToast("Screenshot saved");
+            ShowToast(Strings.Get("Toast_ScreenshotSaved"));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            ShowToast($"Couldn't save the screenshot: {e.Message}");
+            ShowToast(Strings.Format("Toast_ScreenshotFailed", e.Message));
         }
     }
 
@@ -1153,13 +1154,13 @@ public sealed partial class MainWindow : Window
     {
         if (await EncodeFrameAsync() is not { } png)
         {
-            ShowToast("No picture to copy yet");
+            ShowToast(Strings.Get("Toast_NoPictureToCopy"));
             return;
         }
         var package = new DataPackage();
         package.SetBitmap(RandomAccessStreamReference.CreateFromStream(png));
         Clipboard.SetContent(package);
-        ShowToast("Frame copied");
+        ShowToast(Strings.Get("Toast_FrameCopied"));
     }
 
     private async Task<InMemoryRandomAccessStream?> EncodeFrameAsync()

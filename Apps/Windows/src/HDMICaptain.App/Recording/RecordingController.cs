@@ -17,9 +17,9 @@ public sealed class RecordingController : IDisposable
 
     public static readonly (string Title, TimeSpan Span)[] RecentSpans =
     [
-        ("Last 15 Seconds", TimeSpan.FromSeconds(15)),
-        ("Last 30 Seconds", TimeSpan.FromSeconds(30)),
-        ("Last 1 Minute", TimeSpan.FromMinutes(1)),
+        (Strings.Get("Recent_15s"), TimeSpan.FromSeconds(15)),
+        (Strings.Get("Recent_30s"), TimeSpan.FromSeconds(30)),
+        (Strings.Get("Recent_1m"), TimeSpan.FromMinutes(1)),
     ];
 
     private readonly D3DRenderer _renderer;
