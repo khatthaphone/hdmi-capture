@@ -218,9 +218,9 @@ struct ProSettingsSections: View {
                 ProSectionHeader(title: "Recording", locked: !store.isUnlocked(.recording))
             }
             .disabled(!store.isUnlocked(.recording))
-            #if DEBUG
+            #if DEBUG || ALLOW_DEBUG_PRO
             Section("Developer") {
-                Toggle("Unlock Pro (debug builds only)", isOn: $store.debugUnlock)
+                Toggle("Unlock Pro (developer builds only)", isOn: $store.debugUnlock)
             }
             #endif
         }

@@ -1,7 +1,7 @@
 DERIVED := .build/xcode
 APP := $(DERIVED)/Build/Products/Debug/HDMI Captain.app
 
-.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad ipad-snapshot ipad-soak android-build android-test android-run android-check16k android-soak inventory logs clean
+.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad run-ipad-profile install-mac ipad-snapshot ipad-soak android-build android-test android-run android-check16k android-soak inventory logs clean
 
 IOS_SIM ?= iPad Pro 11-inch (M5)
 IPAD_APP_SIM := $(DERIVED)/Build/Products/Debug-iphonesimulator/HDMI Captain.app
@@ -18,6 +18,15 @@ build: gen
 
 run: build
 	open "$(APP)"
+
+# Release Mac build with the developer Pro toggle (ALLOW_DEBUG_PRO), copied to /Applications
+MAC_PROFILE_DERIVED := .build/xcode-mac-profile
+install-mac: gen
+	xcodebuild -project HDMICaptain.xcodeproj -scheme HDMICaptain -configuration Release -derivedDataPath $(MAC_PROFILE_DERIVED) -quiet build 'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$$(inherited) ALLOW_DEBUG_PRO'
+	-pkill -x "HDMI Captain"
+	rm -rf "/Applications/HDMI Captain.app"
+	ditto "$(MAC_PROFILE_DERIVED)/Build/Products/Release/HDMI Captain.app" "/Applications/HDMI Captain.app"
+	open "/Applications/HDMI Captain.app" --args $(MAC_ARGS)
 
 test:
 	cd Packages/CaptureCore && swift test
@@ -47,6 +56,15 @@ run-ipad: gen
 	@test -n "$(IPAD_ID)" || (echo "No paired iPad found (xcrun devicectl list devices)"; exit 1)
 	xcodebuild -project HDMICaptain.xcodeproj -scheme HDMICaptain-iPad -configuration Debug -destination 'id=$(IPAD_ID)' -derivedDataPath $(DERIVED) -allowProvisioningUpdates -quiet build
 	xcrun devicectl device install app --device $(IPAD_ID) "$(IPAD_APP)"
+	xcrun devicectl device process launch --terminate-existing --device $(IPAD_ID) com.example.hdmicaptain -- $(IPAD_ARGS)
+
+# Release ("Profile") build on the iPad, as users get it, but with the developer Pro unlock compiled
+# in (ALLOW_DEBUG_PRO) so `IPAD_ARGS="-debugUnlockPro YES"` works. Never used for App Store builds.
+IPAD_PROFILE_DERIVED := .build/xcode-ipad-profile
+run-ipad-profile: gen
+	@test -n "$(IPAD_ID)" || (echo "No paired iPad found (xcrun devicectl list devices)"; exit 1)
+	xcodebuild -project HDMICaptain.xcodeproj -scheme HDMICaptain-iPad -configuration Release -destination 'id=$(IPAD_ID)' -derivedDataPath $(IPAD_PROFILE_DERIVED) -allowProvisioningUpdates -quiet build 'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$$(inherited) ALLOW_DEBUG_PRO'
+	xcrun devicectl device install app --device $(IPAD_ID) "$(IPAD_PROFILE_DERIVED)/Build/Products/Release-iphoneos/HDMI Captain.app"
 	xcrun devicectl device process launch --terminate-existing --device $(IPAD_ID) com.example.hdmicaptain -- $(IPAD_ARGS)
 
 # DEBUG builds: saves the window + raw frame on the iPad and copies them to SNAP_DIR.

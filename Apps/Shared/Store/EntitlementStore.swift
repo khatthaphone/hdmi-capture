@@ -25,7 +25,8 @@ final class EntitlementStore {
     var isShowingUpgrade = false
     private(set) var highlightedFeature: ProFeature?
 
-    #if DEBUG
+    // DEBUG, or a Release "profile" build made with ALLOW_DEBUG_PRO (make run-ipad-profile); never App Store builds.
+    #if DEBUG || ALLOW_DEBUG_PRO
     /// Developer toggle for exercising Pro features without the store.
     var debugUnlock = UserDefaults.standard.bool(forKey: "debugUnlockPro") {
         didSet { UserDefaults.standard.set(debugUnlock, forKey: "debugUnlockPro") }
@@ -53,7 +54,7 @@ final class EntitlementStore {
     }
 
     func isUnlocked(_ feature: ProFeature) -> Bool {
-        #if DEBUG
+        #if DEBUG || ALLOW_DEBUG_PRO
         if honorsDebugUnlock, debugUnlock { return true }
         #endif
         return isPro
