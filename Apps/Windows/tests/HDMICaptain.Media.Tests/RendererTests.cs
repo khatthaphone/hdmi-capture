@@ -97,6 +97,44 @@ public class RendererTests
         }
     }
 
+    public static TheoryData<string> Looks() => [.. LookPreset.All.Select(l => l.Title), "Extreme"];
+
+    /// <summary>
+    /// Task 097: every Picture Look on the 75 % bars matches MetalRenderer's adjustColor (Shaders in MetalRenderer.swift,
+    /// ported line for line below), so the same look gives the same picture on both platforms.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Looks))]
+    public void PictureLooksMatchTheMacFormula(string title)
+    {
+        var values = LookPreset.All.FirstOrDefault(l => l.Title == title)?.Values
+            ?? new ImageAdjustments { Brightness = 0.1, Contrast = 1.4, Saturation = 0.3, Gamma = 1.6 };
+        using var renderer = D3DRenderer.CreateWarp();
+        renderer.Adjustments = ((float)values.Brightness, (float)values.Contrast, (float)values.Saturation, (float)values.Gamma, (float)values.Sharpness);
+        var frame = TestPattern.Pack(TestPatternKind.SmpteBars, PixelFormat.Nv12, Width, Height).AsFrame();
+
+        renderer.Render(in frame);
+        var pixels = renderer.ReadSourcePixels()!;
+
+        for (var bar = 0; bar < 7; bar++)
+        {
+            var (r, g, b) = TestPattern.FullBarColors[bar];
+            var (er, eg, eb) = MacAdjust((r * 0.75, g * 0.75, b * 0.75), values);
+            AssertPixel(pixels, Width, (int)((bar + 0.5) * Width / 7), Height / 3,
+                (int)Math.Round(er * 255), (int)Math.Round(eg * 255), (int)Math.Round(eb * 255), $"{title} bar {bar}");
+        }
+    }
+
+    private static (double R, double G, double B) MacAdjust((double R, double G, double B) rgb, ImageAdjustments a)
+    {
+        static double Clamp(double v) => Math.Clamp(v, 0, 1);
+        var (r, g, b) = ((rgb.R - 0.5) * a.Contrast + 0.5 + a.Brightness, (rgb.G - 0.5) * a.Contrast + 0.5 + a.Brightness, (rgb.B - 0.5) * a.Contrast + 0.5 + a.Brightness);
+        var luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        (r, g, b) = (Clamp(luma + (r - luma) * a.Saturation), Clamp(luma + (g - luma) * a.Saturation), Clamp(luma + (b - luma) * a.Saturation));
+        var inverse = 1 / Math.Max(0.1, a.Gamma);
+        return (Math.Pow(r, inverse), Math.Pow(g, inverse), Math.Pow(b, inverse));
+    }
+
     [Fact]
     public void PresentsIntoACompositionSwapChainAndResizes()
     {

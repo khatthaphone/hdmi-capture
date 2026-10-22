@@ -76,7 +76,7 @@ public sealed partial class MainWindow : Window
     public bool IsPrimary => CardKey is null;
 
     /// <summary>The card this viewer is capturing right now (any thread).</summary>
-    public string? ShowingCard => _capture?.CurrentDevice?.Key;
+    public string? ShowingCard => _testPattern != null ? null : _capture?.CurrentDevice?.Key;
 
     /// <summary>The cards this window's catalog sees (the grid lists the main window's).</summary>
     public IReadOnlyList<CaptureDevice> Devices => _capture?.Catalog.Devices ?? [];
@@ -184,7 +184,7 @@ public sealed partial class MainWindow : Window
             });
             _settings.Attach(_capture);
             _capture.Log += line => AppLog.Write($"[capture] {line}");
-            _capture.FrameArrived += OnFrame;
+            _capture.FrameArrived += OnCaptureFrame;
             _capture.StateChanged += state => DispatcherQueue.TryEnqueue(() => OnCaptureState(state));
             if (IsPrimary)
                 _capture.Catalog.PreferredChanged += key => DispatcherQueue.TryEnqueue(() => _prefs.UpdateState(s => s with { PreferredDeviceKey = key }));
@@ -198,6 +198,7 @@ public sealed partial class MainWindow : Window
     // UI thread: CaptureState → what the window shows, and audio that follows the live card.
     private void OnCaptureState(CaptureState state)
     {
+        if (_testPattern != null) return; // the card is stopped while a test pattern shows
         var device = _capture?.CurrentDevice;
         if (device != null) Model.InputName = device.Name;
         if (state is CaptureState.Live or CaptureState.Connecting && device != null && device.Key != _settings.Device?.Key)
@@ -279,6 +280,47 @@ public sealed partial class MainWindow : Window
     }
 
     private void Reconnect() => _capture?.Retry();
+
+    // MF thread: the last frames of a card being stopped for a test pattern are dropped.
+    private void OnCaptureFrame(in VideoFrame frame)
+    {
+        if (_testPattern == null) OnFrame(in frame);
+    }
+
+    /// <summary>
+    /// Input ▸ Test Pattern: shows a generated pattern instead of the card (which is closed, so other apps can use it),
+    /// or goes back to the live input (null).
+    /// </summary>
+    private void ShowTestPattern(TestPatternKind? kind)
+    {
+        if (_testPattern is { } old)
+        {
+            old.FrameArrived -= OnFrame;
+            old.Dispose();
+            _testPattern = null;
+        }
+        if (kind is { } pattern)
+        {
+            if (_recording.IsRecording) _ = StopRecordingAsync("Recording saved to Videos › HDMI Captain");
+            _capture?.Stop();
+            StopAudio();
+            _signal.Reset();
+            Model.Signal = new SignalContent.Picture();
+            Model.InputName = "Test Pattern";
+            _testPattern = new TestPatternSource(pattern, ParseFormat(_options.TestPatternFormat));
+            _testPattern.FrameArrived += OnFrame;
+            _testPattern.Start();
+            Model.Phase = new ViewerPhase.Live();
+            _guideSource = (_testPattern.Width, _testPattern.Height);
+            DrawGuides();
+        }
+        else if (_capture != null)
+        {
+            _renderer.Clear();
+            Model.Phase = new ViewerPhase.Scanning();
+            _capture.Start();
+        }
+    }
 
     // Source thread: render straight away, no UI-thread hop (CLAUDE.md conventions).
     private void OnFrame(in VideoFrame frame)
@@ -489,7 +531,24 @@ public sealed partial class MainWindow : Window
             items.Add(Item("All Cards in a Grid", "\uF0E2", () => GridWindow.Show(), "Ctrl+G"));
         }
         items.Add(new MenuFlyoutSeparator());
+        items.Add(TestPatternMenu());
         items.Add(Item("Reconnect", "\uE72C", Reconnect));
+    }
+
+    private MenuFlyoutSubItem TestPatternMenu()
+    {
+        var menu = new MenuFlyoutSubItem { Text = "Test Pattern", Icon = new FontIcon { Glyph = "\uE91B" } };
+        var off = new RadioMenuFlyoutItem { Text = "Off (Live Input)", GroupName = "pattern", IsChecked = _testPattern == null, IsEnabled = _capture != null };
+        off.Click += (_, _) => ShowTestPattern(null);
+        menu.Items.Add(off);
+        menu.Items.Add(new MenuFlyoutSeparator());
+        foreach (var kind in Enum.GetValues<TestPatternKind>())
+        {
+            var item = new RadioMenuFlyoutItem { Text = TestPatternSource.Title(kind), GroupName = "pattern", IsChecked = _testPattern?.Kind == kind };
+            item.Click += (_, _) => ShowTestPattern(kind);
+            menu.Items.Add(item);
+        }
+        return menu;
     }
 
     private void OnOptionsMenuOpening(object? sender, object e)
@@ -968,6 +1027,7 @@ public sealed partial class MainWindow : Window
                     break;
                 case "scopes": ScopesWindow.Show(_scopes); break;
                 case "grid": GridWindow.Show(); break;
+                case "patternCycle": _ = PatternCycleForQaAsync(); break;
                 case "upgrade": _ = ShowUpgradeAsync(ProFeature.Recording); break;
             }
         };
@@ -979,6 +1039,14 @@ public sealed partial class MainWindow : Window
         await ToggleRecordingAsync();
         await Task.Delay(3000);
         if (_recording.IsRecording) await ToggleRecordingAsync();
+    }
+
+    // Bars for 3 s, then back to the card: the card is released and reopened (CLAUDE.md -qaAction patternCycle).
+    private async Task PatternCycleForQaAsync()
+    {
+        ShowTestPattern(TestPatternKind.SmpteBars);
+        await Task.Delay(3000);
+        ShowTestPattern(null);
     }
 
     // Keeps 25 s, then saves the last 15 s (CLAUDE.md -qaAction recent15).

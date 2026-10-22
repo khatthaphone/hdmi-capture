@@ -232,21 +232,13 @@ public sealed class GridWindow : Window
     private List<Tile> WantedTiles()
     {
         if (App.Options.TestPattern != null)
-            return Enum.GetValues<TestPatternKind>().Select(k => new Tile($"pattern:{k}", TestPatternTitle(k)) { Pattern = k }).ToList();
+            return Enum.GetValues<TestPatternKind>().Select(k => new Tile($"pattern:{k}", TestPatternSource.Title(k)) { Pattern = k }).ToList();
         var devices = App.Devices;
         foreach (var tile in _tiles)
             if (devices.FirstOrDefault(d => d.Key == tile.Key) is { } device)
                 (tile.Device, tile.Name) = (device, device.Name);
         return devices.Select(d => _tiles.FirstOrDefault(t => t.Key == d.Key) ?? new Tile(d.Key, d.Name) { Device = d }).ToList();
     }
-
-    private static string TestPatternTitle(TestPatternKind kind) => kind switch
-    {
-        TestPatternKind.SmpteBars => "SMPTE Bars",
-        TestPatternKind.FullBars => "Full Bars",
-        TestPatternKind.Grid => "Grid",
-        _ => "Gray Ramp",
-    };
 
     // Source thread: straight into the tile's cell. A tapped viewer may have switched cards since the last check.
     private FrameHandler Feed(Tile tile) => (in VideoFrame frame) =>

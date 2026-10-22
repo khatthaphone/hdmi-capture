@@ -19,6 +19,19 @@ public sealed class TestPatternSource(TestPatternKind kind, PixelFormat format =
 
     public event FrameHandler? FrameArrived;
 
+    public TestPatternKind Kind => kind;
+    public int Width => width;
+    public int Height => height;
+
+    /// <summary>Menu and tile title.</summary>
+    public static string Title(TestPatternKind kind) => kind switch
+    {
+        TestPatternKind.SmpteBars => "SMPTE Bars",
+        TestPatternKind.FullBars => "Full Bars",
+        TestPatternKind.Grid => "Grid",
+        _ => "Gray Ramp",
+    };
+
     public void Start()
     {
         if (_running) return;
