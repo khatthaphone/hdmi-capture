@@ -114,6 +114,27 @@ public class AudioRingBufferTests
 
 public class DriftControllerTests
 {
+    [Fact]
+    public void MinimumTargetCoversAPacketAndAPeriod()
+    {
+        // UGREEN-25854: 480-frame capture packets and render periods at 48 kHz.
+        Assert.Equal(22, DriftController.MinimumTargetMs(10, 10), 6);
+        // Small packets and periods: the 20 ms base wins in the pipeline.
+        Assert.True(DriftController.MinimumTargetMs(1, 3) < 20);
+    }
+
+    [Fact]
+    public void PhaseFreeFillIgnoresWhereTheReadFallsBetweenPackets()
+    {
+        // 480-frame packets every 10 ms; the ring holds 576 frames as a packet lands and drains at 48 frames/ms.
+        // A read 0.1 ms after the packet and one 9.9 ms after it (just before the next) see the same latency.
+        double after = DriftController.PhaseFreeFillFrames(576 - 5, 0.1, 10, 48_000);
+        double before = DriftController.PhaseFreeFillFrames(576 - 475, 9.9, 10, 48_000);
+        Assert.InRange(Math.Abs(before - after), 0, 2);
+        // A capture stall adds at most one packet.
+        Assert.Equal(100 + 480, DriftController.PhaseFreeFillFrames(100, 250, 10, 48_000), 6);
+    }
+
     private const double Rate = 48000, Period = 0.01;
 
     /// <summary>Capture runs ppmOffset fast relative to render; returns the fill (ms) after every render period.</summary>

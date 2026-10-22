@@ -50,7 +50,8 @@ public sealed class GridWindow : Window
             TextAlignment = TextAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
-            Foreground = new SolidColorBrush(Colors.White) { Opacity = 0.7 },
+            Foreground = OverlayBrush("OverlayTextBrush"),
+            Opacity = 0.7,
         };
         var root = new Grid
         {
@@ -349,13 +350,16 @@ public sealed class GridWindow : Window
 
             var info = tile.Status.Length > 0 || tile.Width == 0 ? tile.Status : $"{tile.Width}×{tile.Height}  {tile.Fps:0} fps";
             var label = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+            var text = OverlayBrush("OverlayTextBrush");
             if (tile.Pattern == null)
-                label.Children.Add(new FontIcon { Glyph = hearing ? "\uE767" : "\uE74F", FontSize = 13 });
-            label.Children.Add(new TextBlock { Text = tile.Name, FontSize = 12, MaxWidth = Math.Max(40, w - 140), TextTrimming = TextTrimming.CharacterEllipsis });
-            if (info.Length > 0) label.Children.Add(new TextBlock { Text = info, FontSize = 12, Opacity = 0.7 });
+                label.Children.Add(new FontIcon { Glyph = hearing ? "\uE767" : "\uE74F", FontSize = 13, Foreground = text });
+            label.Children.Add(new TextBlock { Text = tile.Name, FontSize = 12, MaxWidth = Math.Max(40, w - 140), TextTrimming = TextTrimming.CharacterEllipsis, Foreground = text });
+            if (info.Length > 0) label.Children.Add(new TextBlock { Text = info, FontSize = 12, Opacity = 0.7, Foreground = text });
             var chip = new Border
             {
-                Background = new SolidColorBrush(Colors.Black) { Opacity = 0.6 },
+                Background = OverlayBrush("OverlayStatsBrush"),
+                BorderBrush = OverlayBrush("OverlayBorderBrush"),
+                BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(6),
                 Padding = new Thickness(8, 4, 8, 4),
                 Child = label,
@@ -366,6 +370,9 @@ public sealed class GridWindow : Window
             _overlay.Children.Add(chip);
         }
     }
+
+    // App.xaml's overlay brushes (system colours in high contrast); looked up on every redraw, so a theme switch shows on the next one.
+    private static Brush OverlayBrush(string key) => (Brush)Application.Current.Resources[key];
 
     // MARK: - Audio
 

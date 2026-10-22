@@ -23,7 +23,7 @@ public sealed class WasapiAudioPipeline : IDisposable
 {
     private const int AudclntEDeviceInvalidated = unchecked((int)0x88890004);
     private const uint AudclntBufferFlagsSilent = 0x2;
-    private const double BaseLatencyMs = 20; // ring fill kept on top of the user delay; absorbs capture packet jitter
+    private const double BaseLatencyMs = 20; // least ring fill kept on top of the user delay; raised to DriftController.MinimumTargetMs
     private const int RingSeconds = 2;
 
     private readonly string _captureId;
@@ -37,6 +37,8 @@ public sealed class WasapiAudioPipeline : IDisposable
     private volatile bool _renderRestart;
     private volatile AudioSettings _settings = new();
     private volatile int _captureRate = 48_000;
+    private double _capturePacketMs = 10, _renderPeriodMs = 10; // largest seen; Volatile access
+    private long _lastCaptureTicks; // Stopwatch time of the last ring write
     private DefaultDeviceListener? _listener;
     private float _peakL, _peakR;
 
@@ -54,8 +56,14 @@ public sealed class WasapiAudioPipeline : IDisposable
         set
         {
             _settings = value;
-            _drift.TargetMs = BaseLatencyMs + Math.Clamp(value.DelayMs, 0, 500);
+            UpdateTarget();
         }
+    }
+
+    private void UpdateTarget()
+    {
+        var floor = DriftController.MinimumTargetMs(Volatile.Read(ref _capturePacketMs), Volatile.Read(ref _renderPeriodMs));
+        _drift.TargetMs = Math.Max(BaseLatencyMs, floor) + Math.Clamp(_settings.DelayMs, 0, 500);
     }
 
     /// <summary>Microphone privacy is off for desktop apps (E_ACCESSDENIED). Video keeps running.</summary>
@@ -144,6 +152,8 @@ public sealed class WasapiAudioPipeline : IDisposable
             _captureRate = reinterpreted ? actual.SampleRate : format.Rate;
             Log?.Invoke($"capture {format}{(reinterpreted ? " → MS2109 fix: 48000 Hz stereo" : "")}, period {client.PeriodFrames} frames");
 
+            Volatile.Write(ref _capturePacketMs, client.PeriodFrames * 1000.0 / _captureRate);
+            UpdateTarget();
             var capture = client.Service<IAudioCaptureClient>();
             var scratch = new float[48_000 * 2];
 #if DEBUG
@@ -168,6 +178,11 @@ public sealed class WasapiAudioPipeline : IDisposable
                         count = SampleConvert.ToStereoFloat(new ReadOnlySpan<byte>(data, (int)frames * format.BlockAlign),
                             channels, format.Bits, format.IsFloat, scratch);
                     capture.ReleaseBuffer(frames);
+                    if (frames * 1000.0 / _captureRate > Volatile.Read(ref _capturePacketMs) + 0.5)
+                    {
+                        Volatile.Write(ref _capturePacketMs, frames * 1000.0 / _captureRate);
+                        UpdateTarget();
+                    }
 #if DEBUG
                     (maxPacket, maxGapMs) = (Math.Max(maxPacket, frames), Math.Max(maxGapMs, Stopwatch.GetElapsedTime(lastPacket).TotalMilliseconds));
                     lastPacket = Stopwatch.GetTimestamp();
@@ -181,6 +196,7 @@ public sealed class WasapiAudioPipeline : IDisposable
                     // QPC position is already in 100 ns units (IAudioCaptureClient::GetBuffer).
                     CapturedAudio?.Invoke(scratch.AsSpan(0, count * 2), (long)qpc);
                     _ring.Write(scratch.AsSpan(0, count * 2));
+                    Volatile.Write(ref _lastCaptureTicks, Stopwatch.GetTimestamp());
                 }
             }
             client.Audio.Stop();
@@ -237,6 +253,8 @@ public sealed class WasapiAudioPipeline : IDisposable
             var format = client.Format;
             client.Audio.GetBufferSize(out var bufferFrames);
             Log?.Invoke($"render {format}, period {client.PeriodFrames} frames, buffer {bufferFrames}");
+            Volatile.Write(ref _renderPeriodMs, client.PeriodFrames * 1000.0 / format.Rate);
+            UpdateTarget();
             var render = client.Service<IAudioRenderClient>();
             var scratch = new float[bufferFrames * 2];
             var clock = Stopwatch.StartNew();
@@ -257,7 +275,8 @@ public sealed class WasapiAudioPipeline : IDisposable
                 var elapsed = clock.Elapsed.TotalSeconds;
                 clock.Restart();
                 var fill = _ring.FillFrames;
-                var correction = _drift.Update(fill, elapsed);
+                var sincePacketMs = Stopwatch.GetElapsedTime(Volatile.Read(ref _lastCaptureTicks)).TotalMilliseconds;
+                var correction = _drift.Update(DriftController.PhaseFreeFillFrames(fill, sincePacketMs, Volatile.Read(ref _capturePacketMs), _captureRate), elapsed);
 #if DEBUG
                 (minFill, maxFrames, maxGapMs) = (Math.Min(minFill, fill), Math.Max(maxFrames, frames), Math.Max(maxGapMs, elapsed * 1000));
 #endif

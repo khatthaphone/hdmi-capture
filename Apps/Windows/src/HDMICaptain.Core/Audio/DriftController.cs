@@ -11,6 +11,7 @@ public sealed class DriftController
     private const double ProportionalPpmPerMs = 40;
     private const double IntegralPpmPerMsSecond = 1;
     private const double RetargetMsPerSecond = 200;
+    private const double HeadroomMs = 2;
 
     private readonly double _sampleRate;
     private double _targetMs;
@@ -38,6 +39,23 @@ public sealed class DriftController
     /// <summary>The target the loop is currently steering toward (follows <see cref="TargetMs"/> smoothly).</summary>
     public double CurrentTargetMs => _currentTargetMs;
 
+    /// <summary>
+    /// The lowest target (for <see cref="PhaseFreeFillFrames"/>) that never runs dry: just before a packet lands the ring
+    /// holds a whole packet less, and a render read then still needs a full period plus the resampler's few frames of
+    /// look-ahead. With 10 ms packets and periods a 20 ms target left no margin and underflowed every ~9 min (task 102).
+    /// </summary>
+    public static double MinimumTargetMs(double capturePacketMs, double renderPeriodMs) =>
+        Math.Max(0, capturePacketMs) + Math.Max(0, renderPeriodMs) + HeadroomMs;
+
+    /// <summary>
+    /// The fill the loop should see: the ring's fill plus the audio that has arrived since the last capture packet
+    /// (up to one packet). The raw fill is a sawtooth whose value at a render read depends on whether the latest packet
+    /// landed just before or just after it; when the two clocks drift across that point the raw reading jumps by a whole
+    /// packet and the loop chases a change in phase, not in latency (task 102). This reading stays flat through it.
+    /// </summary>
+    public static double PhaseFreeFillFrames(int fillFrames, double msSinceCapturePacket, double capturePacketMs, double sampleRate) =>
+        fillFrames + Math.Clamp(msSinceCapturePacket, 0, Math.Max(0, capturePacketMs)) * sampleRate / 1000;
+
     /// <summary>Clears loop state, e.g. after the ring was cleared or the stream restarted.</summary>
     public void Reset()
     {
@@ -50,7 +68,7 @@ public sealed class DriftController
     /// Render thread, once per period. Returns the correction (about 1.0) to multiply the nominal input/output ratio by:
     /// above 1 consumes input faster (fill too high). No allocations.
     /// </summary>
-    public double Update(int fillFrames, double elapsedSeconds)
+    public double Update(double fillFrames, double elapsedSeconds)
     {
         if (!_primed)
         {
