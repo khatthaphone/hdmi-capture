@@ -67,6 +67,36 @@ public class RendererTests
         GC.KeepAlive(keepAlive);
     }
 
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(0.5)]
+    public void LutAppliesAtItsStrength(double strength)
+    {
+        using var renderer = D3DRenderer.CreateWarp();
+        const int size = 2;
+        // Inverting LUT: out = 1 - in, red fastest as in .cube files.
+        var rgb = new float[size * size * size * 3];
+        for (var b = 0; b < size; b++)
+        for (var g = 0; g < size; g++)
+        for (var r = 0; r < size; r++)
+        {
+            var i = ((b * size + g) * size + r) * 3;
+            (rgb[i], rgb[i + 1], rgb[i + 2]) = (1 - r, 1 - g, 1 - b);
+        }
+        renderer.SetLut(size, rgb, System.Numerics.Vector3.Zero, System.Numerics.Vector3.One, (float)strength);
+        var frame = TestPattern.Pack(TestPatternKind.SmpteBars, PixelFormat.Nv12, Width, Height).AsFrame();
+
+        renderer.Render(in frame);
+        var pixels = renderer.ReadSourcePixels()!;
+
+        for (var bar = 0; bar < 7; bar++)
+        {
+            var (r, g, b) = TestPattern.FullBarColors[bar];
+            int Expected(double c) => (int)Math.Round((c * 0.75 * (1 - strength) + (1 - c * 0.75) * strength) * 255);
+            AssertPixel(pixels, Width, (int)((bar + 0.5) * Width / 7), Height / 3, Expected(r), Expected(g), Expected(b), $"strength {strength} bar {bar}");
+        }
+    }
+
     [Fact]
     public void PresentsIntoACompositionSwapChainAndResizes()
     {

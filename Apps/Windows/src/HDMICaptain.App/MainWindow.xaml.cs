@@ -89,6 +89,7 @@ public sealed partial class MainWindow : Window
         _settings.Attach(Model);
         if (options.QaShowStats) Model.ShowDiagnostics = true;
         _settings.Changed += OnSettingsChanged;
+        _settings.LutFailed += ShowToast;
         _settings.ApplyTo(_renderer);
         _audioSettings = _settings.AudioSettings;
         Model.PropertyChanged += OnModelChanged;
@@ -413,6 +414,7 @@ public sealed partial class MainWindow : Window
         items.Add(Toggle("Sharp Pixels", Model.SharpPixels, v => Model.SharpPixels = v));
         items.Add(PictureLookMenu());
         items.Add(GuidesMenu());
+        items.Add(LutMenu());
         var size = new MenuFlyoutSubItem { Text = "Window Size", Icon = new FontIcon { Glyph = "\uE9A6" } };
         size.Items.Add(Item("Half Size (50 %)", "\uE73F", () => SizeToVideo(0.5)));
         size.Items.Add(Item("Actual Pixels (100 %)", "\uE9A6", () => SizeToVideo(1), "Ctrl+0"));
@@ -440,6 +442,38 @@ public sealed partial class MainWindow : Window
             menu.Items.Add(item);
         }
         return menu;
+    }
+
+    private MenuFlyoutSubItem LutMenu()
+    {
+        var menu = new MenuFlyoutSubItem { Text = "LUT", Icon = new FontIcon { Glyph = "\uE2B1" } };
+        if (_settings.LutName is { } name)
+        {
+            menu.Items.Add(new ToggleMenuFlyoutItem { Text = name, IsChecked = true, IsEnabled = false });
+            foreach (var strength in new[] { 1.0, 0.75, 0.5, 0.25 })
+            {
+                var item = new RadioMenuFlyoutItem
+                {
+                    Text = $"Strength {strength * 100:0} %",
+                    GroupName = "lutStrength",
+                    IsChecked = Math.Abs(_settings.LutIntensity - strength) < 0.01,
+                };
+                item.Click += (_, _) => _settings.LutIntensity = strength;
+                menu.Items.Add(item);
+            }
+            menu.Items.Add(new MenuFlyoutSeparator());
+        }
+        menu.Items.Add(Item("Choose .cube File…", "\uE8E5", ChooseLut));
+        if (_settings.LutName != null) menu.Items.Add(Item("Remove LUT", "\uE711", () => _settings.SetLut(null)));
+        return menu;
+    }
+
+    private async void ChooseLut()
+    {
+        var picker = new Windows.Storage.Pickers.FileOpenPicker { SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary };
+        picker.FileTypeFilter.Add(".cube");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, _hwnd); // unpackaged/desktop: pickers need an owner HWND
+        if (await picker.PickSingleFileAsync() is { } file) _settings.SetLut(file.Path);
     }
 
     private MenuFlyoutSubItem GuidesMenu()

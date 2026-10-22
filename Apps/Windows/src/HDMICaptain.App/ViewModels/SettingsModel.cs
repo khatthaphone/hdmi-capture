@@ -89,7 +89,57 @@ public sealed partial class SettingsModel : ObservableObject
         renderer.Options = _preset.RenderOptions;
         var a = _preset.Adjustments;
         renderer.Adjustments = ((float)a.Brightness, (float)a.Contrast, (float)a.Saturation, (float)a.Gamma, (float)a.Sharpness);
+        ApplyLut(renderer);
         renderer.Redraw();
+    }
+
+    /// <summary>A .cube file that can't be read or parsed (message for the toast). UI thread.</summary>
+    public event Action<string>? LutFailed;
+
+    public string? LutName => _preset.LutName;
+
+    /// <summary>LUT strength 0…1.</summary>
+    public double LutIntensity
+    {
+        get => _preset.LutIntensity;
+        set => Set(_preset with { LutIntensity = Math.Clamp(value, 0, 1) }, SettingsChange.Adjustments);
+    }
+
+    /// <summary>Uses <paramref name="path"/> as the current card's LUT (null removes it); remembered in its preset.</summary>
+    public void SetLut(string? path) =>
+        Set(_preset with { LutPath = path, LutName = path is null ? null : Path.GetFileNameWithoutExtension(path) }, SettingsChange.Adjustments);
+
+    private (string? Path, CubeLUT? Lut) _lutCache;
+
+    // Parses each file once; a file that fails stays failed until another path is chosen.
+    private void ApplyLut(D3DRenderer renderer)
+    {
+        if (_preset.LutPath is not { } path)
+        {
+            renderer.ClearLut();
+            return;
+        }
+        if (_lutCache.Path != path)
+        {
+            try
+            {
+                _lutCache = (path, CubeLUT.Parse(File.ReadAllText(path), Path.GetFileNameWithoutExtension(path)));
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or CubeLUT.ParseException)
+            {
+                _lutCache = (path, null);
+                LutFailed?.Invoke($"Can't use this LUT: {e.Message}");
+            }
+        }
+        if (_lutCache.Lut is { } lut)
+        {
+            renderer.SetLut(lut.Size, lut.Entries, new System.Numerics.Vector3(lut.DomainMin[0], lut.DomainMin[1], lut.DomainMin[2]),
+                new System.Numerics.Vector3(lut.DomainMax[0], lut.DomainMax[1], lut.DomainMax[2]), (float)_preset.LutIntensity);
+        }
+        else
+        {
+            renderer.ClearLut();
+        }
     }
 
     public AudioSettings AudioSettings => _preset.AudioSettings;

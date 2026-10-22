@@ -64,7 +64,10 @@ public sealed class D3DRenderer : IDisposable
     /// <summary>Scale mode, filter, range and matrix; read at the next render.</summary>
     public RenderOptions Options { get; set; } = new();
 
-    /// <summary>Brightness, contrast, saturation, 1/gamma (identity = 0, 1, 1, 1) and sharpness, as MetalRenderer's ImageAdjustments.</summary>
+    /// <summary>
+    /// Brightness, contrast, saturation, gamma (identity = 0, 1, 1, 1) and sharpness, as MetalRenderer's ImageAdjustments.
+    /// Gamma is the user value (0.5…2); the shader gets 1/gamma.
+    /// </summary>
     public (float Brightness, float Contrast, float Saturation, float Gamma, float Sharpness) Adjustments { get; set; } = (0, 1, 1, 1, 0);
 
     /// <summary>Size of the last converted frame (0 × 0 before the first).</summary>
