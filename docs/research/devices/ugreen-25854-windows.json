@@ -1,0 +1,482 @@
+{
+  "audio": [
+    {
+      "id": "{0.0.1.00000000}.{208cf8a6-df9b-44da-9699-7978f27e16b3}",
+      "kind": "endpoint",
+      "name": "Digital Audio Interface (UGREEN-25854)",
+      "transport": "wasapi"
+    }
+  ],
+  "video": [
+    {
+      "autoChoice": "1920x1080 NV12 @ 60",
+      "device": {
+        "id": "\\\\?\\usb#vid_1de1&pid_f105&mi_00#9&357a7c5f&0&0000#{e5323777-f976-4f5b-9b55-b94699c46e44}\\global",
+        "kind": "external",
+        "modelID": "UGREEN-25854:1DE1:F105",
+        "name": "UGREEN-25854",
+        "transport": "usb"
+      },
+      "formats": [
+        {
+          "fourCC": "NV12",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 1080,
+          "width": 1920
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 1080,
+          "width": 1920
+        },
+        {
+          "fourCC": "NV12",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 768,
+          "width": 1360
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 768,
+          "width": 1360
+        },
+        {
+          "fourCC": "NV12",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 1024,
+          "width": 1280
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 1024,
+          "width": 1280
+        },
+        {
+          "fourCC": "NV12",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 960,
+          "width": 1280
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 960,
+          "width": 1280
+        },
+        {
+          "fourCC": "NV12",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 720,
+          "width": 1280
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 720,
+          "width": 1280
+        },
+        {
+          "fourCC": "NV12",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 768,
+          "width": 1024
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 768,
+          "width": 1024
+        },
+        {
+          "fourCC": "NV12",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 600,
+          "width": 800
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 600,
+          "width": 800
+        },
+        {
+          "fourCC": "NV12",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 576,
+          "width": 720
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 576,
+          "width": 720
+        },
+        {
+          "fourCC": "NV12",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 480,
+          "width": 720
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 480,
+          "width": 720
+        },
+        {
+          "fourCC": "NV12",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 480,
+          "width": 640
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 480,
+          "width": 640
+        }
+      ],
+      "windows": {
+        "busReportedName": "UGREEN-25854",
+        "containerId": "{ee2ce397-8f82-5f3c-8cbb-32c71f8a984c}",
+        "error": null,
+        "instanceId": "USB\\VID_1DE1&PID_F105&MI_00\\9&357a7c5f&0&0000",
+        "linkSpeed": "high",
+        "nativeTypes": [
+          "#0 NV12 1920x1080 60/1 range=full matrix=Bt601 decodedByWindows",
+          "#1 MJPG 1920x1080 60/1 range=full matrix=Bt601",
+          "#2 NV12 1920x1080 30/1 range=full matrix=Bt601 decodedByWindows",
+          "#3 MJPG 1920x1080 30/1 range=full matrix=Bt601",
+          "#4 NV12 1920x1080 15/1 range=full matrix=Bt601 decodedByWindows",
+          "#5 MJPG 1920x1080 15/1 range=full matrix=Bt601",
+          "#6 NV12 1920x1080 30/1 range=full matrix=Bt601 decodedByWindows",
+          "#7 MJPG 1920x1080 30/1 range=full matrix=Bt601",
+          "#8 NV12 1920x1080 60/1 range=full matrix=Bt601 decodedByWindows",
+          "#9 MJPG 1920x1080 60/1 range=full matrix=Bt601",
+          "#10 NV12 1920x1080 15/1 range=full matrix=Bt601 decodedByWindows",
+          "#11 MJPG 1920x1080 15/1 range=full matrix=Bt601",
+          "#12 NV12 1360x768 60/1 range=full matrix=Bt601 decodedByWindows",
+          "#13 MJPG 1360x768 60/1 range=full matrix=Bt601",
+          "#14 NV12 1360x768 30/1 range=full matrix=Bt601 decodedByWindows",
+          "#15 MJPG 1360x768 30/1 range=full matrix=Bt601",
+          "#16 NV12 1360x768 15/1 range=full matrix=Bt601 decodedByWindows",
+          "#17 MJPG 1360x768 15/1 range=full matrix=Bt601",
+          "#18 NV12 1280x1024 60/1 range=full matrix=Bt601 decodedByWindows",
+          "#19 MJPG 1280x1024 60/1 range=full matrix=Bt601",
+          "#20 NV12 1280x1024 30/1 range=full matrix=Bt601 decodedByWindows",
+          "#21 MJPG 1280x1024 30/1 range=full matrix=Bt601",
+          "#22 NV12 1280x1024 15/1 range=full matrix=Bt601 decodedByWindows",
+          "#23 MJPG 1280x1024 15/1 range=full matrix=Bt601",
+          "#24 NV12 1280x960 60/1 range=full matrix=Bt601 decodedByWindows",
+          "#25 MJPG 1280x960 60/1 range=full matrix=Bt601",
+          "#26 NV12 1280x960 30/1 range=full matrix=Bt601 decodedByWindows",
+          "#27 MJPG 1280x960 30/1 range=full matrix=Bt601",
+          "#28 NV12 1280x960 15/1 range=full matrix=Bt601 decodedByWindows",
+          "#29 MJPG 1280x960 15/1 range=full matrix=Bt601",
+          "#30 NV12 1280x720 60/1 range=full matrix=Bt601 decodedByWindows",
+          "#31 MJPG 1280x720 60/1 range=full matrix=Bt601",
+          "#32 NV12 1280x720 30/1 range=full matrix=Bt601 decodedByWindows",
+          "#33 MJPG 1280x720 30/1 range=full matrix=Bt601",
+          "#34 NV12 1280x720 15/1 range=full matrix=Bt601 decodedByWindows",
+          "#35 MJPG 1280x720 15/1 range=full matrix=Bt601",
+          "#36 NV12 1024x768 60/1 range=full matrix=Bt601 decodedByWindows",
+          "#37 MJPG 1024x768 60/1 range=full matrix=Bt601",
+          "#38 NV12 1024x768 30/1 range=full matrix=Bt601 decodedByWindows",
+          "#39 MJPG 1024x768 30/1 range=full matrix=Bt601",
+          "#40 NV12 1024x768 15/1 range=full matrix=Bt601 decodedByWindows",
+          "#41 MJPG 1024x768 15/1 range=full matrix=Bt601",
+          "#42 NV12 800x600 60/1 range=full matrix=Bt601 decodedByWindows",
+          "#43 MJPG 800x600 60/1 range=full matrix=Bt601",
+          "#44 NV12 800x600 30/1 range=full matrix=Bt601 decodedByWindows",
+          "#45 MJPG 800x600 30/1 range=full matrix=Bt601",
+          "#46 NV12 800x600 15/1 range=full matrix=Bt601 decodedByWindows",
+          "#47 MJPG 800x600 15/1 range=full matrix=Bt601",
+          "#48 NV12 720x576 60/1 range=full matrix=Bt601 decodedByWindows",
+          "#49 MJPG 720x576 60/1 range=full matrix=Bt601",
+          "#50 NV12 720x576 30/1 range=full matrix=Bt601 decodedByWindows",
+          "#51 MJPG 720x576 30/1 range=full matrix=Bt601",
+          "#52 NV12 720x576 15/1 range=full matrix=Bt601 decodedByWindows",
+          "#53 MJPG 720x576 15/1 range=full matrix=Bt601",
+          "#54 NV12 720x480 60/1 range=full matrix=Bt601 decodedByWindows",
+          "#55 MJPG 720x480 60/1 range=full matrix=Bt601",
+          "#56 NV12 720x480 30/1 range=full matrix=Bt601 decodedByWindows",
+          "#57 MJPG 720x480 30/1 range=full matrix=Bt601",
+          "#58 NV12 720x480 15/1 range=full matrix=Bt601 decodedByWindows",
+          "#59 MJPG 720x480 15/1 range=full matrix=Bt601",
+          "#60 NV12 640x480 60/1 range=full matrix=Bt601 decodedByWindows",
+          "#61 MJPG 640x480 60/1 range=full matrix=Bt601",
+          "#62 NV12 640x480 30/1 range=full matrix=Bt601 decodedByWindows",
+          "#63 MJPG 640x480 30/1 range=full matrix=Bt601",
+          "#64 NV12 640x480 15/1 range=full matrix=Bt601 decodedByWindows",
+          "#65 MJPG 640x480 15/1 range=full matrix=Bt601"
+        ],
+        "serial": "-468708563",
+        "usbDeviceInstanceId": "USB\\VID_1DE1&PID_F105\\-468708563",
+        "vidPid": "1DE1:F105"
+      }
+    }
+  ]
+}

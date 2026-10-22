@@ -78,7 +78,20 @@ _2026-10-22. Three research passes (capture/audio; UI/render/language stack; dis
 | Microphone privacy off (camera allowed) | `E_ACCESSDENIED` from WASAPI on the card endpoint | Picture works; audio badge + `ms-settings:privacy-microphone` |
 | Sleep / resume | `RegisterSuspendResumeNotification` / `PBT_APMRESUMEAUTOMATIC` | Rebuild the reader |
 
-Check the exact HRESULT values against `mferror.h` in SDK 10.0.26100 (089). One Store competitor's top complaint is that "denying the mic silently breaks capture". We treat the microphone as optional.
+HRESULT values checked against `mferror.h` in SDK 10.0.26100 (089); they live in `MfErrors.cs`: `MF_E_SHUTDOWN` 0xC00D3E85, `MF_E_VIDEO_RECORDING_DEVICE_INVALIDATED` 0xC00D3EA2, `MF_E_VIDEO_RECORDING_DEVICE_PREEMPTED` 0xC00D3EA3, `MF_E_HW_MFT_FAILED_START_STREAMING` 0xC00D3704, `MF_E_VIDEO_DEVICE_LOCKED` 0xC00D4E24, `MF_E_NO_MORE_TYPES` 0xC00D36B9.
+
+Observed on the dev PC (Windows 11 26200, UGREEN-25854, 2026-10-22, task 089):
+
+| Condition | What actually happened |
+|---|---|
+| Windows Camera opens the card while we stream | Nothing: no `OnEvent`, no error, our 1080p60 keeps 60 fps. Windows 11 shares the card through the Frame Server, so "in use" is not an error for a second reader |
+| We open while Windows Camera streams | Open succeeds at our type. A non-matching type (720p30 while Camera runs) "succeeds" but arrives at ~13 fps with gaps, so the frame rate watchdog has to catch it, not an HRESULT |
+| HDMI source unplugged (card stays on USB) | Nothing from MF: the card keeps delivering frames, irregularly (~30 fps with gaps). Signal loss must come from `SignalAnalyzer` on the picture plus a frame-gap watchdog |
+| USB unplug mid-stream | *pending: needs the user to pull the cable* |
+| Camera privacy off | *pending* |
+| Sleep / resume | *pending* |
+
+**Windows decodes MJPEG for us.** The UGREEN-25854 negotiates USB 2 high speed on this PC, yet lists NV12 1080p60 next to every MJPEG type. Each NV12 twin carries an undocumented attribute `{EA031A62-8BBB-43C5-B5C4-572D2D231C18}` = 1, reports full range + BT.601 (JPEG's), and streams 60 fps steadily even with `MF_READWRITE_DISABLE_CONVERTERS`. So the camera pipeline decodes MJPEG upstream of the reader. `MfDevices.Choose` skips the USB-link bandwidth rule when such types exist. Whether our own libjpeg-turbo path (090) beats it on latency is a 092 question. The 30 fps modes on this card are irregular (17–25 fps); the 60 fps modes are clean. One Store competitor's top complaint is that "denying the mic silently breaks capture". We treat the microphone as optional.
 
 ## 3. MJPEG decode
 

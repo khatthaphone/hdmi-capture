@@ -131,6 +131,20 @@ public sealed class D3DRenderer : IDisposable
         }
     }
 
+    /// <summary>Forgets the last frame and presents black (source lost), so a stale picture never lingers.</summary>
+    public void Clear()
+    {
+        lock (_gate)
+        {
+            _sourceView?.Dispose();
+            _sourceTarget?.Dispose();
+            _source?.Dispose();
+            (_sourceView, _sourceTarget, _source) = (null, null, null);
+            SourceSize = default;
+            PresentAll();
+        }
+    }
+
     /// <summary>Uploads a 3D LUT (size³ RGB triples, red fastest, as .cube files list them) applied at <paramref name="intensity"/>.</summary>
     public void SetLut(int size, ReadOnlySpan<float> rgb, Vector3 domainMin, Vector3 domainMax, float intensity)
     {
@@ -519,6 +533,12 @@ public sealed class D3DRenderer : IDisposable
 
     private void DrawScaled(SwapChainTarget target)
     {
+        if (_sourceView == null)
+        {
+            _context.OMSetRenderTargets(target.View!);
+            _context.ClearRenderTargetView(target.View!, new Color4(0, 0, 0, 1));
+            return;
+        }
         var options = Options;
         var (sw, sh) = SourceSize;
         var g = RenderGeometry.Compute(sw, sh, target.Width, target.Height, options.Scale);

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using HDMICaptain.App.Video;
 using HDMICaptain.Core;
+using HDMICaptain.Media.Capture;
 using HDMICaptain.Media.Render;
 using HDMICaptain.Media.Video;
 using Microsoft.UI.Windowing;
@@ -16,7 +17,10 @@ public sealed partial class MainWindow : Window
     private readonly SwapChainPanelHost? _panelHost;
     private readonly ChildVideoWindow? _childWindow;
     private readonly DispatcherTimer _statsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly DispatcherTimer _retryTimer = new() { Interval = TimeSpan.FromSeconds(3) };
+    private DeviceWatcher? _watcher;
     private ICaptureSource? _source;
+    private int _opening;
     private int _frames;
     private long _lastStatsTicks = Stopwatch.GetTimestamp();
 
@@ -49,9 +53,20 @@ public sealed partial class MainWindow : Window
         _statsTimer.Start();
 
         if (options.TestPattern is { } pattern)
+        {
             StartSource(new TestPatternSource(pattern, ParseFormat(options.TestPatternFormat)));
+        }
         else
-            StatusText.Text = "Waiting for a capture device";
+        {
+            StatusText.Text = "Looking for a capture card…";
+            _watcher = new DeviceWatcher();
+            _watcher.Arrived += _ => DispatcherQueue.TryEnqueue(OpenCard);
+            _watcher.Removed += OnCameraRemoved;
+            // Covers a card that is busy in another app or blocked by privacy settings: try again until it opens.
+            _retryTimer.Tick += (_, _) => OpenCard();
+            _retryTimer.Start();
+            OpenCard();
+        }
     }
 
     private void StartSource(ICaptureSource source)
@@ -60,6 +75,91 @@ public sealed partial class MainWindow : Window
         source.FrameArrived += OnFrame;
         source.Start();
         Placeholder.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Opens the first external card (the built-in webcam only as a last resort) on a pool thread: MF objects
+    /// live in the MTA, and opening can take a second. The controller in task 094 replaces this policy.
+    /// </summary>
+    private void OpenCard()
+    {
+        if (_source != null || Interlocked.Exchange(ref _opening, 1) == 1) return;
+        Task.Run(() =>
+        {
+            string status;
+            MfSource? opened = null;
+            try
+            {
+                var device = MfDevices.Video().OrderBy(d => d.Usb?.VendorId is null).FirstOrDefault();
+                if (device is null)
+                {
+                    status = "Connect a capture card";
+                }
+                else
+                {
+                    var source = new MfSource(device.SymbolicLink, link: device.Usb?.Link);
+                    source.Log += line => AppLog.Write($"[{device.Name}] {line}");
+                    source.Failed += error => DispatcherQueue.TryEnqueue(() => OnCaptureFailed(source, error));
+                    source.FrameArrived += OnFrame;
+                    try
+                    {
+                        source.Start();
+                        opened = source;
+                        status = "";
+                    }
+                    catch (System.Runtime.InteropServices.COMException e)
+                    {
+                        AppLog.Write($"[{device.Name}] open failed: {MfErrors.Name(e.HResult)}");
+                        status = e.HResult switch
+                        {
+                            MfErrors.AccessDenied => "Camera access is off in Windows Privacy settings",
+                            MfErrors.DevicePreempted or MfErrors.SharingViolation or MfErrors.HwMftFailedStartStreaming
+                                => $"{device.Name} is in use by another app",
+                            _ => $"Can't open {device.Name} ({MfErrors.Name(e.HResult)})",
+                        };
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                AppLog.Write($"open failed: {e}");
+                status = "Can't list capture devices";
+            }
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                Volatile.Write(ref _opening, 0);
+                if (opened != null)
+                {
+                    _source = opened;
+                    Placeholder.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    StatusText.Text = status;
+                }
+            });
+        });
+    }
+
+    private void OnCameraRemoved(string link)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_source is MfSource source && DeviceWatcher.SameLink(source.SymbolicLink, link))
+                OnCaptureFailed(source, new CaptureError(MfErrors.DeviceRemoved, "interface removal"));
+        });
+    }
+
+    // UI thread. The reader already stopped delivering; release it off the UI thread and look again.
+    private void OnCaptureFailed(MfSource source, CaptureError error)
+    {
+        if (!ReferenceEquals(_source, source)) return;
+        AppLog.Write($"[capture] {error}");
+        _source = null;
+        Task.Run(source.Dispose);
+        Placeholder.Visibility = Visibility.Visible;
+        StatusText.Text = error.HResult == MfErrors.DevicePreempted ? "The card was taken by another app" : "Capture card disconnected";
+        _renderer.Clear();
     }
 
     // Source thread: render straight away, no UI-thread hop (CLAUDE.md conventions).
@@ -101,6 +201,8 @@ public sealed partial class MainWindow : Window
     private void Shutdown()
     {
         _statsTimer.Stop();
+        _retryTimer.Stop();
+        _watcher?.Dispose();
         _source?.Dispose();
         _panelHost?.Dispose();
         _renderer.Dispose();
