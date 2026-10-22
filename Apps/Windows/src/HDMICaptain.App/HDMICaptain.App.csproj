@@ -40,6 +40,7 @@
   <ItemGroup>
     <Content Include="Assets\*" CopyToOutputDirectory="PreserveNewest" />
     <Manifest Include="app.manifest" />
+    <Content Include="..\..\THIRD-PARTY.md" Link="THIRD-PARTY.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- libjpeg-turbo from the vcpkg manifest in native/ (make win-deps); copied next to the exe when built. -->

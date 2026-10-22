@@ -14,6 +14,7 @@ public sealed class PrefsStore
 
     public PrefsStore()
     {
+        Presets = new PresetStore(_folder);
         Prefs = ViewerPrefs.Decode(ReadText("prefs.json"));
         try
         {
@@ -26,6 +27,9 @@ public sealed class PrefsStore
     }
 
     public ViewerPrefs Prefs { get; }
+
+    /// <summary>Per-card presets (presets.json) and user profiles (profiles.json), written atomically.</summary>
+    public PresetStore Presets { get; }
 
     public AppState State { get; private set; }
 
@@ -45,8 +49,7 @@ public sealed class PrefsStore
     {
         try
         {
-            var path = Path.Combine(_folder, name);
-            return File.Exists(path) ? File.ReadAllText(path) : null;
+            return AtomicFile.ReadAllText(Path.Combine(_folder, name));
         }
         catch (IOException)
         {
@@ -58,10 +61,9 @@ public sealed class PrefsStore
     {
         try
         {
-            Directory.CreateDirectory(_folder);
-            File.WriteAllText(Path.Combine(_folder, name), text);
+            AtomicFile.WriteAllText(Path.Combine(_folder, name), text);
         }
-        catch (IOException e)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             AppLog.Write($"couldn't save {name}: {e.Message}");
         }
