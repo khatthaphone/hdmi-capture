@@ -6,6 +6,7 @@
 | Windows App SDK / WinUI | 2.5.1 | MIT | UI framework (self-contained) |
 | Vortice.Windows (Direct3D11, DXGI, D3DCompiler) | 3.8.3 | MIT | D3D11 interop |
 | Microsoft.Windows.CsWin32 | 0.3.367 | MIT | Win32 interop source generator (build only) |
+| smourier/VCamSample (adapted, not linked) | main @ 2026-10-23 | MIT (below) | Structure of the dev-only virtual camera source in `native/VirtualCamera` (activator attributes, sensor profiles, KS stubs, HKLM registration); not part of the app or MSIX |
 
 This product includes software developed by the libjpeg-turbo project and is based in part on the work of the Independent JPEG Group.
 
@@ -146,3 +147,29 @@ License specifically refers to the Independent JPEG Group and does not extend
 attribution and endorsement protections to other entities.  Thus, it was
 desirable to choose a license that granted us the same protections for new code
 that were granted to the IJG for code derived from their software.
+
+## VCamSample licence
+
+`native/VirtualCamera` (task 104) adapts the media-source structure of https://github.com/smourier/VCamSample.
+
+MIT License
+
+Copyright (c) 2024-2026 Simon Mourier
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

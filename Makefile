@@ -1,7 +1,7 @@
 DERIVED := .build/xcode
 APP := $(DERIVED)/Build/Products/Debug/HDMI Captain.app
 
-.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad run-ipad-profile install-mac ipad-snapshot ipad-soak android-build android-test android-run android-check16k android-soak win-deps win-build win-test win-run win-package win-cert inventory logs clean
+.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad run-ipad-profile install-mac ipad-snapshot ipad-soak android-build android-test android-run android-check16k android-soak win-deps win-build win-test win-run win-package win-cert win-vcam inventory logs clean
 
 IOS_SIM ?= iPad Pro 11-inch (M5)
 IPAD_APP_SIM := $(DERIVED)/Build/Products/Debug-iphonesimulator/HDMI Captain.app
@@ -147,6 +147,20 @@ win-package: win-deps
 	  -p:PackageCertificateThumbprint=$$(pwsh -NoProfile -File tools/new-dev-cert.ps1 -Path "$(abspath $(WIN_CERT))") \
 	  -p:AppxPackageDir="$(abspath $(WIN_DIR))/AppPackages/" -nologo
 	@ls -t $(WIN_DIR)/AppPackages/*/*.msix | head -1
+
+# Virtual camera test source (task 104): HDMICaptainVCam.dll + vcam.exe, Release, CMake + VS 2022.
+# Output in $(VCAM_BIN). Register once from an elevated prompt: regsvr32 "<VCAM_BIN>\HDMICaptainVCam.dll"
+# (rebuilding fails to overwrite the DLL while Frame Server has it loaded: `vcam add` stopped, no camera app open).
+VCAM_DIR := $(WIN_DIR)/native/VirtualCamera
+VCAM_BIN := $(VCAM_DIR)/bin/$(WIN_PLATFORM)
+CMAKE ?= $(if $(shell command -v cmake 2>/dev/null),cmake,"C:/Program Files/CMake/bin/cmake.exe")
+
+win-vcam:
+	$(CMAKE) -S $(VCAM_DIR) -B $(VCAM_DIR)/build/$(WIN_PLATFORM) -G "Visual Studio 17 2022" -A $(WIN_PLATFORM)
+	$(CMAKE) --build $(VCAM_DIR)/build/$(WIN_PLATFORM) --config Release -- -nologo -v:minimal
+	mkdir -p $(VCAM_BIN)
+	cp $(VCAM_DIR)/build/$(WIN_PLATFORM)/out/Release/HDMICaptainVCam.dll $(VCAM_DIR)/build/$(WIN_PLATFORM)/out/Release/vcam.exe $(VCAM_BIN)/
+	@echo "built $(VCAM_BIN)/HDMICaptainVCam.dll and vcam.exe; run '$(VCAM_BIN)/vcam.exe status'"
 
 inventory:
 	cd tools/device-inventory && swift run -q device-inventory
