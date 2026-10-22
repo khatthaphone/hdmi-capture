@@ -10,6 +10,9 @@ using Windows.Win32.System.Com;
 
 namespace HDMICaptain.Media.Audio;
 
+/// <summary>Interleaved stereo float samples and the QPC time (100 ns) of the first frame.</summary>
+public delegate void AudioSamplesHandler(ReadOnlySpan<float> interleavedStereo, long timestamp);
+
 /// <summary>
 /// Card audio passthrough (spec §13.6, windows.md §5): the card's capture endpoint and the default output, both
 /// WASAPI shared and event-driven at the engine's smallest period, joined by a ring buffer whose fill a drift
@@ -62,6 +65,16 @@ public sealed class WasapiAudioPipeline : IDisposable
     public event Action<int>? Failed;
 
     public event Action<string>? Log;
+
+    /// <summary>
+    /// Captured audio after conversion to interleaved stereo float at <see cref="CaptureSampleRate"/> (48 kHz on the
+    /// cards we know), with the QPC time (100 ns) of its first frame. Raised on the capture thread before the ring
+    /// buffer, so recorders see audio before delay and volume; handlers copy and return quickly.
+    /// </summary>
+    public event AudioSamplesHandler? CapturedAudio;
+
+    /// <summary>Sample rate of <see cref="CapturedAudio"/> (after the MS2109 fix).</summary>
+    public int CaptureSampleRate => _captureRate;
 
     /// <summary>Peak level per channel since the last read, after volume (0…1). For meters.</summary>
     public (float Left, float Right) TakePeak()
@@ -142,7 +155,8 @@ public sealed class WasapiAudioPipeline : IDisposable
                     capture.GetNextPacketSize(out var packet);
                     if (packet == 0) break;
                     byte* data;
-                    capture.GetBuffer(&data, out var frames, out var flags, null, null);
+                    ulong qpc;
+                    capture.GetBuffer(&data, out var frames, out var flags, null, &qpc);
                     var count = (int)Math.Min(frames, (uint)(scratch.Length / 2));
                     if ((flags & AudclntBufferFlagsSilent) != 0)
                         Array.Clear(scratch, 0, count * 2);
@@ -150,6 +164,8 @@ public sealed class WasapiAudioPipeline : IDisposable
                         count = SampleConvert.ToStereoFloat(new ReadOnlySpan<byte>(data, (int)frames * format.BlockAlign),
                             channels, format.Bits, format.IsFloat, scratch);
                     capture.ReleaseBuffer(frames);
+                    // QPC position is already in 100 ns units (IAudioCaptureClient::GetBuffer).
+                    CapturedAudio?.Invoke(scratch.AsSpan(0, count * 2), (long)qpc);
                     _ring.Write(scratch.AsSpan(0, count * 2));
                 }
             }
