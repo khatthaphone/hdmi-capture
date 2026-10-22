@@ -5,6 +5,8 @@ using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Media.MediaFoundation;
 
+using HDMICaptain.Media.Diagnostics;
+
 namespace HDMICaptain.Media.Capture;
 
 /// <summary>A capture failure: the HRESULT and where it surfaced (open, set type, ReadSample, OnEvent).</summary>
@@ -258,6 +260,7 @@ public sealed class MfSource : ICaptureSession
     {
         var type = _type!;
         Stats.Count(timestamp, _period);
+        if (MediaEvents.Log.IsEnabled()) MediaEvents.Log.FrameCaptured(timestamp);
         if (_decoder != null)
         {
             DeliverMjpeg(sample, timestamp);
@@ -342,6 +345,7 @@ public sealed class MfSource : ICaptureSession
                     return;
                 }
                 NoteDecode(_decoder.LastDecodeMilliseconds, frame);
+                if (MediaEvents.Log.IsEnabled()) MediaEvents.Log.FrameDecoded(timestamp, _decoder.LastDecodeMilliseconds);
                 FrameArrived?.Invoke(in frame);
             }
             finally

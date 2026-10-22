@@ -14,6 +14,8 @@ using Windows.Win32.Graphics.Gdi;
 using Luid = Vortice.Luid;
 using PixelFormat = HDMICaptain.Media.Video.PixelFormat;
 
+using HDMICaptain.Media.Diagnostics;
+
 namespace HDMICaptain.Media.Render;
 
 /// <summary>
@@ -122,9 +124,17 @@ public sealed class D3DRenderer : IDisposable
     {
         lock (_gate)
         {
+            var trace = MediaEvents.Log.IsEnabled();
+            var start = trace ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
             Upload(frame);
             Convert(frame);
+            var converted = trace ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
             PresentAll();
+            if (trace)
+            {
+                MediaEvents.Log.FrameConverted(frame.Timestamp, System.Diagnostics.Stopwatch.GetElapsedTime(start, converted).TotalMilliseconds);
+                MediaEvents.Log.FramePresented(frame.Timestamp, System.Diagnostics.Stopwatch.GetElapsedTime(converted).TotalMilliseconds);
+            }
         }
     }
 

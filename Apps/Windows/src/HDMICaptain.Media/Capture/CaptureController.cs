@@ -475,6 +475,7 @@ public sealed class CaptureController : IDisposable
         _published = effective;
         _state = effective;
         Log?.Invoke($"state: {effective}");
+        if (Diagnostics.MediaEvents.Log.IsEnabled()) Diagnostics.MediaEvents.Log.CaptureState(effective.ToString());
         StateChanged?.Invoke(effective);
     }
 
