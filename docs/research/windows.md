@@ -86,6 +86,7 @@ Observed on the dev PC (Windows 11 26200, UGREEN-25854, 2026-10-22, task 089):
 |---|---|
 | Windows Camera opens the card while we stream | Nothing: no `OnEvent`, no error, our 1080p60 keeps 60 fps. Windows 11 shares the card through the Frame Server, so "in use" is not an error for a second reader |
 | We open while Windows Camera streams | Open succeeds at our type. A non-matching type (720p30 while Camera runs) "succeeds" but arrives at ~13 fps with gaps, so the frame rate watchdog has to catch it, not an HRESULT |
+| Second reader of the same card in the same process | Both readers alternate: each open preempts the other (`MF_E_VIDEO_RECORDING_DEVICE_PREEMPTED`, every ~3 s with retries). Keep one session per card per process (task 098) |
 | HDMI source unplugged (card stays on USB) | Nothing from MF: the card keeps delivering frames, irregularly (~30 fps with gaps). Signal loss must come from `SignalAnalyzer` on the picture plus a frame-gap watchdog |
 | USB unplug mid-stream | *pending: needs the user to pull the cable* |
 | Camera privacy off | *pending* |

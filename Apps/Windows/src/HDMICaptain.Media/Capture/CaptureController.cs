@@ -51,6 +51,15 @@ public sealed record CaptureControllerOptions
     /// </summary>
     public bool PreferOwnMjpegDecode { get; init; }
 
+    /// <summary>
+    /// Multi-View (task 098): cards another viewer in this process holds. Two readers of one card inside one process
+    /// preempt each other (MF_E_VIDEO_RECORDING_DEVICE_PREEMPTED every few seconds), so fallbacks skip these.
+    /// </summary>
+    public Func<string, bool>? IsClaimedElsewhere { get; init; }
+
+    /// <summary>A card window: show only the preferred card, never fall back to another one.</summary>
+    public bool PinnedToPreferred { get; init; }
+
     public MjpegPolicy MjpegPolicy => PreferOwnMjpegDecode ? MjpegPolicy.PreferOwnDecode : MjpegPolicy.Auto;
 }
 
@@ -201,6 +210,9 @@ public sealed class CaptureController : IDisposable
     });
 
     /// <summary>Starts over now with a fresh backoff: from Failed, from a long Paused, or to kick a stuck card.</summary>
+    /// <summary>Another viewer took or released a card (Multi-View): re-run the card policy.</summary>
+    public void ClaimsChanged() => _scheduler.Post(() => EvaluateTarget());
+
     public void Retry() => _scheduler.Post(() =>
     {
         if (!_started) return;
@@ -237,9 +249,12 @@ public sealed class CaptureController : IDisposable
         if (!_started) return;
         var devices = _catalog.Devices;
         var preferred = _catalog.PreferredKey is { } key ? _catalog.Find(key) : null;
-        var target = preferred
-            ?? (_current is { } c ? _catalog.Find(c.Key) : null)
-            ?? devices.FirstOrDefault();
+        var claimed = _options.IsClaimedElsewhere ?? (_ => false);
+        var target = _options.PinnedToPreferred
+            ? preferred
+            : (preferred is { } p && !claimed(p.Key) ? p : null)
+              ?? (_current is { } c && !claimed(c.Key) ? _catalog.Find(c.Key) : null)
+              ?? devices.FirstOrDefault(d => !claimed(d.Key));
 
         if (target == null)
         {

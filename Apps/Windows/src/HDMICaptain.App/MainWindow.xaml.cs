@@ -37,8 +37,8 @@ public sealed partial class MainWindow : Window
     private readonly SwapChainPanelHost? _panelHost;
     private readonly ChildVideoWindow? _childWindow;
     private readonly AspectLock _aspectLock;
-    private readonly TrayIcon _tray;
-    private readonly PrefsStore _prefs = new();
+    private readonly TrayIcon? _tray;
+    private readonly PrefsStore _prefs = App.Prefs;
     private readonly SettingsModel _settings;
     private readonly ProGate _pro;
     private readonly RecordingController _recording;
@@ -70,14 +70,40 @@ public sealed partial class MainWindow : Window
 
     public ViewerModel Model { get; }
 
-    public MainWindow(LaunchOptions options)
+    /// <summary>The card this window is pinned to (Multi-View), or null for the main viewer.</summary>
+    public string? CardKey { get; }
+
+    public bool IsPrimary => CardKey is null;
+
+    /// <summary>The card this viewer is capturing right now (any thread).</summary>
+    public string? ShowingCard => _capture?.CurrentDevice?.Key;
+
+    /// <summary>A card window opened or closed: let the card policy avoid cards other viewers hold.</summary>
+    public void OnClaimsChanged() => _capture?.ClaimsChanged();
+
+    private bool _silenced;
+
+    /// <summary>Another viewer has focus and "Play sound from the frontmost window" is on (App.FocusAudio).</summary>
+    public void SetSilenced(bool silenced)
+    {
+        if (_silenced == silenced) return;
+        _silenced = silenced;
+        if (_audio is { } audio) audio.Settings = EffectiveAudio;
+    }
+
+    private AudioSettings EffectiveAudio => _silenced ? _audioSettings with { Muted = true } : _audioSettings;
+
+    /// <param name="cardKey">Null for the main viewer; a card's DeviceKey for a Multi-View card window.</param>
+    public MainWindow(LaunchOptions options, string? cardKey = null)
     {
         _options = options;
+        CardKey = cardKey;
         Model = new ViewerModel { QaDiagnostics = options.QaShowStats };
         InitializeComponent();
         ExtendsContentIntoTitleBar = true;
         AppWindow.SetIcon("Assets/AppIcon.ico");
-        RestoreFrame();
+        if (IsPrimary) RestoreFrame();
+        else AppWindow.Resize(new Windows.Graphics.SizeInt32(960, 580));
         SystemBackdrop = new MicaBackdrop();
 
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
@@ -97,7 +123,7 @@ public sealed partial class MainWindow : Window
         _recording = new RecordingController(_renderer);
         _recording.Failed += message => DispatcherQueue.TryEnqueue(() => OnRecordingFailed(message));
         _recordTimer.Tick += (_, _) => UpdateRecordButton();
-        _tray = new TrayIcon(_hwnd, Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"), "HDMI Captain", TrayMenu, ShowFromTray);
+        if (IsPrimary) _tray = new TrayIcon(_hwnd, Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"), "HDMI Captain", TrayMenu, ShowFromTray);
 
         AppWindow.Changed += OnAppWindowChanged;
         Closed += (_, _) => Shutdown();
@@ -131,7 +157,7 @@ public sealed partial class MainWindow : Window
         ControlBar.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(200) };
         Toast.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(200) };
         if (options.QaPinControls) ShowControls();
-        if (options.QaAction is { } qaAction) RunQaActionSoon(qaAction);
+        if (IsPrimary && options.QaAction is { } qaAction) RunQaActionSoon(qaAction);
         if (options.QaSoakMinutes is > 0) _soakNext = DateTime.Now.AddSeconds(5);
 
         if (options.TestPattern is { } pattern)
@@ -145,13 +171,18 @@ public sealed partial class MainWindow : Window
         else
         {
             // The controller owns discovery, open, recovery, privacy/in-use retries, sleep and power (task 093).
-            _capture = CaptureController.CreateDefault(_prefs.State.PreferredDeviceKey);
+            _capture = CaptureController.CreateDefault(cardKey ?? _prefs.State.PreferredDeviceKey, new CaptureControllerOptions
+            {
+                IsClaimedElsewhere = key => App.IsClaimedByOther(this, key),
+                PinnedToPreferred = cardKey != null,
+            });
             _settings.Attach(_capture);
             _capture.Log += line => AppLog.Write($"[capture] {line}");
             _capture.FrameArrived += OnFrame;
             _capture.StateChanged += state => DispatcherQueue.TryEnqueue(() => OnCaptureState(state));
-            _capture.Catalog.PreferredChanged += key => DispatcherQueue.TryEnqueue(() => _prefs.UpdateState(s => s with { PreferredDeviceKey = key }));
-            if (_prefs.State.WelcomeShown) _capture.Start();
+            if (IsPrimary)
+                _capture.Catalog.PreferredChanged += key => DispatcherQueue.TryEnqueue(() => _prefs.UpdateState(s => s with { PreferredDeviceKey = key }));
+            if (_prefs.State.WelcomeShown || !IsPrimary) _capture.Start();
             else Model.Phase = new ViewerPhase.Welcome();
         }
     }
@@ -223,7 +254,7 @@ public sealed partial class MainWindow : Window
                 AppLog.Write($"[{device.Name}] no audio endpoint in its container");
                 return;
             }
-            var audio = new WasapiAudioPipeline(endpoint.Id) { Settings = settings };
+            var audio = new WasapiAudioPipeline(endpoint.Id) { Settings = _silenced ? settings with { Muted = true } : settings };
             audio.Log += line => AppLog.Write($"[audio] {line}");
             audio.AccessDenied += () => DispatcherQueue.TryEnqueue(() =>
                 ShowToast("Sound is blocked. Allow desktop apps in Settings › Privacy & security › Microphone."));
@@ -267,7 +298,8 @@ public sealed partial class MainWindow : Window
                 DrawGuides();
                 break;
             case nameof(ViewerModel.InputName):
-                _tray.SetTip($"HDMI Captain — {Model.InputName}");
+                _tray?.SetTip($"HDMI Captain — {Model.InputName}");
+                if (!IsPrimary) Title = $"HDMI Captain — {Model.InputName}";
                 break;
             case nameof(ViewerModel.ShowDiagnostics):
                 UpdateStats();
@@ -292,7 +324,7 @@ public sealed partial class MainWindow : Window
         if ((change & SettingsChange.Audio) != 0)
         {
             _audioSettings = _settings.AudioSettings;
-            if (_audio is { } audio) audio.Settings = _audioSettings;
+            if (_audio is { } audio) audio.Settings = EffectiveAudio;
         }
         if ((change & SettingsChange.Prefs) != 0)
         {
@@ -424,10 +456,26 @@ public sealed partial class MainWindow : Window
         foreach (var device in _capture?.Catalog.Devices ?? [])
         {
             var item = new RadioMenuFlyoutItem { Text = device.Name, GroupName = "input", IsChecked = device.Key == current };
-            item.Click += (_, _) => _capture?.Select(device.Key);
+            item.Click += (_, _) =>
+            {
+                if (App.CardWindowFor(device.Key) is { } window && !ReferenceEquals(window, this)) window.Activate();
+                else _capture?.Select(device.Key);
+            };
             items.Add(item);
         }
         if (items.Count == 0) items.Add(new MenuFlyoutItem { Text = "No capture card connected", IsEnabled = false });
+        if (_capture is { Catalog.Devices.Count: > 0 } capture)
+        {
+            var windows = new MenuFlyoutSubItem { Text = "New Window for", Icon = new FontIcon { Glyph = "\uE78B" } };
+            foreach (var device in capture.Catalog.Devices)
+            {
+                var item = new MenuFlyoutItem { Text = device.Name };
+                item.Click += (_, _) => App.OpenCardWindow(device.Key);
+                windows.Items.Add(item);
+            }
+            items.Add(new MenuFlyoutSeparator());
+            items.Add(windows);
+        }
         items.Add(new MenuFlyoutSeparator());
         items.Add(Item("Reconnect", "\uE72C", Reconnect));
     }
@@ -902,6 +950,9 @@ public sealed partial class MainWindow : Window
                 case "settings": OpenSettings(); break;
                 case "record3s": _ = RecordForQaAsync(); break;
                 case "recent15": _ = RecentForQaAsync(); break;
+                case "openCards":
+                    foreach (var device in _capture?.Catalog.Devices ?? []) App.OpenCardWindow(device.Key);
+                    break;
                 case "scopes": ScopesWindow.Show(_scopes); break;
                 case "upgrade": _ = ShowUpgradeAsync(ProFeature.Recording); break;
             }
@@ -942,6 +993,7 @@ public sealed partial class MainWindow : Window
 
     private void SaveFrame()
     {
+        if (!IsPrimary) return;
         if (AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored }) return;
         var (position, size) = (AppWindow.Position, AppWindow.Size);
         _prefs.UpdateState(state => state with { Frame = new WindowFrame(position.X, position.Y, size.Width, size.Height) });
@@ -1101,7 +1153,7 @@ public sealed partial class MainWindow : Window
         _audio?.Dispose();
         _capture?.Dispose();
         _testPattern?.Dispose();
-        _tray.Dispose();
+        _tray?.Dispose();
         _aspectLock.Dispose();
         _panelHost?.Dispose();
         _renderer.Dispose();
