@@ -11,13 +11,16 @@ using HDMICaptain.Media.Video;
 //                       [--bench-mjpeg <frames> [--pin WxH@fps]] [--attributes] | --probe-dxva
 // Lists MF capture devices and their native types in the Mac device-inventory JSON shape (plus a "windows"
 // block), and with --probe streams the auto-chosen type to report fps, drops and any HRESULT (task 089).
+// DEBUG builds: --record <seconds> records the first matching card with its paired audio to Videos\HDMI Captain
+// and saves the last half as a Save Recent clip, then reads both back (task 100).
 // --own-mjpeg captures raw MJPG and decodes it with libjpeg-turbo instead of Windows' NV12 twin (task 090).
 // --bench-mjpeg captures that many raw MJPG frames, then decodes them offline on 1 and 2 threads (task 090).
 // --probe-dxva lists each GPU's D3D11 MJPEG decoder profiles (task 090 step 3).
 
-const string Usage = "usage: HDMICaptain.Inventory [--match <name>] [--out <file.json>] [--probe <seconds> [--pin WxH@fps] [--ignore-link] [--own-mjpeg]] [--bench-mjpeg <frames>] [--attributes] | --probe-dxva";
+const string Usage = "usage: HDMICaptain.Inventory [--match <name>] [--out <file.json>] [--probe <seconds> [--pin WxH@fps] [--ignore-link] [--own-mjpeg]] [--bench-mjpeg <frames>] [--attributes] [--record <seconds>] | --probe-dxva";
 string? match = null, outPath = null;
 var probeSeconds = 0;
+var recordSeconds = 0; // DEBUG builds: record the first matching card (task 100)
 var benchFrames = 0;
 var dumpAttributes = false;
 var ignoreLink = false;
@@ -44,6 +47,7 @@ for (var i = 0; i < args.Length; i++)
                 parts.Length > 2 ? double.Parse(parts[2], CultureInfo.InvariantCulture) : null);
             break;
         case "--probe": probeSeconds = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
+        case "--record": recordSeconds = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
         default:
             Console.Error.WriteLine(Usage);
             return 2;
@@ -161,6 +165,17 @@ foreach (var device in probeSeconds > 0 ? probes : [])
     Console.Error.WriteLine($"  {source.Stats.Frames / seconds:F2} fps, {source.Stats.Dropped} dropped over {seconds:F1} s" +
                             (failed.Task.IsCompleted ? $", stopped by {failed.Task.Result}" : ""));
 }
+#if DEBUG
+if (recordSeconds > 0)
+{
+    if (probes.FirstOrDefault() is not { } card)
+    {
+        Console.Error.WriteLine("record: no capture device");
+        return 1;
+    }
+    await RecordTest.Run(card, recordSeconds, pin, ignoreLink, ownMjpeg ? MjpegPolicy.PreferOwnDecode : MjpegPolicy.Auto);
+}
+#endif
 
 foreach (var device in benchFrames > 0 ? probes : [])
     BenchMjpeg(device, benchFrames, pin ?? new FormatPreference.Pinned(1920, 1080, 60));

@@ -16,6 +16,9 @@ using PixelFormat = HDMICaptain.Media.Video.PixelFormat;
 
 namespace HDMICaptain.Media.Render;
 
+/// <summary>See <see cref="D3DRenderer.SourceRendered"/>.</summary>
+public delegate void SourceRenderedHandler(ID3D11Texture2D texture, long timestamp);
+
 /// <summary>
 /// The MetalRenderer equivalent on D3D11 (spec §13.4). Frames are rendered on the caller's thread (the source's),
 /// in two passes like Android: pass 1 converts the planes to RGBA at source size (<see cref="SourceTexture"/>,
@@ -82,6 +85,14 @@ public sealed class D3DRenderer : IDisposable
     /// <summary>Raised (on the render thread) after a lost device was rebuilt.</summary>
     public event Action? DeviceRecreated;
 
+    /// <summary>
+    /// Raised on the render thread, inside the render lock, after each frame was converted and presented:
+    /// <see cref="SourceTexture"/> and the QPC time (100 ns, <see cref="Recording.MediaClock"/>) at which the frame
+    /// reached the renderer. The texture is reused by the next frame, so handlers copy it (on this device's
+    /// immediate context) before returning. Recorders hook in here; overlays never reach this texture.
+    /// </summary>
+    public event SourceRenderedHandler? SourceRendered;
+
     public SwapChainTarget CreateHwndTarget(nint hwnd, int width, int height)
     {
         var target = new SwapChainTarget(hwnd, null, width, height);
@@ -120,11 +131,13 @@ public sealed class D3DRenderer : IDisposable
     /// <summary>Converts <paramref name="frame"/> and presents it on every visible target.</summary>
     public void Render(in VideoFrame frame)
     {
+        var arrived = Recording.MediaClock.Now();
         lock (_gate)
         {
             Upload(frame);
             Convert(frame);
             PresentAll();
+            if (_source != null) SourceRendered?.Invoke(_source, arrived);
         }
     }
 
@@ -246,7 +259,8 @@ public sealed class D3DRenderer : IDisposable
 
     private void CreateDevice(Luid? adapterLuid)
     {
-        var flags = DeviceCreationFlags.BgraSupport;
+        // Video support lets hardware encoder MFTs take our textures (task 100); WARP has no video engine.
+        var flags = DeviceCreationFlags.BgraSupport | (_warp ? 0 : DeviceCreationFlags.VideoSupport);
         FeatureLevel[] levels = [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0];
         using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory4>();
         IDXGIAdapter1? adapter = null;
@@ -259,6 +273,12 @@ public sealed class D3DRenderer : IDisposable
         ID3D11DeviceContext? context;
         var result = D3D11.D3D11CreateDevice(adapter, adapter == null ? DriverType.Hardware : DriverType.Unknown, flags, levels,
             out device, out context);
+        if (result.Failure && (flags & DeviceCreationFlags.VideoSupport) != 0)
+        {
+            flags &= ~DeviceCreationFlags.VideoSupport;
+            result = D3D11.D3D11CreateDevice(adapter, adapter == null ? DriverType.Hardware : DriverType.Unknown, flags, levels,
+                out device, out context);
+        }
         if (result.Failure && adapter != null)
         {
             // e.g. an indirect-display adapter that can't render: fall back to the default GPU.
@@ -559,6 +579,11 @@ public sealed class D3DRenderer : IDisposable
         _context.OMSetRenderTargets(target.View!);
         _context.ClearRenderTargetView(target.View!, new Color4(0, 0, 0, 1));
         _context.RSSetViewport((float)g.Viewport.X, (float)g.Viewport.Y, (float)g.Viewport.Width, (float)g.Viewport.Height);
+        // Bind everything this pass needs: SourceRendered handlers draw on the same context between frames.
+        _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleStrip);
+        _context.VSSetShader(_vs);
+        _context.VSSetConstantBuffer(0, _params);
+        _context.PSSetConstantBuffer(0, _params);
         _context.PSSetShader(_psScale);
         _context.PSSetShaderResource(0, _sourceView!);
         _context.PSSetSampler(0, options.Filter == FilterMode.Nearest ? _nearest : _linear);
