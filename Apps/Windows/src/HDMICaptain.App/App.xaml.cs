@@ -10,6 +10,7 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        UnhandledException += (_, e) => AppLog.Write($"unhandled: {e.Exception}");
     }
 
     public static LaunchOptions Options { get; private set; } = LaunchOptions.Default;

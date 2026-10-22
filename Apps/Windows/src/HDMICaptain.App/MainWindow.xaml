@@ -4,14 +4,113 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="HDMI Captain">
-    <Grid Background="Black">
+    <Grid x:Name="Root" Background="Black"
+          PointerMoved="OnRootPointerMoved" PointerExited="OnRootPointerExited"
+          DoubleTapped="OnRootDoubleTapped" PointerPressed="OnRootPointerPressed">
+        <Grid.Resources>
+            <!-- Plain bar item: transparent until hovered (the Mac's BarButtonStyle). -->
+            <Style x:Key="BarButton" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Foreground" Value="White" />
+                <Setter Property="Padding" Value="8,5" />
+                <Setter Property="MinHeight" Value="32" />
+                <Setter Property="MinWidth" Value="32" />
+                <Setter Property="CornerRadius" Value="7" />
+            </Style>
+            <Style x:Key="BarDropDown" TargetType="DropDownButton">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Foreground" Value="White" />
+                <Setter Property="Padding" Value="8,5" />
+                <Setter Property="MinHeight" Value="32" />
+                <Setter Property="CornerRadius" Value="7" />
+            </Style>
+            <Style x:Key="BarDivider" TargetType="Rectangle">
+                <Setter Property="Width" Value="1" />
+                <Setter Property="Height" Value="18" />
+                <Setter Property="Margin" Value="3,0" />
+                <Setter Property="Fill" Value="#2EFFFFFF" />
+            </Style>
+        </Grid.Resources>
+
         <SwapChainPanel x:Name="VideoPanel" />
-        <StackPanel x:Name="Placeholder" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-            <TextBlock Text="HDMI Captain" Style="{StaticResource TitleTextBlockStyle}" HorizontalAlignment="Center" />
-            <TextBlock x:Name="StatusText" Opacity="0.7" HorizontalAlignment="Center" />
-        </StackPanel>
-        <!-- XAML overlay: never part of SourceTexture, so never in screenshots or recordings. -->
-        <TextBlock x:Name="StatsText" Visibility="Collapsed" Margin="12,40,12,12" FontFamily="Consolas" FontSize="12"
-                   HorizontalAlignment="Left" VerticalAlignment="Top" Foreground="White" Opacity="0.85" />
+
+        <!-- Status card for every non-live phase (StatusScreens.swift). XAML only: never in the source texture. -->
+        <Grid Visibility="{x:Bind Model.StatusVisibility, Mode=OneWay}" Background="#99000000">
+            <StackPanel MaxWidth="440" Margin="24" Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid Height="48">
+                    <FontIcon x:Name="StatusGlyph" FontSize="40" Foreground="White" />
+                    <ProgressRing x:Name="StatusSpinner" Width="40" Height="40" IsActive="False" Foreground="White" />
+                </Grid>
+                <TextBlock x:Name="StatusTitle" Style="{StaticResource SubtitleTextBlockStyle}" Foreground="White"
+                           TextAlignment="Center" TextWrapping="WrapWholeWords" />
+                <TextBlock x:Name="StatusMessage" Foreground="White" Opacity="0.75" TextAlignment="Center" TextWrapping="WrapWholeWords" />
+                <TextBlock x:Name="StatusDetail" Style="{StaticResource CaptionTextBlockStyle}" Foreground="White" Opacity="0.5"
+                           TextAlignment="Center" TextWrapping="WrapWholeWords" />
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Margin="0,6,0,0">
+                    <Button x:Name="StatusPrimary" Style="{StaticResource AccentButtonStyle}" Click="OnStatusAction" />
+                    <Button x:Name="StatusSecondary" Click="OnStatusAction" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+
+        <!-- Diagnostics (verbatim, not localized). -->
+        <Border Visibility="{x:Bind Model.StatsVisibility, Mode=OneWay}" Margin="12,40,12,12" Padding="8,6" CornerRadius="6"
+                Background="#A6000000" HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False">
+            <TextBlock Text="{x:Bind Model.StatsText, Mode=OneWay}" FontFamily="Consolas" FontSize="12" Foreground="White" />
+        </Border>
+
+        <!-- Feedback toast ("Screenshot saved"). -->
+        <Border x:Name="Toast" Opacity="0" Margin="0,48,0,0" Padding="14,8" CornerRadius="16" Background="#CC1F1F1F"
+                BorderBrush="#24FFFFFF" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Top" IsHitTestVisible="False">
+            <TextBlock x:Name="ToastText" Foreground="White" />
+        </Border>
+
+        <!-- Hover control bar (ControlBar.swift): shown near the bottom edge, fades after 3 s, never in outputs. -->
+        <Border x:Name="ControlBar" Opacity="0" IsHitTestVisible="False" Margin="12,0,12,20" Padding="6,5"
+                HorizontalAlignment="Center" VerticalAlignment="Bottom" CornerRadius="21"
+                Background="#8C141414" BorderBrush="#24FFFFFF" BorderThickness="1"
+                PointerEntered="OnBarPointerEntered" PointerExited="OnBarPointerExited">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+                <DropDownButton x:Name="InputButton" Style="{StaticResource BarDropDown}" ToolTipService.ToolTip="Input and profiles"
+                                AutomationProperties.Name="Input">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE714;" FontSize="15" />
+                        <TextBlock Text="{x:Bind Model.InputName, Mode=OneWay}" FontSize="12" MaxWidth="160" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <DropDownButton.Flyout>
+                        <MenuFlyout x:Name="InputMenu" Placement="Top" Opening="OnInputMenuOpening" Opened="OnFlyoutOpened" Closed="OnFlyoutClosed" />
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+                <Rectangle Style="{StaticResource BarDivider}" />
+                <Button Style="{StaticResource BarButton}" Click="OnMuteClick" ToolTipService.ToolTip="Mute (Ctrl+M)"
+                        AutomationProperties.Name="Mute">
+                    <FontIcon Glyph="{x:Bind Model.MuteGlyph, Mode=OneWay}" FontSize="15" />
+                </Button>
+                <Slider x:Name="VolumeSlider" Width="80" Minimum="0" Maximum="100" VerticalAlignment="Center" Margin="2,0,6,0"
+                        Value="{x:Bind Model.Volume, Mode=TwoWay}" IsEnabled="False" AutomationProperties.Name="Volume"
+                        ToolTipService.ToolTip="Sound arrives in a later update" />
+                <Rectangle Style="{StaticResource BarDivider}" />
+                <Button Style="{StaticResource BarButton}" Click="OnScreenshotClick" ToolTipService.ToolTip="Save Screenshot (Ctrl+Shift+S)"
+                        AutomationProperties.Name="Screenshot">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE722;" FontSize="15" />
+                        <TextBlock Text="Screenshot" FontSize="12" />
+                    </StackPanel>
+                </Button>
+                <Rectangle Style="{StaticResource BarDivider}" />
+                <DropDownButton Style="{StaticResource BarDropDown}" ToolTipService.ToolTip="View options" AutomationProperties.Name="View options">
+                    <FontIcon Glyph="&#xE712;" FontSize="15" />
+                    <DropDownButton.Flyout>
+                        <MenuFlyout x:Name="OptionsMenu" Placement="Top" Opening="OnOptionsMenuOpening" Opened="OnFlyoutOpened" Closed="OnFlyoutClosed" />
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+                <Button Style="{StaticResource BarButton}" Click="OnFullScreenClick" ToolTipService.ToolTip="Full Screen (F11)"
+                        AutomationProperties.Name="Full screen">
+                    <FontIcon Glyph="{x:Bind Model.FullScreenGlyph, Mode=OneWay}" FontSize="15" />
+                </Button>
+            </StackPanel>
+        </Border>
     </Grid>
 </Window>
