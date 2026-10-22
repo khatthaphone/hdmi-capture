@@ -43,6 +43,9 @@ public sealed class D3DRenderer : IDisposable
     private readonly PlaneTexture[] _planes = [new(), new(), new()];
     private ID3D11Texture2D? _source;
     private ID3D11RenderTargetView? _sourceTarget;
+    private static readonly ID3D11ShaderResourceView[] NoViews = new ID3D11ShaderResourceView[4];
+    private readonly ID3D11ShaderResourceView[] _convertViews = new ID3D11ShaderResourceView[4];
+    private readonly ID3D11SamplerState[] _convertSamplers = new ID3D11SamplerState[2];
     private ID3D11ShaderResourceView? _sourceView;
 
     private D3DRenderer(bool warp, Luid? adapter)
@@ -509,10 +512,13 @@ public sealed class D3DRenderer : IDisposable
         _context.VSSetConstantBuffer(0, _params);
         _context.PSSetShader(_psConvert);
         _context.PSSetConstantBuffer(0, _params);
-        _context.PSSetShaderResources(0, [_planes[0].View!, _planes[1].View!, _planes[2].View!, _lutView]);
-        _context.PSSetSamplers(0, [_linear, _linear]);
+        // Reused arrays: this runs per frame and must not allocate (task 101).
+        (_convertViews[0], _convertViews[1], _convertViews[2], _convertViews[3]) = (_planes[0].View!, _planes[1].View!, _planes[2].View!, _lutView!);
+        (_convertSamplers[0], _convertSamplers[1]) = (_linear!, _linear!);
+        _context.PSSetShaderResources(0, _convertViews);
+        _context.PSSetSamplers(0, _convertSamplers);
         _context.Draw(4, 0);
-        _context.PSSetShaderResources(0, [null!, null!, null!, null!]);
+        _context.PSSetShaderResources(0, NoViews);
     }
 
     private void PresentAll()
@@ -563,7 +569,7 @@ public sealed class D3DRenderer : IDisposable
     private void WriteParams(in ShaderParams p)
     {
         var mapped = _context.Map(_params, MapMode.WriteDiscard, Vortice.Direct3D11.MapFlags.None);
-        Marshal.StructureToPtr(p, mapped.DataPointer, false);
+        unsafe { *(ShaderParams*)mapped.DataPointer = p; } // blittable; StructureToPtr would box per frame
         _context.Unmap(_params, 0);
     }
 

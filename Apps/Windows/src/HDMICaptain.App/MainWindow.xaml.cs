@@ -53,6 +53,13 @@ public sealed partial class MainWindow : Window
     private (int Width, int Height) _guideSource = (1920, 1080);
     private int _frames;
     private long _lastStatsTicks = Stopwatch.GetTimestamp();
+    private long _lastAllocated = GC.GetTotalAllocatedBytes();
+    private int _lastGen0 = GC.CollectionCount(0);
+    private bool _firstLiveLogged;
+    private int _perfTicks;
+    private long _frameThreadAllocated;
+    private DateTime _soakNext = DateTime.MaxValue;
+    private string _allocText = "";
     private bool _barHovered;
     private int _openFlyouts;
     private bool _cursorHidden;
@@ -118,6 +125,7 @@ public sealed partial class MainWindow : Window
         Toast.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(200) };
         if (options.QaPinControls) ShowControls();
         if (options.QaAction is { } qaAction) RunQaActionSoon(qaAction);
+        if (options.QaSoakMinutes is > 0) _soakNext = DateTime.Now.AddSeconds(5);
 
         if (options.TestPattern is { } pattern)
         {
@@ -170,6 +178,14 @@ public sealed partial class MainWindow : Window
         if (state is CaptureState.Live live)
         {
             _hadCard = true;
+            // Steady capture allocates nothing per frame; keep blocking gen2 GCs away while live (task 101).
+            System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
+            if (!_firstLiveLogged)
+            {
+                _firstLiveLogged = true;
+                var sinceStart = DateTime.Now - Process.GetCurrentProcess().StartTime;
+                AppLog.Write($"[perf] live picture {sinceStart.TotalMilliseconds:F0} ms after process start");
+            }
             _aspectLock.Aspect = _settings.LockAspect ? (double)live.Info.Width / live.Info.Height : null;
             _guideSource = (live.Info.Width, live.Info.Height);
             DrawGuides();
@@ -216,10 +232,12 @@ public sealed partial class MainWindow : Window
     // Source thread: render straight away, no UI-thread hop (CLAUDE.md conventions).
     private void OnFrame(in VideoFrame frame)
     {
+        var before = GC.GetAllocatedBytesForCurrentThread();
         _renderer.Render(in frame);
         _signal.Observe(in frame);
         _scopes.Observe(in frame);
         Interlocked.Increment(ref _frames);
+        Interlocked.Add(ref _frameThreadAllocated, GC.GetAllocatedBytesForCurrentThread() - before);
     }
 
     // MARK: - Status card
@@ -852,7 +870,15 @@ public sealed partial class MainWindow : Window
         var now = Stopwatch.GetTimestamp();
         var seconds = (now - _lastStatsTicks) / (double)Stopwatch.Frequency;
         _lastStatsTicks = now;
-        var fps = Interlocked.Exchange(ref _frames, 0) / seconds;
+        var frames = Interlocked.Exchange(ref _frames, 0);
+        var fps = frames / seconds;
+        var allocated = GC.GetTotalAllocatedBytes();
+        var gen0 = GC.CollectionCount(0);
+        var frameAlloc = Interlocked.Exchange(ref _frameThreadAllocated, 0);
+        _allocText = $"alloc {(allocated - _lastAllocated) / Math.Max(1, frames)} B/frame process, {frameAlloc / Math.Max(1, frames)} B/frame render path, gen0 {gen0 - _lastGen0}/s";
+        (_lastAllocated, _lastGen0) = (allocated, gen0);
+        WriteSoak(fps);
+        if (++_perfTicks % 30 == 0 && Model.IsLive) AppLog.Write($"[perf] {fps:F1} fps, {_allocText}, heap {GC.GetTotalMemory(false) / 1_048_576} MB");
         if (!Model.ShowDiagnostics) return;
         var (w, h) = _renderer.SourceSize;
         var surface = _childWindow != null ? "HWND" : "SwapChainPanel";
@@ -860,8 +886,34 @@ public sealed partial class MainWindow : Window
         var capture = _capture is { CurrentType: { } type } c
             ? $"\n{type.FourCC} {type.Width}×{type.Height} @ {type.FrameRate:F2}{(type.DecodedByWindows ? " (Windows MJPEG decode)" : "")}, {c.Stats?.Dropped ?? 0} dropped"
             : "";
-        Model.StatsText = $"{Model.InputName}\n{w}×{h}  {fps:F1} fps{capture}\n{_renderer.AdapterName}\n{surface}, tearing {(_target.Tearing ? "on" : "off")}{sound}";
+        Model.StatsText = $"{Model.InputName}\n{w}×{h}  {fps:F1} fps{capture}\n{_renderer.AdapterName}\n{surface}, tearing {(_target.Tearing ? "on" : "off")}{sound}\n{_allocText}";
     }
+
+    /// <summary>DEBUG -qaSoakMinutes N: one CSV row a minute (fps, drops, memory, audio buffer) to Documents\qa-soak.csv.</summary>
+    private void WriteSoak(double fps)
+    {
+        if (_options.QaSoakMinutes is not { } minutes || DateTime.Now < _soakNext) return;
+        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "qa-soak.csv");
+        if (!_soakStarted)
+        {
+            _soakStarted = true;
+            _soakEnd = DateTime.Now.AddMinutes(minutes);
+            File.WriteAllText(path, "time,fps,dropped,working_set_mb,gc_heap_mb,gen0,gen2,audio_buffered_ms,alloc\n");
+        }
+        _soakNext = DateTime.Now.AddMinutes(1);
+        var row = string.Join(',', DateTime.Now.ToString("HH:mm:ss"), fps.ToString("F1"), _capture?.Stats?.Dropped ?? 0,
+            Environment.WorkingSet / 1_048_576, GC.GetTotalMemory(false) / 1_048_576, GC.CollectionCount(0), GC.CollectionCount(2),
+            _audio?.BufferedMs.ToString("F1") ?? "", $"\"{_allocText}\"");
+        File.AppendAllText(path, row + "\n");
+        if (DateTime.Now >= _soakEnd)
+        {
+            AppLog.Write($"[qa] soak finished: {path}");
+            _soakNext = DateTime.MaxValue; // done
+        }
+    }
+
+    private DateTime _soakEnd = DateTime.MaxValue;
+    private bool _soakStarted;
 
     private void Shutdown()
     {

@@ -57,6 +57,7 @@ public sealed class MfSource : ICaptureSession
     private IMFSourceReader? _reader;
     private ReaderCallback? _callback;
     private NativeVideoType? _type;
+    private PixelFormat _format; // of _type, resolved once so the frame path stays string-free
     private double _period;
     private volatile bool _running;
     private bool _warnedShortBuffer;
@@ -166,6 +167,7 @@ public sealed class MfSource : ICaptureSession
         {
             MfInterop.Release(current);
         }
+        _format = ToPixelFormat(_type.FourCC) ?? PixelFormat.Nv12; // MJPG frames come out of the decoder already planar
         _period = _type.FrameRate > 0 ? 10_000_000 / _type.FrameRate : 0;
         Stats = new CaptureStats();
         DecodeFailures = 0;
@@ -230,34 +232,29 @@ public sealed class MfSource : ICaptureSession
         Failed?.Invoke(error);
     }
 
-    private unsafe void OnSample(HRESULT status, uint flags, long timestamp, IMFSample? sample)
+    // MF work-queue thread. The sample is borrowed for the call: not released here (COM in-parameter rules).
+    private void OnSample(int status, uint flags, long timestamp, nint sample)
     {
-        try
+        if (status < 0)
         {
-            if (status.Failed)
-            {
-                Fail(new CaptureError(status.Value, "ReadSample"));
-                return;
-            }
-            var readerFlags = (MF_SOURCE_READER_FLAG)flags;
-            if ((readerFlags & MF_SOURCE_READER_FLAG.MF_SOURCE_READERF_ERROR) != 0)
-            {
-                Fail(new CaptureError(MfErrors.Shutdown, "ReadSample flags"));
-                return;
-            }
-            if ((readerFlags & (MF_SOURCE_READER_FLAG.MF_SOURCE_READERF_NATIVEMEDIATYPECHANGED
-                                | MF_SOURCE_READER_FLAG.MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED)) != 0)
-                Log?.Invoke($"media type changed (flags 0x{flags:X})");
-            if (sample != null && _running) Deliver(sample, timestamp);
+            Fail(new CaptureError(status, "ReadSample"));
+            return;
         }
-        finally
+        var readerFlags = (MF_SOURCE_READER_FLAG)flags;
+        if ((readerFlags & MF_SOURCE_READER_FLAG.MF_SOURCE_READERF_ERROR) != 0)
         {
-            MfInterop.Release(sample);
+            Fail(new CaptureError(MfErrors.Shutdown, "ReadSample flags"));
+            return;
         }
+        if ((readerFlags & (MF_SOURCE_READER_FLAG.MF_SOURCE_READERF_NATIVEMEDIATYPECHANGED
+                            | MF_SOURCE_READER_FLAG.MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED)) != 0)
+            Log?.Invoke($"media type changed (flags 0x{flags:X})");
+        if (sample != 0 && _running) Deliver(sample, timestamp);
         if (_running) Request();
     }
 
-    private unsafe void Deliver(IMFSample sample, long timestamp)
+    // Raw vtable calls only (RawMf): this runs 60 times a second and must not allocate (task 101).
+    private unsafe void Deliver(nint sample, long timestamp)
     {
         var type = _type!;
         Stats.Count(timestamp, _period);
@@ -266,27 +263,28 @@ public sealed class MfSource : ICaptureSession
             DeliverMjpeg(sample, timestamp);
             return;
         }
-        sample.GetBufferByIndex(0, out var buffer);
+        if (RawMf.GetBufferByIndex(sample, 0, out var buffer) < 0) return;
+        var twoD = RawMf.As2D(buffer);
         try
         {
             byte* data;
             int pitch;
-            var twoD = buffer as IMF2DBuffer;
-            if (twoD != null)
+            if (twoD != 0)
             {
-                twoD.Lock2D(&data, out pitch);
+                if (RawMf.Lock2D(twoD, &data, &pitch) < 0) return;
             }
             else
             {
-                buffer.Lock(&data, null, null);
-                pitch = type.FourCC == "YUY2" ? type.Width * 2 : type.Width;
+                if (RawMf.Lock(buffer, &data, null, null) < 0) return;
+                pitch = _format == PixelFormat.Yuy2 ? type.Width * 2 : type.Width;
             }
             try
             {
-                var format = ToPixelFormat(type.FourCC)!.Value;
-                buffer.GetCurrentLength(out var length);
+                var format = _format;
+                uint length;
+                RawMf.GetCurrentLength(buffer, &length);
                 var needed = (long)pitch * (format == PixelFormat.Nv12 ? type.Height * 3 / 2 : type.Height);
-                if (twoD == null && length < needed)
+                if (twoD == 0 && length < needed)
                 {
                     if (!_warnedShortBuffer) Log?.Invoke($"short buffer: {length} bytes, expected {needed}; frames dropped");
                     _warnedShortBuffer = true;
@@ -310,13 +308,14 @@ public sealed class MfSource : ICaptureSession
             }
             finally
             {
-                if (twoD != null) twoD.Unlock2D();
-                else buffer.Unlock();
+                if (twoD != 0) RawMf.Unlock2D(twoD);
+                else RawMf.Unlock(buffer);
             }
         }
         finally
         {
-            MfInterop.Release(buffer);
+            if (twoD != 0) RawMf.Release(twoD);
+            RawMf.Release(buffer);
         }
     }
 
@@ -324,14 +323,14 @@ public sealed class MfSource : ICaptureSession
     /// Raw MJPG: decode on this MF thread into the decoder's reused planes, then hand the planar frame on. One
     /// ReadSample is in flight, so a slow decode delays the next read instead of queueing (newest frame wins).
     /// </summary>
-    private unsafe void DeliverMjpeg(IMFSample sample, long timestamp)
+    private unsafe void DeliverMjpeg(nint sample, long timestamp)
     {
-        sample.ConvertToContiguousBuffer(out var buffer);
+        if (RawMf.ConvertToContiguousBuffer(sample, out var buffer) < 0) return;
         try
         {
             byte* data;
             uint length;
-            buffer.Lock(&data, null, &length);
+            if (RawMf.Lock(buffer, &data, null, &length) < 0) return;
             try
             {
                 CompressedFrameArrived?.Invoke(new ReadOnlySpan<byte>(data, (int)length), timestamp);
@@ -347,12 +346,12 @@ public sealed class MfSource : ICaptureSession
             }
             finally
             {
-                buffer.Unlock();
+                RawMf.Unlock(buffer);
             }
         }
         finally
         {
-            MfInterop.Release(buffer);
+            RawMf.Release(buffer);
         }
     }
 
@@ -398,14 +397,28 @@ public sealed class MfSource : ICaptureSession
         _ => "event",
     };
 
-    /// <summary>The COM callback the reader holds. Built-in COM interop gives it a CCW (CsWin32 [ComImport] interface).</summary>
-    private sealed class ReaderCallback(MfSource owner) : IMFSourceReaderCallback
+    /// <summary>
+    /// The COM callback the reader holds: a CCW over <see cref="IRawSourceReaderCallback"/>, so samples arrive as
+    /// raw pointers instead of freshly allocated RCWs. OnEvent is rare and wraps its event normally.
+    /// </summary>
+    private sealed class ReaderCallback(MfSource owner) : IRawSourceReaderCallback
     {
-        public void OnReadSample(HRESULT hrStatus, uint dwStreamIndex, uint dwStreamFlags, long llTimestamp, IMFSample pSample) =>
-            owner.OnSample(hrStatus, dwStreamFlags, llTimestamp, pSample);
+        public int OnReadSample(int hrStatus, uint streamIndex, uint streamFlags, long timestamp, nint sample)
+        {
+            owner.OnSample(hrStatus, streamFlags, timestamp, sample);
+            return 0;
+        }
 
-        public void OnFlush(uint dwStreamIndex) => owner._flushed.Set();
+        public int OnFlush(uint streamIndex)
+        {
+            owner._flushed.Set();
+            return 0;
+        }
 
-        public void OnEvent(uint dwStreamIndex, IMFMediaEvent pEvent) => owner.OnMediaEvent(dwStreamIndex, pEvent);
+        public int OnEvent(uint streamIndex, nint mediaEvent)
+        {
+            if (mediaEvent != 0) owner.OnMediaEvent(streamIndex, (IMFMediaEvent)Marshal.GetObjectForIUnknown(mediaEvent));
+            return 0;
+        }
     }
 }
