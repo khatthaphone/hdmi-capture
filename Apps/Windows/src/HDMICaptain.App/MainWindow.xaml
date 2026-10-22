@@ -36,6 +36,9 @@
 
         <SwapChainPanel x:Name="VideoPanel" />
 
+        <!-- Framing guides: XAML over the video rect, never in the source texture (GuideOverlay). -->
+        <Canvas x:Name="GuideCanvas" IsHitTestVisible="False" />
+
         <!-- Status card for every non-live phase (StatusScreens.swift). XAML only: never in the source texture. -->
         <Grid Visibility="{x:Bind Model.StatusVisibility, Mode=OneWay}" Background="#99000000">
             <StackPanel MaxWidth="440" Margin="24" Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Center">

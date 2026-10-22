@@ -27,6 +27,7 @@ public sealed class WasapiAudioPipeline : IDisposable
     private readonly AudioRingBuffer _ring;
     private readonly DriftController _drift;
     private readonly StreamResampler _resampler = new();
+    private readonly object _threads = new();
     private Thread? _captureThread;
     private Thread? _renderThread;
     private volatile bool _running;
@@ -76,6 +77,11 @@ public sealed class WasapiAudioPipeline : IDisposable
 
     public void Start()
     {
+        lock (_threads) StartLocked();
+    }
+
+    private void StartLocked()
+    {
         if (_running) return;
         _running = true;
         _ring.Clear();
@@ -87,15 +93,19 @@ public sealed class WasapiAudioPipeline : IDisposable
         _renderThread.Start();
     }
 
+    /// <summary>Safe to call more than once and from several threads (window close races a background dispose).</summary>
     public void Stop()
     {
-        if (!_running) return;
-        _running = false;
-        _captureThread?.Join();
-        _renderThread?.Join();
-        _captureThread = _renderThread = null;
-        _listener?.Dispose();
-        _listener = null;
+        lock (_threads)
+        {
+            if (!_running) return;
+            _running = false;
+            _captureThread?.Join();
+            _renderThread?.Join();
+            _captureThread = _renderThread = null;
+            _listener?.Dispose();
+            _listener = null;
+        }
     }
 
     public void Dispose() => Stop();

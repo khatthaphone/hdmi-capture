@@ -36,6 +36,7 @@ public sealed partial class MainWindow : Window
     private readonly AspectLock _aspectLock;
     private readonly TrayIcon _tray;
     private readonly PrefsStore _prefs = new();
+    private readonly SettingsModel _settings;
     private readonly DispatcherTimer _statsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _idleTimer = new() { Interval = IdleDelay };
     private readonly DispatcherTimer _toastTimer = new() { Interval = TimeSpan.FromSeconds(2) };
@@ -46,6 +47,7 @@ public sealed partial class MainWindow : Window
     private string? _audioDeviceKey;
     private AudioSettings _audioSettings = new();
     private bool _hadCard;
+    private (int Width, int Height) _guideSource = (1920, 1080);
     private int _frames;
     private long _lastStatsTicks = Stopwatch.GetTimestamp();
     private bool _barHovered;
@@ -82,10 +84,13 @@ public sealed partial class MainWindow : Window
         AppWindow.Changed += OnAppWindowChanged;
         Closed += (_, _) => Shutdown();
 
-        var prefs = _prefs.Prefs;
-        Model.ShowDiagnostics = prefs.ShowStats || options.QaShowStats;
-        Model.AlwaysOnTop = prefs.FloatOnTop;
-        Model.CleanMode = prefs.CleanMode;
+        // Settings (task 095) own prefs and the current card's preset; ViewerModel mirrors the toggles both ways.
+        _settings = new SettingsModel(_prefs);
+        _settings.Attach(Model);
+        if (options.QaShowStats) Model.ShowDiagnostics = true;
+        _settings.Changed += OnSettingsChanged;
+        _settings.ApplyTo(_renderer);
+        _audioSettings = _settings.AudioSettings;
         Model.PropertyChanged += OnModelChanged;
         _signal.Changed += content =>
         {
@@ -97,6 +102,7 @@ public sealed partial class MainWindow : Window
         ShowStatus();
         SetUpShortcuts();
         Root.ContextFlyout = BuildContextMenu();
+        Root.SizeChanged += (_, _) => DrawGuides();
 
         _statsTimer.Tick += (_, _) => UpdateStats();
         _statsTimer.Start();
@@ -119,6 +125,7 @@ public sealed partial class MainWindow : Window
         {
             // The controller owns discovery, open, recovery, privacy/in-use retries, sleep and power (task 093).
             _capture = CaptureController.CreateDefault(_prefs.State.PreferredDeviceKey);
+            _settings.Attach(_capture);
             _capture.Log += line => AppLog.Write($"[capture] {line}");
             _capture.FrameArrived += OnFrame;
             _capture.StateChanged += state => DispatcherQueue.TryEnqueue(() => OnCaptureState(state));
@@ -134,6 +141,8 @@ public sealed partial class MainWindow : Window
     {
         var device = _capture?.CurrentDevice;
         if (device != null) Model.InputName = device.Name;
+        if (state is CaptureState.Live or CaptureState.Connecting && device != null && device.Key != _settings.Device?.Key)
+            _settings.OnDeviceChanged(device);
         Model.Phase = state switch
         {
             CaptureState.Live => new ViewerPhase.Live(),
@@ -155,7 +164,9 @@ public sealed partial class MainWindow : Window
         if (state is CaptureState.Live live)
         {
             _hadCard = true;
-            _aspectLock.Aspect = _prefs.Prefs.LockAspect ? (double)live.Info.Width / live.Info.Height : null;
+            _aspectLock.Aspect = _settings.LockAspect ? (double)live.Info.Width / live.Info.Height : null;
+            _guideSource = (live.Info.Width, live.Info.Height);
+            DrawGuides();
             if (device != null && _audioDeviceKey != device.Key) StartAudio(device);
         }
         else if (state is CaptureState.Recovering { Reason: RecoveryReason.Waiting or RecoveryReason.Disconnected } or CaptureState.Failed)
@@ -213,33 +224,44 @@ public sealed partial class MainWindow : Window
             case nameof(ViewerModel.Phase):
                 ShowStatus();
                 break;
-            case nameof(ViewerModel.Scale) or nameof(ViewerModel.SharpPixels):
-                _renderer.Options = _renderer.Options with
-                {
-                    Scale = Model.Scale,
-                    Filter = Model.SharpPixels ? FilterMode.Nearest : FilterMode.Linear,
-                };
-                _renderer.Redraw();
-                break;
-            case nameof(ViewerModel.Muted) or nameof(ViewerModel.Volume):
-                _audioSettings = _audioSettings with { Volume = (float)(Model.Volume / 100), Muted = Model.Muted };
-                if (_audio is { } audio) audio.Settings = _audioSettings;
+            case nameof(ViewerModel.Scale):
+                DrawGuides();
                 break;
             case nameof(ViewerModel.InputName):
                 _tray.SetTip($"HDMI Captain — {Model.InputName}");
                 break;
             case nameof(ViewerModel.ShowDiagnostics):
-                _prefs.Update(p => p.ShowStats = Model.ShowDiagnostics);
                 UpdateStats();
                 break;
             case nameof(ViewerModel.AlwaysOnTop):
-                _prefs.Update(p => p.FloatOnTop = Model.AlwaysOnTop);
                 ApplyAlwaysOnTop();
                 break;
             case nameof(ViewerModel.CleanMode):
-                _prefs.Update(p => p.CleanMode = Model.CleanMode);
                 ApplyCleanMode();
                 break;
+        }
+    }
+
+    // UI thread. Settings changed from the Settings window, a menu, a shortcut or a card's preset.
+    private void OnSettingsChanged(SettingsChange change)
+    {
+        if ((change & (SettingsChange.Render | SettingsChange.Adjustments)) != 0)
+        {
+            _settings.ApplyTo(_renderer);
+            DrawGuides();
+        }
+        if ((change & SettingsChange.Audio) != 0)
+        {
+            _audioSettings = _settings.AudioSettings;
+            if (_audio is { } audio) audio.Settings = _audioSettings;
+        }
+        if ((change & SettingsChange.Prefs) != 0)
+        {
+            ApplyAlwaysOnTop();
+            ApplyCleanMode();
+            UpdateStats();
+            if (!_settings.LockAspect) _aspectLock.Aspect = null;
+            else if (_guideSource.Width > 0) _aspectLock.Aspect = (double)_guideSource.Width / _guideSource.Height;
         }
     }
 
@@ -286,7 +308,7 @@ public sealed partial class MainWindow : Window
     {
         ShowCursor();
         var y = e.GetCurrentPoint(Root).Position.Y;
-        if (_prefs.Prefs.ShowControlsOnHover && Root.ActualHeight - y <= BarZone) ShowControls();
+        if (_settings.ShowControlsOnHover && Root.ActualHeight - y <= BarZone) ShowControls();
         RestartIdle();
     }
 
@@ -389,6 +411,8 @@ public sealed partial class MainWindow : Window
         }
         items.Add(scale);
         items.Add(Toggle("Sharp Pixels", Model.SharpPixels, v => Model.SharpPixels = v));
+        items.Add(PictureLookMenu());
+        items.Add(GuidesMenu());
         var size = new MenuFlyoutSubItem { Text = "Window Size", Icon = new FontIcon { Glyph = "\uE9A6" } };
         size.Items.Add(Item("Half Size (50 %)", "\uE73F", () => SizeToVideo(0.5)));
         size.Items.Add(Item("Actual Pixels (100 %)", "\uE9A6", () => SizeToVideo(1), "Ctrl+0"));
@@ -396,12 +420,59 @@ public sealed partial class MainWindow : Window
         items.Add(size);
         items.Add(new MenuFlyoutSeparator());
         items.Add(Toggle("Show Diagnostics", Model.ShowDiagnostics, v => Model.ShowDiagnostics = v));
+        items.Add(Item("Settings…", "\uE713", OpenSettings, "Ctrl+,"));
         items.Add(Item("Connection Help…", "\uE897", async () => await ConnectionHelp.ShowAsync(Content.XamlRoot)));
         items.Add(Toggle("Keep Window on Top", Model.AlwaysOnTop, v => Model.AlwaysOnTop = v, "Ctrl+T"));
         items.Add(Toggle("Clean Mode", Model.CleanMode, v => Model.CleanMode = v));
         items.Add(new MenuFlyoutSeparator());
         items.Add(Item("Save Screenshot", "\uE722", SaveScreenshot, "Ctrl+Shift+S"));
         items.Add(Item("Copy Frame", "\uE8C8", CopyFrame));
+    }
+
+    private MenuFlyoutSubItem PictureLookMenu()
+    {
+        var menu = new MenuFlyoutSubItem { Text = "Picture Look", Icon = new FontIcon { Glyph = "\uE790" } };
+        var current = LookPreset.Of(_settings.Preset.Adjustments);
+        foreach (var look in LookPreset.All)
+        {
+            var item = new RadioMenuFlyoutItem { Text = look.Title, GroupName = "look", IsChecked = current == look };
+            item.Click += (_, _) => _settings.ApplyLook(look);
+            menu.Items.Add(item);
+        }
+        return menu;
+    }
+
+    private MenuFlyoutSubItem GuidesMenu()
+    {
+        var guides = _prefs.Prefs.Guides;
+        var menu = new MenuFlyoutSubItem { Text = "Guides", Icon = new FontIcon { Glyph = "\uE80A" } };
+        menu.Items.Add(Toggle("Rule of Thirds", guides.Thirds, v => UpdateGuides(g => g with { Thirds = v })));
+        menu.Items.Add(Toggle("Center Cross", guides.Center, v => UpdateGuides(g => g with { Center = v })));
+        menu.Items.Add(Toggle("Safe Areas (90 % / 80 %)", guides.SafeAreas, v => UpdateGuides(g => g with { SafeAreas = v })));
+        menu.Items.Add(new MenuFlyoutSeparator());
+        var none = new RadioMenuFlyoutItem { Text = "No Aspect Mask", GroupName = "mask", IsChecked = guides.Mask is null };
+        none.Click += (_, _) => UpdateGuides(g => g with { Mask = null });
+        menu.Items.Add(none);
+        foreach (var mask in Enum.GetValues<GuideMask>())
+        {
+            var item = new RadioMenuFlyoutItem { Text = $"Mask {GuideSettings.Title(mask)}", GroupName = "mask", IsChecked = guides.Mask == mask };
+            item.Click += (_, _) => UpdateGuides(g => g with { Mask = mask });
+            menu.Items.Add(item);
+        }
+        return menu;
+    }
+
+    private void UpdateGuides(Func<GuideSettings, GuideSettings> change)
+    {
+        _prefs.Update(p => p.Guides = change(p.Guides));
+        DrawGuides();
+    }
+
+    private void DrawGuides()
+    {
+        var (w, h) = _guideSource;
+        var geometry = RenderGeometry.Compute(w, h, Root.ActualWidth, Root.ActualHeight, Model.Scale);
+        GuideOverlay.Draw(GuideCanvas, _prefs.Prefs.Guides, geometry.Viewport);
     }
 
     /// <summary>Right-click menu: the Mac's context menu (input, view options, full screen).</summary>
@@ -483,6 +554,7 @@ public sealed partial class MainWindow : Window
         Add(VirtualKey.T, VirtualKeyModifiers.Control, () => Model.AlwaysOnTop = !Model.AlwaysOnTop);
         Add(VirtualKey.S, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift, SaveScreenshot);
         Add(VirtualKey.Number0, VirtualKeyModifiers.Control, () => SizeToVideo(1));
+        Add((VirtualKey)188, VirtualKeyModifiers.Control, OpenSettings); // VK_OEM_COMMA
         Add(VirtualKey.Number1, VirtualKeyModifiers.Control, () => Model.Scale = ScaleMode.Fit);
         Add(VirtualKey.Number2, VirtualKeyModifiers.Control, () => Model.Scale = ScaleMode.Fill);
         Add(VirtualKey.Number3, VirtualKeyModifiers.Control, () => Model.Scale = ScaleMode.Stretch);
@@ -555,10 +627,13 @@ public sealed partial class MainWindow : Window
         if (_capture is { Catalog.Devices.Count: > 0 }) entries.Add(TrayIcon.MenuEntry.Separator);
         entries.Add(new("Mute", () => Model.Muted = !Model.Muted, Checked: Model.Muted));
         entries.Add(new("Save Screenshot", SaveScreenshot, Enabled: Model.IsLive));
+        entries.Add(new("Settings…", OpenSettings));
         entries.Add(TrayIcon.MenuEntry.Separator);
         entries.Add(new("Quit HDMI Captain", Close));
         return entries;
     }
+
+    private void OpenSettings() => SettingsWindow.Show(_settings, _capture);
 
     private void ShowFromTray()
     {
@@ -582,6 +657,7 @@ public sealed partial class MainWindow : Window
                 case "size50": SizeToVideo(0.5); break;
                 case "actualPixels": SizeToVideo(1); break;
                 case "fullScreen": ToggleFullScreen(); break;
+                case "settings": OpenSettings(); break;
             }
         };
         timer.Start();
@@ -719,6 +795,8 @@ public sealed partial class MainWindow : Window
     private void Shutdown()
     {
         SaveFrame();
+        _settings.Flush();
+        SettingsWindow.CloseIfOpen();
         _statsTimer.Stop();
         _idleTimer.Stop();
         ShowCursor();
