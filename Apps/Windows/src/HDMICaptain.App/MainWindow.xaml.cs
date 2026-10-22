@@ -45,6 +45,7 @@ public sealed partial class MainWindow : Window
     private CaptureController? _capture;
     private TestPatternSource? _testPattern;
     private readonly SignalMonitor _signal = new();
+    private readonly ScopeSampler _scopes = new();
     private WasapiAudioPipeline? _audio;
     private string? _audioDeviceKey;
     private AudioSettings _audioSettings = new();
@@ -217,6 +218,7 @@ public sealed partial class MainWindow : Window
     {
         _renderer.Render(in frame);
         _signal.Observe(in frame);
+        _scopes.Observe(in frame);
         Interlocked.Increment(ref _frames);
     }
 
@@ -432,6 +434,7 @@ public sealed partial class MainWindow : Window
         items.Add(Toggle("Keep Window on Top", Model.AlwaysOnTop, v => Model.AlwaysOnTop = v, "Ctrl+T"));
         items.Add(Toggle("Clean Mode", Model.CleanMode, v => Model.CleanMode = v));
         items.Add(new MenuFlyoutSeparator());
+        items.Add(Item("Show Scopes", "\uE9D2", () => ScopesWindow.Show(_scopes)));
         items.Add(Item("Save Screenshot", "\uE722", SaveScreenshot, "Ctrl+Shift+S"));
         items.Add(Item("Copy Frame", "\uE8C8", CopyFrame));
     }
@@ -724,6 +727,7 @@ public sealed partial class MainWindow : Window
                 case "actualPixels": SizeToVideo(1); break;
                 case "fullScreen": ToggleFullScreen(); break;
                 case "settings": OpenSettings(); break;
+                case "scopes": ScopesWindow.Show(_scopes); break;
                 case "upgrade": _ = ShowUpgradeAsync(ProFeature.Recording); break;
             }
         };
@@ -864,6 +868,7 @@ public sealed partial class MainWindow : Window
         SaveFrame();
         _settings.Flush();
         SettingsWindow.CloseIfOpen();
+        ScopesWindow.CloseIfOpen();
         _statsTimer.Stop();
         _idleTimer.Stop();
         ShowCursor();
