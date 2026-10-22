@@ -29,6 +29,7 @@ public sealed class ScopesWindow : Window
     {
         _sampler = sampler;
         Title = "Scopes";
+        AppWindow.TitleBar.PreferredTheme = Microsoft.UI.Windowing.TitleBarTheme.Dark;
         SystemBackdrop = new MicaBackdrop();
         AppWindow.Resize(new Windows.Graphics.SizeInt32(560, 760));
 

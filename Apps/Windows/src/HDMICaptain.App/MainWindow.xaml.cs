@@ -64,11 +64,12 @@ public sealed partial class MainWindow : Window
     private int _openFlyouts;
     private bool _cursorHidden;
 
-    public ViewerModel Model { get; } = new();
+    public ViewerModel Model { get; }
 
     public MainWindow(LaunchOptions options)
     {
         _options = options;
+        Model = new ViewerModel { QaDiagnostics = options.QaShowStats };
         InitializeComponent();
         ExtendsContentIntoTitleBar = true;
         AppWindow.SetIcon("Assets/AppIcon.ico");
@@ -97,7 +98,6 @@ public sealed partial class MainWindow : Window
         // Settings (task 095) own prefs and the current card's preset; ViewerModel mirrors the toggles both ways.
         _settings = new SettingsModel(_prefs);
         _settings.Attach(Model);
-        if (options.QaShowStats) Model.ShowDiagnostics = true;
         _settings.Changed += OnSettingsChanged;
         _settings.LutFailed += ShowToast;
         _pro = new ProGate(CreateProStore(options));
@@ -144,7 +144,8 @@ public sealed partial class MainWindow : Window
             _capture.FrameArrived += OnFrame;
             _capture.StateChanged += state => DispatcherQueue.TryEnqueue(() => OnCaptureState(state));
             _capture.Catalog.PreferredChanged += key => DispatcherQueue.TryEnqueue(() => _prefs.UpdateState(s => s with { PreferredDeviceKey = key }));
-            _capture.Start();
+            if (_prefs.State.WelcomeShown) _capture.Start();
+            else Model.Phase = new ViewerPhase.Welcome();
         }
     }
 
@@ -323,6 +324,11 @@ public sealed partial class MainWindow : Window
                 break;
             case "retry":
                 Reconnect();
+                break;
+            case "welcome":
+                _prefs.UpdateState(state => state with { WelcomeShown = true });
+                Model.Phase = new ViewerPhase.Scanning();
+                _capture?.Start();
                 break;
         }
     }
@@ -879,7 +885,7 @@ public sealed partial class MainWindow : Window
         (_lastAllocated, _lastGen0) = (allocated, gen0);
         WriteSoak(fps);
         if (++_perfTicks % 30 == 0 && Model.IsLive) AppLog.Write($"[perf] {fps:F1} fps, {_allocText}, heap {GC.GetTotalMemory(false) / 1_048_576} MB");
-        if (!Model.ShowDiagnostics) return;
+        if (!Model.DiagnosticsShown) return;
         var (w, h) = _renderer.SourceSize;
         var surface = _childWindow != null ? "HWND" : "SwapChainPanel";
         var sound = _audio is { } a ? $"\naudio buffered {a.BufferedMs:F0} ms" : "";

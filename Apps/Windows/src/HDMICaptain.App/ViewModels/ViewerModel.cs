@@ -10,6 +10,8 @@ public abstract record ViewerPhase
     private ViewerPhase() { }
 
     public sealed record Scanning : ViewerPhase;
+    /// <summary>First run: explains the camera/microphone prompts before capture starts (task 062 on Mac).</summary>
+    public sealed record Welcome : ViewerPhase;
     public sealed record PermissionDenied : ViewerPhase;
     public sealed record Connecting(string Name) : ViewerPhase;
     public sealed record Waiting(string Name) : ViewerPhase;
@@ -34,7 +36,11 @@ public sealed record StatusCopy(string Glyph, string Title, string Message, stri
 
     public static StatusCopy? For(ViewerPhase phase) => phase switch
     {
-        ViewerPhase.Scanning => new("\uE8EA", "Connect a capture card",
+        ViewerPhase.Welcome => new("\uE714", "Welcome to HDMI Captain",
+            $"Your {Device} sees an HDMI capture card as a camera and a microphone, so Windows may ask for access next. " +
+            $"HDMI Captain uses it only to show the picture and play the sound, and nothing leaves your {Device}.",
+            Primary: StatusAction.Continue),
+        ViewerPhase.Scanning => new("\uE714", "Connect a capture card",
             $"Plug an HDMI capture card into this {Device}. The picture appears automatically.",
             Secondary: StatusAction.Help),
         ViewerPhase.PermissionDenied => new("\uE8A6", "Camera access required",
@@ -69,6 +75,7 @@ public sealed record StatusCopy(string Glyph, string Title, string Message, stri
 public sealed record StatusAction(string Title, string Id)
 {
     public static readonly StatusAction Help = new("Connection Help…", "help");
+    public static readonly StatusAction Continue = new("Continue", "welcome");
     public static readonly StatusAction OpenPrivacySettings = new("Open Settings", "privacy");
     public static readonly StatusAction CheckAgain = new("Check Again", "retry");
     public static readonly StatusAction Reconnect = new("Reconnect", "retry");
@@ -125,7 +132,12 @@ public sealed partial class ViewerModel : ObservableObject
     public StatusCopy? Status => Phase is ViewerPhase.Live && Signal.IsNoSignal ? StatusCopy.NoSignal(Signal) : StatusCopy.For(Phase);
     public Visibility StatusVisibility => Status is null ? Visibility.Collapsed : Visibility.Visible;
     public bool IsLive => Phase is ViewerPhase.Live;
-    public Visibility StatsVisibility => ShowDiagnostics ? Visibility.Visible : Visibility.Collapsed;
+    /// <summary>DEBUG -qaShowStats: shows diagnostics for this run only, never saved to prefs (CLAUDE.md QA rule).</summary>
+    public bool QaDiagnostics { get; init; }
+
+    public bool DiagnosticsShown => ShowDiagnostics || QaDiagnostics;
+
+    public Visibility StatsVisibility => DiagnosticsShown ? Visibility.Visible : Visibility.Collapsed;
     public string MuteGlyph => Muted ? "\uE74F" : "\uE767";
     public string FullScreenGlyph => IsFullScreen ? "\uE73F" : "\uE740";
 

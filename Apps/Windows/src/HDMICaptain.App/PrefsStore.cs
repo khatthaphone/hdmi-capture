@@ -74,7 +74,7 @@ public sealed class PrefsStore
 public sealed record WindowFrame(int X, int Y, int Width, int Height);
 
 /// <summary>Remembered between launches: where the window was and which card the user picked last (DeviceKey).</summary>
-public sealed record AppState(WindowFrame? Frame = null, string? PreferredDeviceKey = null);
+public sealed record AppState(WindowFrame? Frame = null, string? PreferredDeviceKey = null, bool WelcomeShown = false);
 
 [System.Text.Json.Serialization.JsonSourceGenerationOptions(PropertyNamingPolicy = System.Text.Json.Serialization.JsonKnownNamingPolicy.CamelCase)]
 [System.Text.Json.Serialization.JsonSerializable(typeof(AppState))]

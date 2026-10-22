@@ -49,6 +49,7 @@ public sealed class SettingsWindow : Window
         _model = model;
         _capture = capture;
         Title = "HDMI Captain Settings";
+        AppWindow.TitleBar.PreferredTheme = Microsoft.UI.Windowing.TitleBarTheme.Dark;
         AppWindow.Resize(new SizeInt32(900, 680));
 
         _nav.PaneDisplayMode = NavigationViewPaneDisplayMode.Left;
