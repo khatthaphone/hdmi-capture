@@ -39,16 +39,16 @@
         <Canvas x:Name="GuideCanvas" IsHitTestVisible="False" />
 
         <!-- Status card for every non-live phase (StatusScreens.swift). XAML only: never in the source texture. -->
-        <Grid Visibility="{x:Bind Model.StatusVisibility, Mode=OneWay}" Background="#99000000">
+        <Grid Visibility="{x:Bind Model.StatusVisibility, Mode=OneWay}" Background="{ThemeResource OverlayScrimBrush}">
             <StackPanel MaxWidth="440" Margin="24" Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <Grid Height="48">
-                    <FontIcon x:Name="StatusGlyph" FontSize="40" Foreground="White" />
-                    <ProgressRing x:Name="StatusSpinner" Width="40" Height="40" IsActive="False" Foreground="White" />
+                    <FontIcon x:Name="StatusGlyph" FontSize="40" Foreground="{ThemeResource OverlayTextBrush}" />
+                    <ProgressRing x:Name="StatusSpinner" Width="40" Height="40" IsActive="False" Foreground="{ThemeResource OverlayTextBrush}" />
                 </Grid>
-                <TextBlock x:Name="StatusTitle" Style="{StaticResource SubtitleTextBlockStyle}" Foreground="White"
+                <TextBlock x:Name="StatusTitle" Style="{StaticResource SubtitleTextBlockStyle}" Foreground="{ThemeResource OverlayTextBrush}"
                            TextAlignment="Center" TextWrapping="WrapWholeWords" />
-                <TextBlock x:Name="StatusMessage" Foreground="White" Opacity="0.75" TextAlignment="Center" TextWrapping="WrapWholeWords" />
-                <TextBlock x:Name="StatusDetail" Style="{StaticResource CaptionTextBlockStyle}" Foreground="White" Opacity="0.5"
+                <TextBlock x:Name="StatusMessage" Foreground="{ThemeResource OverlayTextBrush}" Opacity="0.75" TextAlignment="Center" TextWrapping="WrapWholeWords" />
+                <TextBlock x:Name="StatusDetail" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource OverlayTextBrush}" Opacity="0.5"
                            TextAlignment="Center" TextWrapping="WrapWholeWords" />
                 <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Margin="0,6,0,0">
                     <Button x:Name="StatusPrimary" Style="{StaticResource AccentButtonStyle}" Click="OnStatusAction" />
@@ -59,20 +59,20 @@
 
         <!-- Diagnostics (verbatim, not localized). -->
         <Border Visibility="{x:Bind Model.StatsVisibility, Mode=OneWay}" Margin="12,40,12,12" Padding="8,6" CornerRadius="6"
-                Background="#A6000000" HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False">
-            <TextBlock Text="{x:Bind Model.StatsText, Mode=OneWay}" FontFamily="Consolas" FontSize="12" Foreground="White" />
+                Background="{ThemeResource OverlayStatsBrush}" HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False">
+            <TextBlock Text="{x:Bind Model.StatsText, Mode=OneWay}" FontFamily="Consolas" FontSize="12" Foreground="{ThemeResource OverlayTextBrush}" />
         </Border>
 
         <!-- Feedback toast ("Screenshot saved"). -->
-        <Border x:Name="Toast" Opacity="0" Margin="0,48,0,0" Padding="14,8" CornerRadius="16" Background="#CC1F1F1F"
-                BorderBrush="#24FFFFFF" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Top" IsHitTestVisible="False">
-            <TextBlock x:Name="ToastText" Foreground="White" />
+        <Border x:Name="Toast" Opacity="0" Margin="0,48,0,0" Padding="14,8" CornerRadius="16" Background="{ThemeResource OverlayToastBrush}"
+                BorderBrush="{ThemeResource OverlayBorderBrush}" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Top" IsHitTestVisible="False">
+            <TextBlock x:Name="ToastText" Foreground="{ThemeResource OverlayTextBrush}" />
         </Border>
 
         <!-- Hover control bar (ControlBar.swift): shown near the bottom edge, fades after 3 s, never in outputs. -->
         <Border x:Name="ControlBar" Opacity="0" IsHitTestVisible="False" Margin="12,0,12,20" Padding="6,5"
                 HorizontalAlignment="Center" VerticalAlignment="Bottom" CornerRadius="21"
-                Background="#8C141414" BorderBrush="#24FFFFFF" BorderThickness="1"
+                Background="{ThemeResource OverlayPanelBrush}" BorderBrush="{ThemeResource OverlayBorderBrush}" BorderThickness="1"
                 PointerEntered="OnBarPointerEntered" PointerExited="OnBarPointerExited">
             <StackPanel Orientation="Horizontal" Spacing="2">
                 <DropDownButton x:Name="InputButton" Style="{StaticResource BarDropDown}" x:Uid="Bar_Input">
@@ -101,7 +101,7 @@
                 <Button x:Name="RecordButton" Style="{StaticResource BarButton}" Click="OnRecordClick" x:Uid="Bar_Record">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Ellipse x:Name="RecordDot" Width="10" Height="10" Fill="Red" />
-                        <Rectangle x:Name="StopSquare" Width="9" Height="9" RadiusX="2" RadiusY="2" Fill="White" Visibility="Collapsed" />
+                        <Rectangle x:Name="StopSquare" Width="9" Height="9" RadiusX="2" RadiusY="2" Fill="{ThemeResource OverlayTextBrush}" Visibility="Collapsed" />
                         <TextBlock x:Name="RecordText" x:Uid="Bar_RecordText" FontSize="12" FontWeight="SemiBold" />
                     </StackPanel>
                 </Button>

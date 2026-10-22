@@ -9,6 +9,26 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+            <!-- Overlays drawn over the video (status card, toast, control bar, diagnostics). High contrast swaps them for
+                 the user's system colours, so text stays readable whatever the theme does to the buttons inside. -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="OverlayScrimBrush" Color="#99000000" />
+                    <SolidColorBrush x:Key="OverlayPanelBrush" Color="#8C141414" />
+                    <SolidColorBrush x:Key="OverlayToastBrush" Color="#CC1F1F1F" />
+                    <SolidColorBrush x:Key="OverlayStatsBrush" Color="#A6000000" />
+                    <SolidColorBrush x:Key="OverlayBorderBrush" Color="#24FFFFFF" />
+                    <SolidColorBrush x:Key="OverlayTextBrush" Color="White" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="OverlayScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="OverlayPanelBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="OverlayToastBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="OverlayStatsBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="OverlayBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="OverlayTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
