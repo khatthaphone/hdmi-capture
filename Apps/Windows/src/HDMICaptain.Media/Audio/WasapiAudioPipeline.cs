@@ -146,6 +146,10 @@ public sealed class WasapiAudioPipeline : IDisposable
 
             var capture = client.Service<IAudioCaptureClient>();
             var scratch = new float[48_000 * 2];
+#if DEBUG
+            var lastLog = Environment.TickCount64;
+            var (maxPacket, maxGapMs, lastPacket) = (0u, 0.0, Stopwatch.GetTimestamp());
+#endif
             client.Audio.Start();
             while (_running)
             {
@@ -164,6 +168,16 @@ public sealed class WasapiAudioPipeline : IDisposable
                         count = SampleConvert.ToStereoFloat(new ReadOnlySpan<byte>(data, (int)frames * format.BlockAlign),
                             channels, format.Bits, format.IsFloat, scratch);
                     capture.ReleaseBuffer(frames);
+#if DEBUG
+                    (maxPacket, maxGapMs) = (Math.Max(maxPacket, frames), Math.Max(maxGapMs, Stopwatch.GetElapsedTime(lastPacket).TotalMilliseconds));
+                    lastPacket = Stopwatch.GetTimestamp();
+                    if (Environment.TickCount64 - lastLog > 1000)
+                    {
+                        lastLog = Environment.TickCount64;
+                        Log?.Invoke($"capture max packet {maxPacket} fr, max gap {maxGapMs:F1} ms");
+                        (maxPacket, maxGapMs) = (0u, 0.0);
+                    }
+#endif
                     // QPC position is already in 100 ns units (IAudioCaptureClient::GetBuffer).
                     CapturedAudio?.Invoke(scratch.AsSpan(0, count * 2), (long)qpc);
                     _ring.Write(scratch.AsSpan(0, count * 2));
@@ -228,6 +242,7 @@ public sealed class WasapiAudioPipeline : IDisposable
             var clock = Stopwatch.StartNew();
 #if DEBUG
             var lastLog = 0L;
+            var (minFill, maxFrames, maxGapMs) = (int.MaxValue, 0, 0.0);
 #endif
             var primed = false;
             client.Audio.Start();
@@ -241,7 +256,11 @@ public sealed class WasapiAudioPipeline : IDisposable
                 var settings = _settings;
                 var elapsed = clock.Elapsed.TotalSeconds;
                 clock.Restart();
-                var correction = _drift.Update(_ring.FillFrames, elapsed);
+                var fill = _ring.FillFrames;
+                var correction = _drift.Update(fill, elapsed);
+#if DEBUG
+                (minFill, maxFrames, maxGapMs) = (Math.Min(minFill, fill), Math.Max(maxFrames, frames), Math.Max(maxGapMs, elapsed * 1000));
+#endif
                 var output = scratch.AsSpan(0, frames * 2);
                 // Start once the ring holds the target, so the first periods don't underrun.
                 primed |= _drift.SmoothedFillMs >= _drift.TargetMs * 0.9 || _ring.FillFrames * 1000.0 / _captureRate >= _drift.TargetMs;
@@ -268,7 +287,9 @@ public sealed class WasapiAudioPipeline : IDisposable
                 if (Environment.TickCount64 - lastLog > 1000)
                 {
                     lastLog = Environment.TickCount64;
-                    Log?.Invoke($"fill {_drift.SmoothedFillMs:F1} ms (target {_drift.TargetMs:F0}), ratio {correction:F6}, underflow {_ring.UnderflowFrames}, overflow {_ring.OverflowFrames}");
+                    Log?.Invoke($"fill {_drift.SmoothedFillMs:F1} ms (target {_drift.TargetMs:F0}, min {minFill} fr), ratio {correction:F6}, " +
+                        $"max write {maxFrames} fr, max gap {maxGapMs:F1} ms, underflow {_ring.UnderflowFrames}, overflow {_ring.OverflowFrames}");
+                    (minFill, maxFrames, maxGapMs) = (int.MaxValue, 0, 0.0);
                 }
 #endif
             }

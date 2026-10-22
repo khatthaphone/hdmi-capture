@@ -748,8 +748,14 @@ Connect capture cards to see them here.</value>
   <data name="Toast_ScreenshotSaved" xml:space="preserve">
     <value>Screenshot saved</value>
   </data>
-  <data name="Toast_SoundBlocked" xml:space="preserve">
-    <value>Sound is blocked. Allow desktop apps in Settings › Privacy &amp; security › Microphone.</value>
+  <data name="MicBadge_Text.Text" xml:space="preserve">
+    <value>No sound: microphone access is off</value>
+  </data>
+  <data name="MicBadge_Open.Content" xml:space="preserve">
+    <value>Open Settings</value>
+  </data>
+  <data name="MicBadge_Open.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Opens Settings › Privacy &amp; security › Microphone. Capture cards deliver sound as a microphone.</value>
   </data>
   <data name="Toast_SwitchToLive" xml:space="preserve">
     <value>Switch to the live input to record</value>

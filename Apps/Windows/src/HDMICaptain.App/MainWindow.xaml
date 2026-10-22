@@ -63,6 +63,16 @@
             <TextBlock Text="{x:Bind Model.StatsText, Mode=OneWay}" FontFamily="Consolas" FontSize="12" Foreground="{ThemeResource OverlayTextBrush}" />
         </Border>
 
+        <!-- Microphone privacy is off (spec §13.6): the picture keeps running; this stays up while live and links to Settings. -->
+        <Border x:Name="MicBadge" Visibility="Collapsed" Margin="12,44,12,0" Padding="12,4,4,4" CornerRadius="18" Background="{ThemeResource OverlayToastBrush}"
+                BorderBrush="{ThemeResource OverlayBorderBrush}" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Top">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <FontIcon Glyph="&#xE74F;" FontSize="14" Foreground="{ThemeResource OverlayTextBrush}" />
+                <TextBlock x:Uid="MicBadge_Text" Foreground="{ThemeResource OverlayTextBrush}" VerticalAlignment="Center" />
+                <Button x:Uid="MicBadge_Open" Click="OnMicBadgeClick" />
+            </StackPanel>
+        </Border>
+
         <!-- Feedback toast ("Screenshot saved"). -->
         <Border x:Name="Toast" Opacity="0" Margin="0,48,0,0" Padding="14,8" CornerRadius="16" Background="{ThemeResource OverlayToastBrush}"
                 BorderBrush="{ThemeResource OverlayBorderBrush}" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Top" IsHitTestVisible="False">

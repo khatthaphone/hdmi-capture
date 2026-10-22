@@ -75,7 +75,7 @@ public sealed record StatusCopy(string Glyph, string Title, string Message, stri
 public static class QaPhases
 {
     public static readonly string[] All =
-        ["welcome", "scanning", "permission", "connecting", "waiting", "noSignal", "black", "reconnecting", "disconnected", "inUse", "sleep", "privacyOff", "failed"];
+        ["welcome", "scanning", "permission", "connecting", "waiting", "noSignal", "black", "reconnecting", "disconnected", "inUse", "sleep", "privacyOff", "failed", "micDenied"];
 
     public static (ViewerPhase Phase, SignalContent Signal)? Parse(string name) => name switch
     {
@@ -91,6 +91,7 @@ public static class QaPhases
         "inUse" => (new ViewerPhase.Paused(PauseReason.InUseByAnotherApp), new SignalContent.Picture()),
         "sleep" => (new ViewerPhase.Paused(PauseReason.Sleep), new SignalContent.Picture()),
         "privacyOff" => (new ViewerPhase.Paused(PauseReason.PrivacyToggle), new SignalContent.Picture()),
+        "micDenied" => (new ViewerPhase.Live(), new SignalContent.Picture()), // live, with the microphone badge
         "failed" => (new ViewerPhase.Failed("MF_E_HW_MFT_FAILED_START_STREAMING (0xC00D3704)"), new SignalContent.Picture()),
         _ => null,
     };

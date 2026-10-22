@@ -53,6 +53,7 @@ public sealed partial class MainWindow : Window
     private readonly ScopeSampler _scopes = new();
     private WasapiAudioPipeline? _audio;
     private string? _audioDeviceKey;
+    private bool _micDenied;
     private AudioSettings _audioSettings = new();
     private bool _hadCard;
     private (int Width, int Height) _guideSource = (1920, 1080);
@@ -109,6 +110,7 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         Title = Strings.Get("App_Name");
         ExtendsContentIntoTitleBar = true;
+        Activated += OnWindowActivated;
         AppWindow.SetIcon("Assets/AppIcon.ico");
         if (IsPrimary) RestoreFrame();
         else AppWindow.Resize(new Windows.Graphics.SizeInt32(960, 580));
@@ -176,6 +178,8 @@ public sealed partial class MainWindow : Window
             Model.InputName = "UGREEN-25854";
             Model.Phase = fake.Phase;
             Model.Signal = fake.Signal;
+            _micDenied = qaPhase == "micDenied";
+            UpdateMicBadge();
         }
         else if (options.TestPattern is { } pattern)
         {
@@ -275,7 +279,12 @@ public sealed partial class MainWindow : Window
             var audio = new WasapiAudioPipeline(endpoint.Id) { Settings = _silenced ? settings with { Muted = true } : settings };
             audio.Log += line => AppLog.Write($"[audio] {line}");
             audio.AccessDenied += () => DispatcherQueue.TryEnqueue(() =>
-                ShowToast(Strings.Get("Toast_SoundBlocked")));
+            {
+                if (!ReferenceEquals(_audio, audio)) return;
+                _micDenied = true;
+                UpdateMicBadge();
+                Announce(Strings.Get("MicBadge_Text/Text"), "status");
+            });
             audio.Start();
             Interlocked.Exchange(ref _audio, audio)?.Dispose();
             DispatcherQueue.TryEnqueue(() => { if (ReferenceEquals(_audio, audio)) _recording.AttachAudio(audio); });
@@ -284,6 +293,8 @@ public sealed partial class MainWindow : Window
 
     private void StopAudio()
     {
+        _micDenied = false;
+        UpdateMicBadge();
         _audioDeviceKey = null;
         _recording.AttachAudio(null);
         var audio = Interlocked.Exchange(ref _audio, null);
@@ -291,6 +302,25 @@ public sealed partial class MainWindow : Window
     }
 
     private void Reconnect() => _capture?.Retry();
+
+    // MARK: - Microphone badge
+
+    private void UpdateMicBadge()
+    {
+        var show = _micDenied && Model.IsLive;
+        MicBadge.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        Toast.Margin = new Thickness(0, show ? 92 : 48, 0, 0);
+    }
+
+    private async void OnMicBadgeClick(object sender, RoutedEventArgs e) =>
+        await Launcher.LaunchUriAsync(new Uri("ms-settings:privacy-microphone"));
+
+    // Back from Settings: if sound was blocked, try the card's microphone again (the badge goes once it opens).
+    private void OnWindowActivated(object sender, WindowActivatedEventArgs args)
+    {
+        if (args.WindowActivationState == WindowActivationState.Deactivated || !_micDenied || _audioDeviceKey is not { } key) return;
+        if (_capture?.Catalog.Devices.FirstOrDefault(d => d.Key == key) is { } device) StartAudio(device);
+    }
 
     // MF thread: the last frames of a card being stopped for a test pattern are dropped.
     private void OnCaptureFrame(in VideoFrame frame)
@@ -353,6 +383,7 @@ public sealed partial class MainWindow : Window
         {
             case nameof(ViewerModel.Status): // phase or signal (the no-signal card covers a live picture)
                 ShowStatus();
+                UpdateMicBadge();
                 break;
             case nameof(ViewerModel.Scale):
                 DrawGuides();
