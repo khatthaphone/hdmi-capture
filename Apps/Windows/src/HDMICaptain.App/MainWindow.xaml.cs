@@ -34,6 +34,7 @@ public sealed partial class MainWindow : Window
     private readonly SwapChainPanelHost? _panelHost;
     private readonly ChildVideoWindow? _childWindow;
     private readonly AspectLock _aspectLock;
+    private readonly TrayIcon _tray;
     private readonly PrefsStore _prefs = new();
     private readonly DispatcherTimer _statsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _idleTimer = new() { Interval = IdleDelay };
@@ -76,6 +77,7 @@ public sealed partial class MainWindow : Window
             _target = _panelHost.Target;
         }
         _aspectLock = new AspectLock(_hwnd);
+        _tray = new TrayIcon(_hwnd, Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"), "HDMI Captain", TrayMenu, ShowFromTray);
 
         AppWindow.Changed += OnAppWindowChanged;
         Closed += (_, _) => Shutdown();
@@ -103,6 +105,7 @@ public sealed partial class MainWindow : Window
         ControlBar.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(200) };
         Toast.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(200) };
         if (options.QaPinControls) ShowControls();
+        if (options.QaAction is { } qaAction) RunQaActionSoon(qaAction);
 
         if (options.TestPattern is { } pattern)
         {
@@ -221,6 +224,9 @@ public sealed partial class MainWindow : Window
             case nameof(ViewerModel.Muted) or nameof(ViewerModel.Volume):
                 _audioSettings = _audioSettings with { Volume = (float)(Model.Volume / 100), Muted = Model.Muted };
                 if (_audio is { } audio) audio.Settings = _audioSettings;
+                break;
+            case nameof(ViewerModel.InputName):
+                _tray.SetTip($"HDMI Captain — {Model.InputName}");
                 break;
             case nameof(ViewerModel.ShowDiagnostics):
                 _prefs.Update(p => p.ShowStats = Model.ShowDiagnostics);
@@ -383,6 +389,11 @@ public sealed partial class MainWindow : Window
         }
         items.Add(scale);
         items.Add(Toggle("Sharp Pixels", Model.SharpPixels, v => Model.SharpPixels = v));
+        var size = new MenuFlyoutSubItem { Text = "Window Size", Icon = new FontIcon { Glyph = "\uE9A6" } };
+        size.Items.Add(Item("Half Size (50 %)", "\uE73F", () => SizeToVideo(0.5)));
+        size.Items.Add(Item("Actual Pixels (100 %)", "\uE9A6", () => SizeToVideo(1), "Ctrl+0"));
+        size.Items.Add(Item("Double Size (200 %)", "\uE740", () => SizeToVideo(2)));
+        items.Add(size);
         items.Add(new MenuFlyoutSeparator());
         items.Add(Toggle("Show Diagnostics", Model.ShowDiagnostics, v => Model.ShowDiagnostics = v));
         items.Add(Item("Connection Help…", "\uE897", async () => await ConnectionHelp.ShowAsync(Content.XamlRoot)));
@@ -471,6 +482,7 @@ public sealed partial class MainWindow : Window
         Add(VirtualKey.M, VirtualKeyModifiers.Control, () => Model.Muted = !Model.Muted);
         Add(VirtualKey.T, VirtualKeyModifiers.Control, () => Model.AlwaysOnTop = !Model.AlwaysOnTop);
         Add(VirtualKey.S, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift, SaveScreenshot);
+        Add(VirtualKey.Number0, VirtualKeyModifiers.Control, () => SizeToVideo(1));
         Add(VirtualKey.Number1, VirtualKeyModifiers.Control, () => Model.Scale = ScaleMode.Fit);
         Add(VirtualKey.Number2, VirtualKeyModifiers.Control, () => Model.Scale = ScaleMode.Fill);
         Add(VirtualKey.Number3, VirtualKeyModifiers.Control, () => Model.Scale = ScaleMode.Stretch);
@@ -500,6 +512,79 @@ public sealed partial class MainWindow : Window
             ApplyAlwaysOnTop();
             ApplyCleanMode();
         }
+    }
+
+    /// <summary>
+    /// Sizes the client area to the video at <paramref name="factor"/> (1 = one source pixel per screen pixel),
+    /// limited to the work area of the window's display.
+    /// </summary>
+    private void SizeToVideo(double factor)
+    {
+        var (w, h) = _renderer.SourceSize;
+        if (w == 0)
+        {
+            ShowToast("No picture to size to yet");
+            return;
+        }
+        if (Model.IsFullScreen) ToggleFullScreen();
+        // The video fills the whole Win32 client area (content extends into the title bar), which AppWindow's
+        // ClientSize leaves out, so measure the frame from GetClientRect.
+        var work = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
+        NativeWindow.GetClientRect(_hwnd, out var client);
+        var frameW = AppWindow.Size.Width - client.Width;
+        var frameH = AppWindow.Size.Height - client.Height;
+        var width = (int)Math.Round(w * factor);
+        var height = (int)Math.Round(h * factor);
+        var fit = Math.Min(1.0, Math.Min((double)(work.Width - frameW) / width, (double)(work.Height - frameH) / height));
+        AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(width * fit) + frameW, (int)(height * fit) + frameH));
+        if (fit < 1) ShowToast("Limited to the screen size");
+    }
+
+    // MARK: - Tray
+
+    private IReadOnlyList<TrayIcon.MenuEntry> TrayMenu()
+    {
+        var entries = new List<TrayIcon.MenuEntry>
+        {
+            AppWindow.IsVisible ? new("Hide Window", () => AppWindow.Hide()) : new("Show Window", ShowFromTray),
+            TrayIcon.MenuEntry.Separator,
+        };
+        var current = _capture?.CurrentDevice?.Key;
+        foreach (var device in _capture?.Catalog.Devices ?? [])
+            entries.Add(new(device.Name, () => _capture?.Select(device.Key), Checked: device.Key == current));
+        if (_capture is { Catalog.Devices.Count: > 0 }) entries.Add(TrayIcon.MenuEntry.Separator);
+        entries.Add(new("Mute", () => Model.Muted = !Model.Muted, Checked: Model.Muted));
+        entries.Add(new("Save Screenshot", SaveScreenshot, Enabled: Model.IsLive));
+        entries.Add(TrayIcon.MenuEntry.Separator);
+        entries.Add(new("Quit HDMI Captain", Close));
+        return entries;
+    }
+
+    private void ShowFromTray()
+    {
+        AppWindow.Show();
+        Activate();
+    }
+
+    // DEBUG -qaAction (CLAUDE.md): runs 1.5 s after the picture is live.
+    private void RunQaActionSoon(string action)
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+        timer.Tick += (_, _) =>
+        {
+            if (!Model.IsLive) return;
+            timer.Stop();
+            AppLog.Write($"[qa] {action}");
+            switch (action)
+            {
+                case "screenshot": SaveScreenshot(); break;
+                case "copy": CopyFrame(); break;
+                case "size50": SizeToVideo(0.5); break;
+                case "actualPixels": SizeToVideo(1); break;
+                case "fullScreen": ToggleFullScreen(); break;
+            }
+        };
+        timer.Start();
     }
 
     /// <summary>Last size and position, if that spot is still on a connected display; else 1280×760.</summary>
@@ -640,6 +725,7 @@ public sealed partial class MainWindow : Window
         _audio?.Dispose();
         _capture?.Dispose();
         _testPattern?.Dispose();
+        _tray.Dispose();
         _aspectLock.Dispose();
         _panelHost?.Dispose();
         _renderer.Dispose();
