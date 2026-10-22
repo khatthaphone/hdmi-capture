@@ -3,6 +3,7 @@ using System.Diagnostics;
 using HDMICaptain.App.Video;
 using HDMICaptain.App.ViewModels;
 using HDMICaptain.App.Views;
+using HDMICaptain.App.Recording;
 using HDMICaptain.App.Store;
 using HDMICaptain.App.Windowing;
 using HDMICaptain.Core;
@@ -13,6 +14,7 @@ using HDMICaptain.Media.Video;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -39,6 +41,8 @@ public sealed partial class MainWindow : Window
     private readonly PrefsStore _prefs = new();
     private readonly SettingsModel _settings;
     private readonly ProGate _pro;
+    private readonly RecordingController _recording;
+    private readonly DispatcherTimer _recordTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _statsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _idleTimer = new() { Interval = IdleDelay };
     private readonly DispatcherTimer _toastTimer = new() { Interval = TimeSpan.FromSeconds(2) };
@@ -90,6 +94,9 @@ public sealed partial class MainWindow : Window
             _target = _panelHost.Target;
         }
         _aspectLock = new AspectLock(_hwnd);
+        _recording = new RecordingController(_renderer);
+        _recording.Failed += message => DispatcherQueue.TryEnqueue(() => OnRecordingFailed(message));
+        _recordTimer.Tick += (_, _) => UpdateRecordButton();
         _tray = new TrayIcon(_hwnd, Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"), "HDMI Captain", TrayMenu, ShowFromTray);
 
         AppWindow.Changed += OnAppWindowChanged;
@@ -191,9 +198,13 @@ public sealed partial class MainWindow : Window
             _guideSource = (live.Info.Width, live.Info.Height);
             DrawGuides();
             if (device != null && _audioDeviceKey != device.Key) StartAudio(device);
+            // Keep Recent Footage stays on across launches and card changes, as on the Mac (Pro only).
+            if (_prefs.Prefs.RecentEnabled && !_recording.IsKeepingRecent && _pro.IsUnlocked(ProFeature.ReplayBuffer))
+                _recording.StartKeepingRecent(live.Info.FrameRate);
         }
         else if (state is CaptureState.Recovering { Reason: RecoveryReason.Waiting or RecoveryReason.Disconnected } or CaptureState.Failed)
         {
+            if (_recording.IsRecording) _ = StopRecordingAsync("Recording saved: the capture card was disconnected");
             StopAudio();
             _renderer.Clear();
         }
@@ -218,12 +229,14 @@ public sealed partial class MainWindow : Window
                 ShowToast("Sound is blocked. Allow desktop apps in Settings › Privacy & security › Microphone."));
             audio.Start();
             Interlocked.Exchange(ref _audio, audio)?.Dispose();
+            DispatcherQueue.TryEnqueue(() => { if (ReferenceEquals(_audio, audio)) _recording.AttachAudio(audio); });
         });
     }
 
     private void StopAudio()
     {
         _audioDeviceKey = null;
+        _recording.AttachAudio(null);
         var audio = Interlocked.Exchange(ref _audio, null);
         if (audio != null) Task.Run(audio.Dispose);
     }
@@ -620,6 +633,8 @@ public sealed partial class MainWindow : Window
         Add(VirtualKey.T, VirtualKeyModifiers.Control, () => Model.AlwaysOnTop = !Model.AlwaysOnTop);
         Add(VirtualKey.S, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift, SaveScreenshot);
         Add(VirtualKey.Number0, VirtualKeyModifiers.Control, () => SizeToVideo(1));
+        Add(VirtualKey.R, VirtualKeyModifiers.Control, () => _ = ToggleRecordingAsync());
+        Add(VirtualKey.R, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift, () => _ = SaveRecentAsync(TimeSpan.FromSeconds(30)));
         Add((VirtualKey)188, VirtualKeyModifiers.Control, OpenSettings); // VK_OEM_COMMA
         Add(VirtualKey.Number1, VirtualKeyModifiers.Control, () => Model.Scale = ScaleMode.Fit);
         Add(VirtualKey.Number2, VirtualKeyModifiers.Control, () => Model.Scale = ScaleMode.Fill);
@@ -701,6 +716,140 @@ public sealed partial class MainWindow : Window
 
     private void OpenSettings() => SettingsWindow.Show(_settings, _capture);
 
+    // MARK: - Record and Save Recent (Pro)
+
+    private async void OnRecordClick(object sender, RoutedEventArgs e) => await ToggleRecordingAsync();
+
+    private async Task ToggleRecordingAsync()
+    {
+        if (_recording.IsRecording)
+        {
+            await StopRecordingAsync("Recording saved to Videos › HDMI Captain");
+            return;
+        }
+        if (_testPattern != null)
+        {
+            ShowToast("Switch to the live input to record");
+            return;
+        }
+        if (!Model.IsLive)
+        {
+            ShowToast("Connect a capture card to record");
+            return;
+        }
+        if (!await RequireProAsync(ProFeature.Recording)) return;
+        try
+        {
+            _recording.StartRecording(_capture?.CurrentType?.FrameRate ?? 60);
+        }
+        catch (Exception e) when (e is System.Runtime.InteropServices.COMException or InvalidOperationException or IOException)
+        {
+            ShowToast($"Recording failed: {e.Message}");
+            return;
+        }
+        _recordTimer.Start();
+        UpdateRecordButton();
+    }
+
+    private async Task StopRecordingAsync(string savedMessage)
+    {
+        _recordTimer.Stop();
+        var path = await _recording.StopRecordingAsync();
+        UpdateRecordButton();
+        if (path != null)
+        {
+            AppLog.Write($"[record] saved {path}");
+            ShowToast(savedMessage);
+        }
+    }
+
+    private void OnRecordingFailed(string message)
+    {
+        AppLog.Write($"[record] failed: {message}");
+        _recordTimer.Stop();
+        _ = _recording.StopRecordingAsync();
+        UpdateRecordButton();
+        ShowToast($"Recording failed: {message}");
+    }
+
+    private void UpdateRecordButton()
+    {
+        var recording = _recording.IsRecording;
+        RecordDot.Visibility = recording ? Visibility.Collapsed : Visibility.Visible;
+        StopSquare.Visibility = recording ? Visibility.Visible : Visibility.Collapsed;
+        var s = (int)_recording.RecordingDuration.TotalSeconds;
+        RecordText.Text = recording ? (s >= 3600 ? $"{s / 3600}:{s / 60 % 60:00}:{s % 60:00}" : $"{s / 60}:{s % 60:00}") : "Record";
+        RecordButton.Background = recording ? new SolidColorBrush(Microsoft.UI.Colors.Red) : null;
+        ToolTipService.SetToolTip(RecordButton, recording ? "Stop Recording (Ctrl+R)" : "Record (Ctrl+R)");
+        AutomationProperties.SetName(RecordButton, recording ? "Stop recording" : "Record");
+    }
+
+    private void OnRecentMenuOpening(object? sender, object e)
+    {
+        RecentMenu.Items.Clear();
+        var unlocked = _pro.IsUnlocked(ProFeature.ReplayBuffer);
+        var keep = new ToggleMenuFlyoutItem
+        {
+            Text = $"Keep Recent Footage ({RecordingController.KeepRecent.TotalSeconds:0} s)",
+            IsChecked = _recording.IsKeepingRecent,
+            Icon = new FontIcon { Glyph = unlocked ? "\uE81C" : "\uE72E" },
+        };
+        keep.Click += async (_, _) => await SetKeepRecentAsync(keep.IsChecked);
+        RecentMenu.Items.Add(keep);
+        RecentMenu.Items.Add(new MenuFlyoutSeparator());
+        var buffered = _recording.RecentBuffered;
+        foreach (var (title, span) in RecordingController.RecentSpans)
+        {
+            // Allow slack: the buffer starts at a keyframe every 2 s.
+            var item = new MenuFlyoutItem { Text = title, IsEnabled = _recording.IsKeepingRecent && buffered + TimeSpan.FromSeconds(2) >= span };
+            if (span == TimeSpan.FromSeconds(30)) item.KeyboardAcceleratorTextOverride = "Ctrl+Shift+R";
+            item.Click += async (_, _) => await SaveRecentAsync(span);
+            RecentMenu.Items.Add(item);
+        }
+    }
+
+    private async Task SetKeepRecentAsync(bool on)
+    {
+        if (on)
+        {
+            if (!await RequireProAsync(ProFeature.ReplayBuffer)) return;
+            if (!Model.IsLive || _testPattern != null)
+            {
+                ShowToast("Connect a capture card to keep recent footage");
+                return;
+            }
+            _recording.StartKeepingRecent(_capture?.CurrentType?.FrameRate ?? 60);
+            _prefs.Update(p => p.RecentEnabled = true);
+        }
+        else
+        {
+            await _recording.StopKeepingRecentAsync();
+            _prefs.Update(p => p.RecentEnabled = false);
+        }
+    }
+
+    private async Task SaveRecentAsync(TimeSpan span)
+    {
+        if (!_recording.IsKeepingRecent)
+        {
+            ShowToast("Turn on Keep Recent Footage in the Save Recent menu first");
+            return;
+        }
+        ShowToast("Saving…");
+        try
+        {
+            var result = await _recording.SaveRecentAsync(span);
+            AppLog.Write($"[recent] {result.Path}: {result.Duration.TotalSeconds:F1} s in {result.Elapsed.TotalMilliseconds:F0} ms");
+            ShowToast($"Saved the last {Describe(span)} to Videos › HDMI Captain");
+        }
+        catch (Exception e) when (e is InvalidOperationException or IOException or System.Runtime.InteropServices.COMException)
+        {
+            ShowToast($"Couldn't save: {e.Message}");
+        }
+
+        static string Describe(TimeSpan span) => span.TotalSeconds < 60 ? $"{span.TotalSeconds:0} seconds" : "minute";
+    }
+
     /// <summary>The Store add-on; DEBUG builds without package identity (or with -debugUnlockPro) use the fake store.</summary>
     private IProStore CreateProStore(LaunchOptions options)
     {
@@ -751,11 +900,28 @@ public sealed partial class MainWindow : Window
                 case "actualPixels": SizeToVideo(1); break;
                 case "fullScreen": ToggleFullScreen(); break;
                 case "settings": OpenSettings(); break;
+                case "record3s": _ = RecordForQaAsync(); break;
+                case "recent15": _ = RecentForQaAsync(); break;
                 case "scopes": ScopesWindow.Show(_scopes); break;
                 case "upgrade": _ = ShowUpgradeAsync(ProFeature.Recording); break;
             }
         };
         timer.Start();
+    }
+
+    private async Task RecordForQaAsync()
+    {
+        await ToggleRecordingAsync();
+        await Task.Delay(3000);
+        if (_recording.IsRecording) await ToggleRecordingAsync();
+    }
+
+    // Keeps 25 s, then saves the last 15 s (CLAUDE.md -qaAction recent15).
+    private async Task RecentForQaAsync()
+    {
+        await SetKeepRecentAsync(true);
+        await Task.Delay(25_000);
+        await SaveRecentAsync(TimeSpan.FromSeconds(15));
     }
 
     /// <summary>Last size and position, if that spot is still on a connected display; else 1280×760.</summary>
@@ -925,6 +1091,8 @@ public sealed partial class MainWindow : Window
     {
         SaveFrame();
         _settings.Flush();
+        _recordTimer.Stop();
+        _recording.Dispose();
         SettingsWindow.CloseIfOpen();
         ScopesWindow.CloseIfOpen();
         _statsTimer.Stop();

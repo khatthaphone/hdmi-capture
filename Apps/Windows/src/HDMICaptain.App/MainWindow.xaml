@@ -101,6 +101,23 @@
                         <TextBlock Text="Screenshot" FontSize="12" />
                     </StackPanel>
                 </Button>
+                <Button x:Name="RecordButton" Style="{StaticResource BarButton}" Click="OnRecordClick" ToolTipService.ToolTip="Record"
+                        AutomationProperties.Name="Record">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Ellipse x:Name="RecordDot" Width="10" Height="10" Fill="Red" />
+                        <Rectangle x:Name="StopSquare" Width="9" Height="9" RadiusX="2" RadiusY="2" Fill="White" Visibility="Collapsed" />
+                        <TextBlock x:Name="RecordText" Text="Record" FontSize="12" FontWeight="SemiBold" />
+                    </StackPanel>
+                </Button>
+                <DropDownButton Style="{StaticResource BarDropDown}" ToolTipService.ToolTip="Save Recent" AutomationProperties.Name="Save Recent">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE81C;" FontSize="15" />
+                        <TextBlock Text="Save Recent" FontSize="12" />
+                    </StackPanel>
+                    <DropDownButton.Flyout>
+                        <MenuFlyout x:Name="RecentMenu" Placement="Top" Opening="OnRecentMenuOpening" Opened="OnFlyoutOpened" Closed="OnFlyoutClosed" />
+                    </DropDownButton.Flyout>
+                </DropDownButton>
                 <Rectangle Style="{StaticResource BarDivider}" />
                 <DropDownButton Style="{StaticResource BarDropDown}" ToolTipService.ToolTip="View options" AutomationProperties.Name="View options">
                     <FontIcon Glyph="&#xE712;" FontSize="15" />
