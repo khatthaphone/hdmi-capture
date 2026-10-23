@@ -16,6 +16,8 @@ public static class Program
 #endif
         var options = LaunchOptions.Parse(args, allowQa);
         LinuxLog.Write($"launch {string.Join(' ', args)}");
+        // No GC pauses in the frame path while live: the frame path allocates nothing in steady state (task 121).
+        System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
 
         Adw.Module.Initialize();
         // NonUnique: every launch is its own process, like the other platforms (QA runs start next to the user's copy).

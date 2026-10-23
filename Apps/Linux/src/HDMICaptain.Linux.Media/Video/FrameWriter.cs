@@ -53,6 +53,7 @@ public sealed unsafe class FrameWriter : IDisposable
             _ => Fail($"unsupported format {fourCC}"),
         };
         LastMilliseconds = _clock.Elapsed.TotalMilliseconds;
+        if (MediaEvents.Log.IsEnabled()) MediaEvents.Log.FrameDecoded(fourCC, LastMilliseconds);
         if (ok) Written++;
         else Rejected++;
         return ok;

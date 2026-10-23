@@ -83,6 +83,8 @@ public sealed unsafe class V4l2Source : IDisposable
                 break;
             }
             Counters.Skipped += buffer.Skipped;
+            if (MediaEvents.Log.IsEnabled() && buffer.TimestampNs > 0)
+                MediaEvents.Log.FrameCaptured((Render.GlesRenderer.MonotonicNs - buffer.TimestampNs) / 1e6, buffer.Skipped);
             if (lastSequence is { } last && buffer.Sequence > last + 1 + (uint)buffer.Skipped)
                 Counters.SequenceGaps += buffer.Sequence - last - 1 - buffer.Skipped;
             lastSequence = buffer.Sequence;

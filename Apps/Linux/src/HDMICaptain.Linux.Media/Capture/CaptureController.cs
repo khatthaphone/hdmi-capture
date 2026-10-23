@@ -469,6 +469,7 @@ public sealed unsafe class CaptureController : IDisposable
         _published = effective;
         _state = effective;
         Log?.Invoke($"state: {effective}");
+        if (MediaEvents.Log.IsEnabled()) MediaEvents.Log.CaptureState(effective.ToString());
         StateChanged?.Invoke(effective);
     }
 

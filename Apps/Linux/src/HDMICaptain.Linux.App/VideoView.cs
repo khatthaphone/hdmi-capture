@@ -58,7 +58,8 @@ public sealed class VideoView
     private bool Render()
     {
         Interlocked.Exchange(ref _queued, 0);
-        if (Error == null) _renderer.GlRender(_width, _height);
+        if (Error == null && _renderer.GlRender(_width, _height) && MediaEvents.Log.IsEnabled())
+            MediaEvents.Log.FrameDrawn(_renderer.Stats.LastLatencyNs / 1e6);
         return true;
     }
 
