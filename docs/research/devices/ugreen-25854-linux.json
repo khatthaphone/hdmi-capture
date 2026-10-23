@@ -1,0 +1,251 @@
+{
+  "audio": [
+    {
+      "id": "hw:0,0",
+      "kind": "alsa",
+      "name": "UGREEN-25854",
+      "transport": "usb",
+      "vidPid": "1DE1:F105"
+    }
+  ],
+  "video": [
+    {
+      "autoChoice": "1920x1080 MJPG @ 60",
+      "device": {
+        "id": "usb-vhci_hcd.0-1",
+        "kind": "external",
+        "modelID": "UGREEN-25854: UGREEN-25854:1DE1:F105",
+        "name": "UGREEN-25854: UGREEN-25854",
+        "transport": "usb"
+      },
+      "formats": [
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            },
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 1080,
+          "width": 1920
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 768,
+          "width": 1360
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 1024,
+          "width": 1280
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 960,
+          "width": 1280
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 720,
+          "width": 1280
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 768,
+          "width": 1024
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 600,
+          "width": 800
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 576,
+          "width": 720
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 480,
+          "width": 720
+        },
+        {
+          "fourCC": "MJPG",
+          "frameRateRanges": [
+            {
+              "max": 60,
+              "min": 60
+            },
+            {
+              "max": 30,
+              "min": 30
+            },
+            {
+              "max": 15,
+              "min": 15
+            }
+          ],
+          "height": 480,
+          "width": 640
+        }
+      ],
+      "linux": {
+        "alsaCard": "hw:0,0",
+        "busInfo": "usb-vhci_hcd.0-1",
+        "driver": "uvcvideo",
+        "key": "usb:1DE1:F105|serial:-468708563",
+        "manufacturer": "Actions Micro",
+        "node": "/dev/video0",
+        "serial": "-468708563",
+        "usbProduct": "UGREEN-25854",
+        "usbSpeedMbps": 480,
+        "v4l2Types": [
+          "MJPG (compressed) 1920x1080 1/60,1/30,1/15,1/60,1/30,1/15",
+          "MJPG (compressed) 1360x768 1/60,1/30,1/15",
+          "MJPG (compressed) 1280x1024 1/60,1/30,1/15",
+          "MJPG (compressed) 1280x960 1/60,1/30,1/15",
+          "MJPG (compressed) 1280x720 1/60,1/30,1/15",
+          "MJPG (compressed) 1024x768 1/60,1/30,1/15",
+          "MJPG (compressed) 800x600 1/60,1/30,1/15",
+          "MJPG (compressed) 720x576 1/60,1/30,1/15",
+          "MJPG (compressed) 720x480 1/60,1/30,1/15",
+          "MJPG (compressed) 640x480 1/60,1/30,1/15"
+        ],
+        "vidPid": "1DE1:F105"
+      }
+    }
+  ]
+}
