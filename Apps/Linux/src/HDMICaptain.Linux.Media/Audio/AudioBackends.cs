@@ -63,6 +63,14 @@ public sealed unsafe partial class AlsaCapture : IAudioCapture
             snd_pcm_close(pcm);
             return r;
         }
+        // set_params leaves capture's start threshold at the whole buffer, so a one-period read never starts the stream
+        // and fails with EIO once the wait times out; start on the first frame, as arecord does.
+        r = SetStartThreshold(pcm, 1);
+        if (r < 0)
+        {
+            snd_pcm_close(pcm);
+            return r;
+        }
         nuint buffer, period;
         snd_pcm_get_params(pcm, &buffer, &period);
         capture = new AlsaCapture(pcm, new PcmFormat(rate, channels, 16, false), (int)period, device);
@@ -90,6 +98,24 @@ public sealed unsafe partial class AlsaCapture : IAudioCapture
 
     public static string Error(int errno) => Marshal.PtrToStringUTF8(snd_strerror(errno)) ?? $"error {errno}";
 
+    private static int SetStartThreshold(nint pcm, nuint frames)
+    {
+        nint sw;
+        var r = snd_pcm_sw_params_malloc(&sw);
+        if (r < 0) return r;
+        try
+        {
+            r = snd_pcm_sw_params_current(pcm, sw);
+            if (r >= 0) r = snd_pcm_sw_params_set_start_threshold(pcm, sw, frames);
+            if (r >= 0) r = snd_pcm_sw_params(pcm, sw);
+            return r;
+        }
+        finally
+        {
+            snd_pcm_sw_params_free(sw);
+        }
+    }
+
     [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)] private static partial int snd_pcm_open(nint* pcm, string name, int stream, int mode);
     [LibraryImport(Lib)] private static partial int snd_pcm_set_params(nint pcm, int format, int access, uint channels, uint rate, int softResample, uint latencyUs);
     [LibraryImport(Lib)] private static partial int snd_pcm_get_params(nint pcm, nuint* bufferSize, nuint* periodSize);
@@ -97,6 +123,11 @@ public sealed unsafe partial class AlsaCapture : IAudioCapture
     [LibraryImport(Lib)] private static partial int snd_pcm_recover(nint pcm, int err, int silent);
     [LibraryImport(Lib)] private static partial int snd_pcm_close(nint pcm);
     [LibraryImport(Lib)] private static partial nint snd_strerror(int errnum);
+    [LibraryImport(Lib)] private static partial int snd_pcm_sw_params_malloc(nint* sw);
+    [LibraryImport(Lib)] private static partial void snd_pcm_sw_params_free(nint sw);
+    [LibraryImport(Lib)] private static partial int snd_pcm_sw_params_current(nint pcm, nint sw);
+    [LibraryImport(Lib)] private static partial int snd_pcm_sw_params_set_start_threshold(nint pcm, nint sw, nuint frames);
+    [LibraryImport(Lib)] private static partial int snd_pcm_sw_params(nint pcm, nint sw);
 }
 
 /// <summary>PulseAudio simple API (libpulse-simple): pipewire-pulse on desktops, WSLg's server in WSL.</summary>

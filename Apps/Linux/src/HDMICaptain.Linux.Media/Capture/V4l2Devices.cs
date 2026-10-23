@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using HDMICaptain.Core;
 
 namespace HDMICaptain.Linux.Media.Capture;
@@ -25,7 +26,7 @@ public sealed record V4l2Format(string V4l2FourCC, bool Compressed, int Width, i
         Intervals.Where(i => i.Num > 0).Select(i => (double)i.Den / i.Num).Select(fps => new FrameRateRange(fps, fps)).ToList());
 }
 
-public static unsafe class V4l2Devices
+public static unsafe partial class V4l2Devices
 {
     public const string SysClass = "/sys/class/video4linux";
 
@@ -79,16 +80,9 @@ public static unsafe class V4l2Devices
     {
         var start = System.IO.Path.Combine(sysClass, node, "device");
         if (!Directory.Exists(start)) return null;
-        DirectoryInfo? dir;
-        try
-        {
-            dir = new DirectoryInfo(start).ResolveLinkTarget(returnFinalTarget: true) as DirectoryInfo ?? new DirectoryInfo(start);
-        }
-        catch (IOException)
-        {
-            dir = new DirectoryInfo(start);
-        }
-        for (; dir != null; dir = dir.Parent)
+        // The class entry is itself a symlink and "device" is relative to its target, so resolve the whole path the way
+        // the kernel does (.NET's ResolveLinkTarget applies the relative link to the unresolved path and lands elsewhere).
+        for (var dir = new DirectoryInfo(RealPath(start) ?? start); dir != null; dir = dir.Parent)
         {
             var vendor = ReadAttr(dir.FullName, "idVendor");
             var product = ReadAttr(dir.FullName, "idProduct");
@@ -101,6 +95,26 @@ public static unsafe class V4l2Devices
                 dir.FullName);
         }
         return null;
+    }
+
+    [LibraryImport("libc", EntryPoint = "realpath", StringMarshalling = StringMarshalling.Utf8)]
+    private static partial nint realpath(string path, nint resolved);
+
+    [LibraryImport("libc")]
+    private static partial void free(nint pointer);
+
+    private static string? RealPath(string path)
+    {
+        var resolved = realpath(path, 0);
+        if (resolved == 0) return null;
+        try
+        {
+            return Marshal.PtrToStringUTF8(resolved);
+        }
+        finally
+        {
+            free(resolved);
+        }
     }
 
     private static string? ReadAttr(string dir, string name)

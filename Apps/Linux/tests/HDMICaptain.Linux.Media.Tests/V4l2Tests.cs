@@ -62,4 +62,34 @@ public unsafe class V4l2Tests
             Directory.Delete(root, recursive: true);
         }
     }
+
+    [Fact]
+    public void FollowsRelativeSysfsLinksLikeTheKernel()
+    {
+        // Real sysfs: class/video0 -> ../devices/1-1/1-1:1.0/video4linux/video0, and its device -> ../../../1-1:1.0
+        // (relative to the link's real directory). Seen under usbip in WSL, where the pairing with ALSA failed.
+        var root = Directory.CreateTempSubdirectory("hc-sysfs").FullName;
+        try
+        {
+            var usb = Path.Combine(root, "devices", "1-1");
+            var iface = Path.Combine(usb, "1-1:1.0");
+            var real = Path.Combine(iface, "video4linux", "video0");
+            Directory.CreateDirectory(real);
+            File.WriteAllText(Path.Combine(usb, "idVendor"), "1de1\n");
+            File.WriteAllText(Path.Combine(usb, "idProduct"), "f105\n");
+            Directory.CreateSymbolicLink(Path.Combine(real, "device"), "../../../1-1:1.0");
+            var cls = Path.Combine(root, "class");
+            Directory.CreateDirectory(cls);
+            Directory.CreateSymbolicLink(Path.Combine(cls, "video0"), "../devices/1-1/1-1:1.0/video4linux/video0");
+
+            var id = V4l2Devices.ReadUsb("video0", cls);
+            Assert.NotNull(id);
+            Assert.Equal((0x1DE1, 0xF105), (id.VendorId, id.ProductId));
+            Assert.Equal(usb, id.SysPath);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }
