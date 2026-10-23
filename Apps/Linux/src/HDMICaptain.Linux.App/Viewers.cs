@@ -17,6 +17,9 @@ public static class Viewers
 
     public static GridWindow? Grid { get; internal set; }
 
+    /// <summary>The Pro gate for every window (one licence per app).</summary>
+    public static LicenceStore Licence { get; private set; } = new(new FakeLicenceService());
+
     public static IReadOnlyList<MainWindow> Windows => Open;
 
     public static MainWindow? Primary => Open.FirstOrDefault(w => w.IsPrimary);
@@ -24,6 +27,8 @@ public static class Viewers
     public static void OpenPrimary(Adw.Application app, LaunchOptions options, PrefsStore store)
     {
         (_app, _options, _store) = (app, options, store);
+        Licence = new LicenceStore(new FakeLicenceService(), options.DebugUnlockPro);
+        _ = Licence.RevalidateAsync();
         Show(new MainWindow(app, options, new ViewerSettings(store), cardKey: null));
     }
 

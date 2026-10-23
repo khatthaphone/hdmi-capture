@@ -41,6 +41,7 @@ public static class Actions
         Add("keep-on-top", () => w.SetKeepOnTop(!w.Settings.Prefs.FloatOnTop), "<Control>t");
         Add("scopes", w.ShowScopes, "<Control><Shift>w");
         Add("open-cards", Viewers.OpenAllCards, "<Control><Shift>n");
+        Add("upgrade", () => UpgradeWindow.Show(window, Viewers.Licence));
         Add("grid", Viewers.ShowGrid, "<Control><Shift>g");
         Add("pattern-off", () => w.ShowPattern(null));
         Add("pattern-smpte", () => w.ShowPattern(TestPatternKind.SmpteBars));
@@ -113,6 +114,7 @@ public static class Actions
         menu.AppendSection(null, output);
         var settings = Gio.Menu.New();
         settings.Append("Settings…", "win.settings");
+        settings.Append("HDMI Captain Pro…", "win.upgrade");
         menu.AppendSection(null, settings);
         var help = Gio.Menu.New();
         help.Append("Reconnect", "win.reconnect");
@@ -195,6 +197,7 @@ public static class Actions
             case "scopes": w.ShowScopes(); break;
             case "openCards": Viewers.OpenAllCards(); break;
             case "grid": Viewers.ShowGrid(); break;
+            case "upgrade": UpgradeWindow.Show(w.Window, Viewers.Licence); break;
             case "guides": w.PreviewGuides(new GuideSettings { Thirds = true, Center = true, SafeAreas = true, Mask = GuideMask.Scope }); break;
             default: LinuxLog.Write($"qa: unknown action {action}"); break;
         }
