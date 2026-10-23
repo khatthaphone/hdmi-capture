@@ -138,7 +138,7 @@ foreach (var d in probeSeconds > 0 || saveFrames > 0 ? devices : [])
         status = 1;
         continue;
     }
-    status |= Probe(d, d.Formats.First(f => f.Descriptor == choice.Format), choice.FrameRate, Math.Max(probeSeconds, 10));
+    status |= Probe(d, d.Formats[choice.Index], choice.FrameRate, Math.Max(probeSeconds, 10));
 }
 return status;
 
