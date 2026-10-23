@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata (task 122). The app id becomes the real reverse-DNS id before Flathub (task 125). -->
+<component type="desktop-application">
+  <id>com.example.HDMICaptain</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-proprietary</project_license>
+  <name>HDMI Captain</name>
+  <summary>Low-latency viewer for USB HDMI capture cards</summary>
+  <description>
+    <p>HDMI Captain shows a USB HDMI capture card with its sound and keeps it running: it never stops for focus or
+      workspace changes and reconnects by itself when the card or the source drops out.</p>
+    <ul>
+      <li>Fit, fill, stretch and pixel-perfect scaling, colour range and matrix, picture looks and .cube LUTs</li>
+      <li>Guides, scopes, test patterns and a diagnostics overlay</li>
+      <li>Several cards at once, in their own windows or a grid</li>
+      <li>Screenshots straight from the source, without any on-screen controls</li>
+    </ul>
+    <p>Recording and Save Recent are a one-time Pro unlock bought on our website; everything else is free.</p>
+  </description>
+  <launchable type="desktop-id">com.example.HDMICaptain.desktop</launchable>
+  <url type="homepage">https://example.com/hdmi-captain</url>
+  <developer id="com.example">
+    <name>HDMI Captain</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Video</category>
+  </categories>
+  <releases>
+    <release version="0.1.0" date="2026-10-23"/>
+  </releases>
+</component>

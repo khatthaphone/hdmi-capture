@@ -1,0 +1,42 @@
+# Flatpak manifest (task 122). Build: flatpak-builder --user --install build-dir Apps/Linux/packaging/com.example.HDMICaptain.yml
+# NuGet sources for the offline Flathub build come from flatpak-dotnet-generator (nuget-sources.json, generated before
+# submission). The app id becomes the real reverse-DNS id before Flathub (task 125).
+app-id: com.example.HDMICaptain
+runtime: org.gnome.Platform
+runtime-version: '48'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.dotnet10
+command: hdmi-captain
+finish-args:
+  # Raw V4L2 capture: there is no narrower device permission for /dev/video* (linux.md §2a).
+  - --device=all
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --socket=pulseaudio
+  # logind PrepareForSleep, so capture closes cleanly on suspend.
+  - --system-talk-name=org.freedesktop.login1
+  - --filesystem=xdg-pictures/HDMI Captain:create
+  - --filesystem=xdg-videos/HDMI Captain:create
+build-options:
+  append-path: /usr/lib/sdk/dotnet10/bin
+  append-ld-library-path: /usr/lib/sdk/dotnet10/lib
+  env:
+    PKG_CONFIG_PATH: /app/lib/pkgconfig:/app/share/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig
+    DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+modules:
+  # libturbojpeg comes from the freedesktop runtime (check with `flatpak run --command=ls org.gnome.Platform//48 /usr/lib/x86_64-linux-gnu`).
+  - name: hdmi-captain
+    buildsystem: simple
+    sources:
+      - type: dir
+        path: ../../..
+      - nuget-sources.json
+    build-commands:
+      - dotnet publish Apps/Linux/src/HDMICaptain.Linux.App/HDMICaptain.Linux.App.csproj -c Release -r linux-x64 --self-contained
+        --source ./nuget-sources -p:PublishReadyToRun=true -o /app/lib/hdmi-captain
+      - install -D -m 0755 /dev/stdin /app/bin/hdmi-captain <<< 'exec /app/lib/hdmi-captain/hdmi-captain "$@"'
+      - install -D -m 0644 Apps/Linux/packaging/com.example.HDMICaptain.desktop /app/share/applications/com.example.HDMICaptain.desktop
+      - install -D -m 0644 Apps/Linux/packaging/com.example.HDMICaptain.metainfo.xml /app/share/metainfo/com.example.HDMICaptain.metainfo.xml
+      - cd Apps/Linux/packaging/icons && find . -name '*.png' -exec install -D -m 0644 {} /app/share/icons/{} \;
