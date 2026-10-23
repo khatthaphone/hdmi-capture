@@ -114,6 +114,24 @@ public class AudioRingBufferTests
 
 public class DriftControllerTests
 {
+    [Theory]
+    [InlineData(1, 120)]
+    [InlineData(4, 30)]
+    public void GainScaleSettlesALargeClockOffsetFaster(double scale, double withinSeconds)
+    {
+        // The sink consumes 600 ppm faster than the card produces (WSLg's RDP sink, task 111).
+        var drift = new DriftController(48_000, 23, scale);
+        double fillMs = 23, t = 0, worst = 0;
+        while (t < 240)
+        {
+            var correction = drift.Update(fillMs * 48, 0.01);
+            fillMs += 10 * (1 - (1 + 600e-6) * correction);  // 10 ms in, 10 ms × ratio out
+            t += 0.01;
+            if (t > withinSeconds) worst = Math.Max(worst, Math.Abs(drift.SmoothedFillMs - 23));
+        }
+        Assert.True(worst < 1, $"scale {scale}: still {worst:F2} ms off after {withinSeconds} s");
+    }
+
     [Fact]
     public void MinimumTargetCoversAPacketAndAPeriod()
     {

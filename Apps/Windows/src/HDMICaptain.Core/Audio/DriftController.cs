@@ -14,16 +14,25 @@ public sealed class DriftController
     private const double HeadroomMs = 3; // packets land ~1.3 ms after the ideal phase and jitter ~0.8 ms (task 102 log)
 
     private readonly double _sampleRate;
+    private readonly double _kp, _ki;
     private double _targetMs;
     private double _currentTargetMs;
     private double _smoothedFrames;
     private double _integralPpm;
     private bool _primed;
 
-    public DriftController(double sampleRate, double targetMs)
+    /// <param name="gainScale">
+    /// Multiplies both loop gains (the damping stays the same, settling is that many times faster). 1 suits real cards
+    /// (tens of ppm); WSLg's RDP sink runs ~600 ppm fast, which the default loop takes ~2 min to absorb (task 111).
+    /// </param>
+    public DriftController(double sampleRate, double targetMs, double gainScale = 1)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(sampleRate, 0);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(gainScale, 0);
         _sampleRate = sampleRate;
+        // ζ ∝ Kp / √Ki: scaling Kp by s and Ki by s² keeps it.
+        _kp = ProportionalPpmPerMs * gainScale;
+        _ki = IntegralPpmPerMsSecond * gainScale * gainScale;
         _targetMs = _currentTargetMs = targetMs;
     }
 
@@ -85,8 +94,8 @@ public sealed class DriftController
         }
 
         double errorMs = SmoothedFillMs - _currentTargetMs;
-        _integralPpm = Math.Clamp(_integralPpm + IntegralPpmPerMsSecond * errorMs * dt, -MaxPpm, MaxPpm);
-        double ppm = Math.Clamp(ProportionalPpmPerMs * errorMs + _integralPpm, -MaxPpm, MaxPpm);
+        _integralPpm = Math.Clamp(_integralPpm + _ki * errorMs * dt, -MaxPpm, MaxPpm);
+        double ppm = Math.Clamp(_kp * errorMs + _integralPpm, -MaxPpm, MaxPpm);
         return 1 + ppm * 1e-6;
     }
 }

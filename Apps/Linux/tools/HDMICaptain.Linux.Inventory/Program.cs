@@ -10,12 +10,17 @@ using HDMICaptain.Linux.Media.Render;
 using HDMICaptain.Linux.Media.Video;
 
 // hdmi-captain-inventory [--match <name>] [--out <file.json>] [--probe <seconds> [--pin WxH@fps] [--format MJPG|YUY2|NV12]]
-//                        [--save <frames> <dir>] [--bench-mjpeg <dir>]
+//                        [--save <frames> <dir>] [--bench-mjpeg <dir>] [--audio-tone <seconds> [ppm]] [--audio-card <seconds> <alsa device>]
 // Lists V4L2 capture nodes and their native types in the Mac device-inventory JSON shape (plus a "linux" object),
 // and the ALSA cards. --probe streams the auto choice (or the pinned one) for N seconds through the real frame path
 // (copy/decode into the renderer's slots, no window) and prints fps, drops and decode times (task 108).
+// --audio-tone runs the audio pipeline from a generated card clock (off by ppm) to the default Pulse sink;
+// --audio-card from an ALSA capture device (e.g. plughw:1,0) — buffer, ratio and underflows every 5 s (task 111).
 const string Usage = "usage: hdmi-captain-inventory [--match <name>] [--out <file.json>] [--probe <seconds> [--pin WxH@fps] [--format F]] [--save <frames> <dir>] [--bench-mjpeg <dir>]";
 
+int audioSeconds = 0;
+double audioPpm = 0;
+string? audioDevice = null;
 string? match = null, outPath = null, saveDir = null, benchDir = null, formatFilter = null;
 int probeSeconds = 0, saveFrames = 0;
 FormatPreference? pin = null;
@@ -34,6 +39,11 @@ for (var i = 0; i < args.Length; i++)
             break;
         case "--save": saveFrames = int.Parse(args[++i], CultureInfo.InvariantCulture); saveDir = args[++i]; break;
         case "--bench-mjpeg": benchDir = args[++i]; break;
+        case "--audio-tone":
+            audioSeconds = int.Parse(args[++i], CultureInfo.InvariantCulture);
+            if (i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal)) audioPpm = double.Parse(args[++i], CultureInfo.InvariantCulture);
+            break;
+        case "--audio-card": audioSeconds = int.Parse(args[++i], CultureInfo.InvariantCulture); audioDevice = args[++i]; break;
         default:
             Console.Error.WriteLine(Usage);
             return 2;
@@ -41,6 +51,7 @@ for (var i = 0; i < args.Length; i++)
 }
 
 if (benchDir != null) return BenchMjpeg(benchDir);
+if (audioSeconds > 0) return AudioRun(audioSeconds, audioPpm, audioDevice);
 
 static string Num(double v) => v.ToString("0.###", CultureInfo.InvariantCulture);
 
@@ -202,4 +213,32 @@ static int BenchMjpeg(string dir)
     times.Sort();
     Console.Error.WriteLine($"{files.Count} frames × 4: median {Num(times[times.Count / 2])} ms, p99 {Num(times[(int)(times.Count * 0.99)])} ms, max {Num(times[^1])} ms, rejected {writer.Rejected}");
     return 0;
+}
+
+static int AudioRun(int seconds, double ppm, string? device)
+{
+    var failed = 0;
+    using var pipeline = new LinuxAudioPipeline(
+        () =>
+        {
+            if (device == null) return new ToneCapture(ppm);
+            var r = AlsaCapture.TryOpen(device, out var capture);
+            return r == 0 ? capture! : throw new AudioOpenException(r, $"{device}: {AlsaCapture.Error(r)}");
+        },
+        () => PulsePlayback.TryOpen(out var playback) == 0 ? playback! : throw new AudioOpenException(-Errno.EIO, "no Pulse server"));
+    pipeline.Log += m => Console.Error.WriteLine($"  {m}");
+    pipeline.Failed += e => failed = e;
+    pipeline.Start();
+    var clock = Stopwatch.StartNew();
+    var minFill = double.MaxValue;
+    var maxFill = 0.0;
+    while (clock.Elapsed.TotalSeconds < seconds && failed == 0)
+    {
+        Thread.Sleep(250);
+        if (clock.Elapsed.TotalSeconds > 3) (minFill, maxFill) = (Math.Min(minFill, pipeline.BufferedMs), Math.Max(maxFill, pipeline.BufferedMs));
+    }
+    pipeline.Stop();
+    Console.Error.WriteLine($"audio {seconds} s: buffer {Num(minFill)}–{Num(maxFill)} ms (target {Num(pipeline.TargetMs)}), ratio {pipeline.Correction:F6} " +
+        $"({Num((pipeline.Correction - 1) * 1e6)} ppm), underflow {pipeline.UnderflowFrames} fr, overflow {pipeline.OverflowFrames} fr{(failed != 0 ? $", failed {Errno.Name(failed)}" : "")}");
+    return failed != 0 || pipeline.UnderflowFrames > 0 ? 1 : 0;
 }
