@@ -1,6 +1,6 @@
 # HDMI Captain — Product & Technical Spec
 
-_Status: draft v0.4 · 2026-10-22 (Mac + iPad in code; Android in progress, §12; Windows plan added, §13)_
+_Status: draft v0.5 · 2026-10-23 (Mac + iPad in code; Android in progress, §12; Windows in progress, §13; Linux plan added, §14)_
 
 ## 1. Problem
 
@@ -35,7 +35,7 @@ HDMI-to-USB capture dongles (UVC video + UAC audio) let a Mac/iPad act as a moni
 
 - The core work — capture, GPU rendering, encoding, virtual camera — is platform-native everywhere (AVFoundation/Metal/VideoToolbox/CoreMediaIO; Camera2/USB-host/MediaCodec; Media Foundation/D3D11). KMP would only wrap these via `expect/actual`; Compose Multiplatform on Windows is JVM-based, a poor fit for low-latency video.
 - One Swift codebase serves **macOS + iPadOS (+ visionOS later)** via a shared Swift package (~80 % shared). iPhone is out: Apple supports external (UVC) cameras on iPad only (`docs/research/ipados.md`).
-- **Android:** Kotlin + Jetpack Compose shell over a C++ (NDK) media core: libusb + libuvc capture, libjpeg-turbo MJPEG decode, GLES 3 render, Oboe audio (§12, `docs/research/android.md`). Pure logic is ported to Kotlin, not shared; shared JSON test fixtures keep Swift and Kotlin behaviour in step. **Windows:** C# (.NET 10) + WinUI (Windows App SDK 2.x) shell; engine in C# over Media Foundation (Source Reader), D3D11 and WASAPI, libjpeg-turbo for MJPEG; pure logic ported to C# against the same fixtures (§13, `docs/research/windows.md`). A Rust core + Win32 shell was considered and rejected (2026-10-22): far more UI work, and it would share nothing with Android's C++ engine.
+- **Android:** Kotlin + Jetpack Compose shell over a C++ (NDK) media core: libusb + libuvc capture, libjpeg-turbo MJPEG decode, GLES 3 render, Oboe audio (§12, `docs/research/android.md`). Pure logic is ported to Kotlin, not shared; shared JSON test fixtures keep Swift and Kotlin behaviour in step. **Windows:** C# (.NET 10) + WinUI (Windows App SDK 2.x) shell; engine in C# over Media Foundation (Source Reader), D3D11 and WASAPI, libjpeg-turbo for MJPEG; pure logic ported to C# against the same fixtures (§13, `docs/research/windows.md`). A Rust core + Win32 shell was considered and rejected (2026-10-22): far more UI work, and it would share nothing with Android's C++ engine. **Linux (proposed, ADR 0006):** C# (.NET 10) + GTK4/libadwaita via Gir.Core, reusing `HDMICaptain.Core` as is and Android's C++ GLES 3 renderer; V4L2 capture, libjpeg-turbo, PulseAudio API audio (§14, `docs/research/linux.md`).
 - Cross-platform sharing is **specs as data**: scene/layout JSON schema, settings keys, stream presets (in `docs/`). If shared logic later becomes substantial, extract a **Rust core with UniFFI** bindings (Swift/Kotlin/C#).
 - Licensing: avoid GPL dependencies (e.g. libobs) unless we decide to ship GPL. Preferred: HaishinKit (BSD), RootEncoder (Apache-2.0), FFmpeg LGPL builds.
 
@@ -116,6 +116,7 @@ Data flow: `DeviceCatalog` → selected device → `CaptureEngine` (session queu
 | 5 | Android (§12): Kotlin/Compose shell, native libusb + libuvc capture (Camera2 external where available), libjpeg-turbo, GLES 3, Oboe UAC audio, Play Billing Pro, MediaCodec recording. Spikes 069–076 → ADR 0002 (027); MVP 077–085 (028). Streaming stays hidden, as on Apple |
 | 6 | Windows (§13): C# .NET 10 + WinUI, MF Source Reader capture, libjpeg-turbo, D3D11 flip-model render, WASAPI audio, Store MSIX + `StoreContext` Pro, MF Sink Writer recording. Spikes 086–092 → ADR 0003 (029); MVP 093–103 (030). Streaming and virtual camera hidden, as on Android |
 | 7 | Free viewer features from competitor research (§11) |
+| 10 | Linux (§14): C# .NET 10 + GTK4/libadwaita (Gir.Core) reusing `HDMICaptain.Core`, raw V4L2 capture, libjpeg-turbo, shared GLES 3 renderer in a `GtkGLArea`, PulseAudio-API audio, licence-key Pro, FFmpeg recording, Flatpak + .deb. Developed in WSL2/WSLg on the Windows dev PC (card via usbipd-win), signed off on a real Linux install. Spikes 105–111 → ADR 0006 (112); MVP 113–124 (125). Streaming and virtual camera hidden, as on Windows |
 | 8 | Pro unlock (StoreKit 2), Pro features, Mac App Store (§10) |
 
 ## 8. Acceptance tests (macOS v1)
@@ -347,3 +348,108 @@ Apps/Windows/                    .NET 10 solution (HDMICaptain.Windows.slnx), Di
 5. Latency measured with the latency probe and a 240 fps camera, windowed and full screen, with the PresentMon present mode recorded in `docs/research/devices/`.
 6. Recording and Save Recent play back with A/V in sync. Screenshots and recordings contain no UI.
 7. Camera privacy off → the right status card. Microphone off → picture with an audio badge.
+
+## 14. Linux v1 (phase 10)
+
+Research: `docs/research/linux.md`. ADR 0006 (task 112) confirms the stack, or changes it, based on spikes 105–111. Product scope is the same as Windows: a free viewer plus Pro recording and Save Recent. Streaming and the virtual camera stay hidden.
+
+### 14.1 Devices & OS
+- Ubuntu 24.04 LTS and Fedora (current), GNOME on Wayland, are supported and tested. KDE Plasma and X11 sessions should work but are not part of sign-off. x64 first; arm64 builds once the pipeline is up.
+- Development and CI run in **WSL2 + WSLg** (Ubuntu 24.04) on the Windows dev PC. Latency, the soak and desktop integration are signed off on a real install (§14.11).
+
+### 14.2 Discovery & permissions
+- Video: enumerate `/dev/video*` nodes with `V4L2_CAP_VIDEO_CAPTURE`, skipping metadata nodes. The sysfs parent gives the USB VID:PID, serial and link speed.
+- Stable device key: VID:PID + serial, or VID:PID + name when there is no serial, with the USB path as the tiebreaker. Never the `/dev/videoN` number.
+- Hot-plug: a libudev monitor (`video4linux`, `sound`) on the host. Inside Flatpak, inotify on `/dev` plus a sysfs rescan, because the netlink monitor is unreliable in the sandbox.
+- Audio pairing: the card's ALSA card shares a USB parent with the V4L2 node. Map that card to its PulseAudio/PipeWire source, falling back to ALSA `hw:` directly when no sound server owns it (WSL). The user can override the pairing.
+- Access: `/dev/video*` needs the `video` group (the norm on desktop distros) or a uaccess seat. Flatpak needs `--device=all`. Permission denied → a status card that explains the fix. The PipeWire camera portal is a later second backend.
+- `EBUSY` (another app streams the card) → "In use", retrying with backoff.
+
+### 14.3 Capture
+- Raw V4L2: `S_FMT` + `S_PARM` on the native type, ≥ 4 mmap buffers, and `poll` on a dedicated thread. Dequeue everything that's ready and keep the newest. Drop buffers with `bytesused == 0` or `V4L2_BUF_FLAG_ERROR`.
+- `FormatSelector` (the shared C# Core, same fixtures) picks from the enumerated types. The USB link-speed rule uses the sysfs `speed`. USB 2 cards do 1080p30/60 as MJPEG.
+- No allocation per frame: the mmap buffers feed decode and upload directly.
+- Dev/CI: `TestPatternSource` behind the same capture interface (`-testPattern`).
+
+### 14.4 Decode & render
+- MJPEG: system libjpeg-turbo (`tj3DecompressToYUVPlanes8`) on the capture thread into reused planes; the newest frame wins. VA-API JPEG decode is optional, behind a probe.
+- Render: the Android GLES 3 renderer, moved to a shared C++ library (`native/render-gles/`), drawing into a `GtkGLArea` with GLES allowed. Same two passes and options as Android/Windows: fit/fill/stretch/integer, linear/nearest, auto/limited/full, BT.601/709, adjustments, `.cube` LUT, guides. The pass-1 texture is the clean source for screenshots and recordings.
+- Present when a frame arrives (`gtk_gl_area_queue_render` from the frame callback, marshalled to the GTK main context). A later step is `GtkGraphicsOffload` with a dmabuf texture, for direct scanout in full screen (§14.10).
+- WSLg uses Mesa d3d12, with `GSK_RENDERER` pinned to a GL renderer if `ngl` misrenders (task 105).
+
+### 14.5 Always-on & lifecycle
+- Never stop capture for focus loss, minimize, workspace switches, occlusion, scale or monitor changes, or the lock screen. Stop presenting while hidden; capture and audio keep running (§5.3 rule).
+- While live: inhibit idle (`gtk_application_inhibit` / Inhibit portal). While recording, also inhibit suspend. Capture and audio threads ask rtkit (or the Realtime portal) for real-time priority and fall back quietly.
+- Recovery is the same as everywhere else (`RecoveryMachine`, backoff 0.25 s → 4 s, re-attach by device key) for:
+  - unplug/replug;
+  - `ENODEV`/`POLLERR`;
+  - `EBUSY`;
+  - sleep/resume (logind `PrepareForSleep` with a delay inhibitor);
+  - usbipd detach/attach in WSL.
+- USB autosuspend: the .deb/.rpm installs a udev rule (`power/control=on` for known capture cards). Flatpak builds detect `auto` and show advice.
+
+### 14.6 Audio
+- PulseAudio API (`libpulse`, through pipewire-pulse on modern desktops) for playback and for capture where a sound server owns the card. Use ALSA `hw:` capture directly otherwise. Spike 111 measures both. Native `pw_stream` is the upgrade if Pulse can't hold ~20 ms.
+- The ring buffer, drift controller, resampler, channel modes, delay 0–500 ms, meters and the MS2109 fix are reused from `HDMICaptain.Core/Audio`. The kernel's MS2109 quirk usually fixes the format already, so `AudioFormatFix` must leave a correct 48 kHz stereo stream alone.
+- Never fail capture because audio is missing.
+
+### 14.7 UI
+- GTK4 + libadwaita (dark style around the video), following GNOME HIG. Same structure and copy as the other apps (`docs/copy.md`): status cards, connect illustration, no-signal/HDCP help, Connection Help, hover control bar (`GtkOverlay`), right-click menu.
+- Window behaviour:
+  - full screen (double-click, F11);
+  - the cursor hides after 3 s;
+  - window size presets;
+  - borderless clean mode.
+  - Wayland can't lock the aspect ratio while resizing, so the picture is letterboxed; after a resize, the window snaps to the source aspect when the compositor allows it.
+  - Always on top is X11 only (`_NET_WM_STATE_ABOVE`). On Wayland the menu item explains the window-menu alternative.
+- Shortcuts are the same as Windows, with Ctrl as the modifier. Global shortcuts come through the GlobalShortcuts portal where it exists.
+- No tray icon in v1: GNOME has none by default, and StatusNotifierItem is optional later.
+- Settings window: video device, audio device, format, scale/filter/colour, image adjustments, profiles, per-device presets. Prefs are JSON in `$XDG_CONFIG_HOME/hdmicaptain/`, with the same keys as `ViewerPrefs`.
+- Accessibility: AT-SPI names for every control (GTK accessible properties), keyboard navigation, high-contrast and large-text styles. The UI follows the desktop's fractional scaling.
+- Overlays are GTK widgets above the video and never reach screenshots, recordings or Save Recent (§6 rule).
+
+### 14.8 Outputs & Pro
+- Screenshot (free): PNG from the pass-1 texture to `$(xdg-user-dir PICTURES)/HDMI Captain`, plus a copy to the clipboard.
+- Recording and Save Recent (Pro): FFmpeg libraries (LGPL build), with hardware H.264/HEVC through VA-API or NVENC and OpenH264 as the fallback, plus AAC → fragmented MP4 in `$(xdg-user-dir VIDEOS)/HDMI Captain`. Save Recent keeps an encoded ring trimmed at keyframes and remuxes it on save.
+- Pro is a **licence key** bought on our site (vendor to be chosen: Lemon Squeezy, or Paddle + Keygen; ADR 0004 gets a Linux section).
+  - It's activated once online and re-validated periodically; the cache allows offline use.
+  - There is one gate, the equivalent of `EntitlementStore.gate`; free features never check it.
+  - DEBUG builds use a fake store (`-debugUnlockPro YES`). Flathub reviewers get a key.
+
+### 14.9 Code layout
+```
+Apps/Linux/                      .NET 10 solution (HDMICaptain.Linux.slnx); shares Apps/Windows/Directory.Packages.props versions where they overlap
+  src/HDMICaptain.Linux.Media/   net10.0 (linux): V4l2Device/V4l2Source, DeviceCatalog (udev/inotify/sysfs), CaptureController, TestPatternSource, MjpegDecoder (libturbojpeg), AudioPipeline (libpulse/ALSA), Recorder/RollingRecorder (FFmpeg)
+  src/HDMICaptain.Linux.App/     GTK4/libadwaita (Gir.Core): AppModel/ViewerModel, viewer window, control bar, settings, ProStore, strings
+  tests/HDMICaptain.Linux.Media.Tests/  V4L2 parsing, decoder, renderer (EGL surfaceless), audio DSP glue
+  packaging/                     Flatpak manifest (com.example.HDMICaptain), .desktop, metainfo, icons, udev rule, deb/rpm specs
+native/render-gles/              shared C++ GLES 3 renderer (Android JNI + Linux C ABI shims); CMake
+Apps/Windows/src/HDMICaptain.Core/  referenced as is (net10.0, pure); moves to a neutral path only if ADR 0006 says so
+```
+- `make linux-setup | linux-build | linux-test | linux-run LINUX_ARGS="-testPattern smpteBars" | linux-logs | linux-package`. From Git Bash on the Windows PC these run inside WSL (`wsl -d Ubuntu-24.04`) on an ext4 copy of the tree. On Linux they run directly.
+- DEBUG builds accept the shared QA arguments (`-testPattern`, `-qaAction`, `-qaPhase`, `-qaShowStats`, `-qaPinControls`, `-qaSoakMinutes`, `-debugUnlockPro`) through the shared `LaunchOptions`.
+
+### 14.10 Performance
+- Targets:
+  - 1080p60 shown at 60 fps with no drops (MJPEG and uncompressed);
+  - glass-to-glass no worse than the Windows app on the same card and PC, and ≤ 1 frame above OBS preview;
+  - a 30-min soak with flat memory and a flat audio buffer.
+- WSLg numbers don't count: no true vsync, and RDP composition.
+- Means:
+  - mmap buffers decoded or uploaded in place;
+  - no GC allocation per frame (`SustainedLowLatency` while live);
+  - rtkit priority;
+  - present on arrival;
+  - `GtkGraphicsOffload`/direct scanout in full screen if measurement shows it helps;
+  - ReadyToRun;
+  - an EventSource/`dotnet-trace` stage trace like Windows' `HDMICaptain-Media`.
+
+### 14.11 Acceptance tests (Linux v1, on a real GNOME/Wayland install; WSL runs 1–4 as a pre-check)
+1. Plug in a card → picture and sound within 1 s.
+2. Minimize, cover the window, switch workspaces, change scale or monitor, lock 5 min → no capture restart in the logs.
+3. Unplug/replug, suspend/resume, another app streaming the card and then releasing it → recovers without user action.
+4. 30-min soak at 1080p60: no growing drops, memory and audio buffer flat.
+5. Latency measured with the latency probe and a 240 fps camera, windowed and full screen, recorded in `docs/research/devices/`.
+6. Recording and Save Recent play back with A/V in sync. Screenshots and recordings contain no UI.
+7. No `/dev/video` access → the right status card. No audio source → picture with an audio badge.
+8. The Flatpak and the .deb both install, launch and capture on a clean Ubuntu 24.04. The .deb's udev rule keeps `power/control=on`.
