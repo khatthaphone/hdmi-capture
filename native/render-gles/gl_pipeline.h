@@ -19,6 +19,9 @@ struct RenderOptions {
     FilterMode filter = FilterMode::Linear;
     ColorRange range = ColorRange::Auto;
     Matrix matrix = Matrix::Auto;  // the user's override; Auto keeps each frame's own
+    // Bake the look into the source picture (Windows/Mac behaviour: screenshots and recordings show it).
+    // Off on Android, where the look is applied only on screen.
+    bool lookInSource = false;
 };
 
 // Picture look, applied when scaling into the window (CaptureCore's ImageAdjustments + LUT).
@@ -28,6 +31,10 @@ struct Look {
     int lutSize = 0;
     std::vector<float> lut;  // size³ RGB, red fastest
     float lutMin[3] = {0, 0, 0}, lutMax[3] = {1, 1, 1};
+
+    bool isIdentity() const {
+        return brightness == 0 && contrast == 1 && saturation == 1 && gamma == 1 && sharpness == 0 && (lutSize <= 1 || lutIntensity <= 0);
+    }
 };
 
 // Y/Cb/Cr statistics over SignalAnalyzer's 160×90 grid, for no-signal detection.
@@ -58,8 +65,9 @@ public:
     bool init();
     void release();
 
-    // Upload + pass 1. Leaves rgbFramebuffer bound.
-    void convert(const Frame &frame, ColorRange range, Matrix matrix = Matrix::Auto);
+    // Upload + pass 1. With sourceLook (not identity), a second full-size pass bakes the look into the source
+    // picture that screenshots, recordings and pass 2 read.
+    void convert(const Frame &frame, ColorRange range, Matrix matrix = Matrix::Auto, const Look *sourceLook = nullptr);
     // Pass 2 into framebuffer `fbo` of w×h pixels (clears it black around the picture).
     void drawScaled(GLuint fbo, int w, int h, const RenderOptions &options, const Look &look);
     // The clean pass-1 picture at source size, no look (recording surfaces).
@@ -73,6 +81,9 @@ public:
 
 private:
     void upload(const Frame &frame);
+    void setLookUniforms(const Look &look);
+    GLuint sourceTexture() const { return lookBaked_ ? lookTexture_ : rgbTexture_; }
+    GLuint sourceFramebuffer() const { return lookBaked_ ? lookFramebuffer_ : rgbFramebuffer_; }
 
     GLuint convertPrograms_[4] = {};
     GLuint scaleProgram_ = 0;
@@ -81,6 +92,9 @@ private:
     GLuint rgbFramebuffer_ = 0;
     GLuint vao_ = 0;
     GLuint lutTexture_ = 0;
+    GLuint lookTexture_ = 0, lookFramebuffer_ = 0;
+    int lookWidth_ = 0, lookHeight_ = 0;
+    bool lookBaked_ = false;
     int frameWidth_ = 0, frameHeight_ = 0;
     PixelFormat frameFormat_ = PixelFormat::NV12;
     bool hasFrame_ = false;

@@ -87,6 +87,17 @@ public sealed unsafe partial class GlesRenderer : IDisposable
 
     public RenderStats Stats { get { RenderStats s; hc_renderer_stats(_handle, &s); return s; } }
 
+    public const int ScopeColumns = 320, ScopeRows = 180;
+
+    /// <summary>While on, every 5th frame leaves a 320×180 grid of Y,Cb,Cr bytes for the scopes (costs ~0.2 ms).</summary>
+    public void SetScopesEnabled(bool on) => hc_renderer_set_scopes(_handle, on ? 1 : 0);
+
+    /// <summary>Copies the latest scope grid into <paramref name="grid"/> (≥ 320×180×3); returns its sequence, 0 = none yet.</summary>
+    public long ReadScopes(Span<byte> grid)
+    {
+        fixed (byte* p = grid) return hc_renderer_scopes(_handle, p, grid.Length);
+    }
+
     public RenderSignal Signal { get { RenderSignal s; hc_renderer_signal(_handle, &s); return s; } }
 
     public bool GlInit() => hc_renderer_gl_init(_handle) != 0;
@@ -142,6 +153,8 @@ public sealed unsafe partial class GlesRenderer : IDisposable
         float lutIntensity, int lutSize, float* lut, float* lutMin, float* lutMax);
     [LibraryImport(Lib)] private static partial void hc_renderer_stats(nint r, RenderStats* stats);
     [LibraryImport(Lib)] private static partial void hc_renderer_signal(nint r, RenderSignal* signal);
+    [LibraryImport(Lib)] private static partial void hc_renderer_set_scopes(nint r, int enabled);
+    [LibraryImport(Lib)] private static partial long hc_renderer_scopes(nint r, byte* output, int size);
     [LibraryImport(Lib)] private static partial int hc_renderer_gl_init(nint r);
     [LibraryImport(Lib)] private static partial void hc_renderer_gl_release(nint r);
     [LibraryImport(Lib)] private static partial int hc_renderer_render(nint r, int width, int height);

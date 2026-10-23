@@ -260,6 +260,11 @@ void GlPipeline::release() {
     glDeleteTextures(1, &rgbTexture_);
     glDeleteTextures(1, &lutTexture_);
     glDeleteFramebuffers(1, &rgbFramebuffer_);
+    if (lookTexture_) glDeleteTextures(1, &lookTexture_);
+    if (lookFramebuffer_) glDeleteFramebuffers(1, &lookFramebuffer_);
+    lookTexture_ = lookFramebuffer_ = 0;
+    lookWidth_ = lookHeight_ = 0;
+    lookBaked_ = false;
     glDeleteVertexArrays(1, &vao_);
     std::memset(planes_, 0, sizeof planes_);
     rgbTexture_ = lutTexture_ = rgbFramebuffer_ = vao_ = 0;
@@ -317,7 +322,7 @@ void GlPipeline::upload(const Frame &f) {
     }
 }
 
-void GlPipeline::convert(const Frame &f, ColorRange range, Matrix matrix) {
+void GlPipeline::convert(const Frame &f, ColorRange range, Matrix matrix, const Look *sourceLook) {
     HC_TRACE_BEGIN("convert");
     upload(f);
     bool full = range == ColorRange::Full || (range == ColorRange::Auto && f.fullRange);
@@ -347,7 +352,45 @@ void GlPipeline::convert(const Frame &f, ColorRange range, Matrix matrix) {
     glBindVertexArray(vao_);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     hasFrame_ = true;
+
+    lookBaked_ = sourceLook && !sourceLook->isIdentity();
+    if (lookBaked_) {
+        if (!lookTexture_ || lookWidth_ != f.width || lookHeight_ != f.height) {
+            if (!lookTexture_) glGenTextures(1, &lookTexture_);
+            if (!lookFramebuffer_) glGenFramebuffers(1, &lookFramebuffer_);
+            glBindTexture(GL_TEXTURE_2D, lookTexture_);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, f.width, f.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glBindFramebuffer(GL_FRAMEBUFFER, lookFramebuffer_);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lookTexture_, 0);
+            lookWidth_ = f.width;
+            lookHeight_ = f.height;
+        }
+        // Same scale shader, 1:1 with nearest sampling: only the look changes the pixels.
+        glBindFramebuffer(GL_FRAMEBUFFER, lookFramebuffer_);
+        glViewport(0, 0, f.width, f.height);
+        glUseProgram(scaleProgram_);
+        // The vertex shader's uv (0,0) is the picture's top-left at the top of the viewport; flip so row 0 stays row 0.
+        glUniform4f(glGetUniformLocation(scaleProgram_, "uvRect"), 0, 1, 1, -1);
+        setLookUniforms(*sourceLook);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_3D, lutTexture_);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, rgbTexture_);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    }
     HC_TRACE_END();
+}
+
+void GlPipeline::setLookUniforms(const Look &l) {
+    glUniform4f(glGetUniformLocation(scaleProgram_, "adjust"), l.brightness, l.contrast, l.saturation, 1.f / std::max(0.1f, l.gamma));
+    glUniform4f(glGetUniformLocation(scaleProgram_, "sharpen"), l.sharpness, 1.f / frameWidth_, 1.f / frameHeight_, 0);
+    glUniform4f(glGetUniformLocation(scaleProgram_, "lut"), l.lutSize > 1 ? l.lutIntensity : 0.f, float(l.lutSize), 0, 0);
+    glUniform3f(glGetUniformLocation(scaleProgram_, "lutMin"), l.lutMin[0], l.lutMin[1], l.lutMin[2]);
+    glUniform3f(glGetUniformLocation(scaleProgram_, "lutMax"), l.lutMax[0], l.lutMax[1], l.lutMax[2]);
 }
 
 void GlPipeline::uploadLook(const Look &look) {
@@ -376,15 +419,12 @@ void GlPipeline::drawScaled(GLuint fbo, int w, int h, const RenderOptions &optio
     glViewport(GLint(g.viewport.x), GLint(float(h) - g.viewport.y - g.viewport.h), GLsizei(g.viewport.w), GLsizei(g.viewport.h));
     glUseProgram(scaleProgram_);
     glUniform4f(glGetUniformLocation(scaleProgram_, "uvRect"), g.source.x, g.source.y, g.source.w, g.source.h);
-    glUniform4f(glGetUniformLocation(scaleProgram_, "adjust"), l.brightness, l.contrast, l.saturation, 1.f / std::max(0.1f, l.gamma));
-    glUniform4f(glGetUniformLocation(scaleProgram_, "sharpen"), l.sharpness, 1.f / frameWidth_, 1.f / frameHeight_, 0);
-    glUniform4f(glGetUniformLocation(scaleProgram_, "lut"), l.lutSize > 1 ? l.lutIntensity : 0.f, float(l.lutSize), 0, 0);
-    glUniform3f(glGetUniformLocation(scaleProgram_, "lutMin"), l.lutMin[0], l.lutMin[1], l.lutMin[2]);
-    glUniform3f(glGetUniformLocation(scaleProgram_, "lutMax"), l.lutMax[0], l.lutMax[1], l.lutMax[2]);
+    // A baked source already carries the look: draw it as is.
+    setLookUniforms(lookBaked_ ? Look{} : l);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_3D, lutTexture_);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, rgbTexture_);
+    glBindTexture(GL_TEXTURE_2D, sourceTexture());
     GLint filter = options.filter == FilterMode::Nearest ? GL_NEAREST : GL_LINEAR;
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
@@ -404,7 +444,7 @@ void GlPipeline::drawClean(GLuint fbo) {
     glUniform4f(glGetUniformLocation(scaleProgram_, "sharpen"), 0, 0, 0, 0);
     glUniform4f(glGetUniformLocation(scaleProgram_, "lut"), 0, 0, 0, 0);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, rgbTexture_);
+    glBindTexture(GL_TEXTURE_2D, sourceTexture());
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glBindVertexArray(vao_);
@@ -420,7 +460,7 @@ bool GlPipeline::readPass1(Screenshot &out) {
     out.rgba.resize(size_t(frameWidth_) * frameHeight_ * 4);
     GLint previous = 0;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous);
-    glBindFramebuffer(GL_FRAMEBUFFER, rgbFramebuffer_);
+    glBindFramebuffer(GL_FRAMEBUFFER, sourceFramebuffer());
     glReadPixels(0, 0, frameWidth_, frameHeight_, GL_RGBA, GL_UNSIGNED_BYTE, out.rgba.data());
     glBindFramebuffer(GL_FRAMEBUFFER, GLuint(previous));
     return true;

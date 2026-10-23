@@ -29,6 +29,27 @@ public unsafe partial class RendererPixelTests
     }
 
     [Fact]
+    public void TheLookIsBakedIntoTheScreenshotSource()
+    {
+        // Saturation 0 turns 75 % red into its BT.709 luma (0.2126 × 191 ≈ 41) in pass 1, as on Windows/Mac.
+        using var gl = new HeadlessGl(1280, 720);
+        using var r = new GlesRenderer();
+        Assert.True(r.GlInit());
+        r.SetLook(new HDMICaptain.Core.ImageAdjustments { Saturation = 0 });
+        FillNv12(r, 1280, 720, RedY, RedCb, RedCr, fullRange: false);
+        gl.Bind();
+        r.GlRender(1280, 720);
+        AssertPixel(r.GlReadPass1()!.Value.Rgba, 1280, 640, 10, 41, 41, 41);
+        AssertPixel(gl.Read(), 1280, 640, 10, 41, 41, 41); // and on screen, applied once
+        r.SetLook(new HDMICaptain.Core.ImageAdjustments());
+        FillNv12(r, 1280, 720, RedY, RedCb, RedCr, fullRange: false);
+        gl.Bind();
+        r.GlRender(1280, 720);
+        AssertPixel(r.GlReadPass1()!.Value.Rgba, 1280, 640, 10, 191, 0, 0);
+        r.GlRelease();
+    }
+
+    [Fact]
     public void FullRangeFlagChangesTheMaths()
     {
         using var gl = new HeadlessGl(1280, 720);

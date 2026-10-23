@@ -8,6 +8,7 @@ namespace HDMICaptain.Linux.Media.Tests;
 internal sealed class VirtualScheduler : IScheduler
 {
     private readonly List<(TimeSpan Due, long Seq, Item Item)> _items = [];
+    private readonly object _gate = new(); // Dispose posts from another thread while the test pumps
     private long _seq;
 
     public TimeSpan Now { get; private set; }
@@ -17,7 +18,7 @@ internal sealed class VirtualScheduler : IScheduler
     public IDisposable Schedule(TimeSpan delay, Action work)
     {
         var item = new Item(work);
-        _items.Add((Now + delay, _seq++, item));
+        lock (_gate) _items.Add((Now + delay, _seq++, item));
         return item;
     }
 
@@ -26,9 +27,13 @@ internal sealed class VirtualScheduler : IScheduler
         var end = Now + span;
         while (true)
         {
-            var next = _items.Where(i => !i.Item.Cancelled && i.Due <= end).OrderBy(i => i.Due).ThenBy(i => i.Seq).Cast<(TimeSpan, long, Item)?>().FirstOrDefault();
+            (TimeSpan, long, Item)? next;
+            lock (_gate)
+            {
+                next = _items.Where(i => !i.Item.Cancelled && i.Due <= end).OrderBy(i => i.Due).ThenBy(i => i.Seq).Cast<(TimeSpan, long, Item)?>().FirstOrDefault();
+                if (next is { } found) _items.RemoveAll(i => i.Seq == found.Item2);
+            }
             if (next is not { } n) break;
-            _items.RemoveAll(i => i.Seq == n.Item2);
             if (n.Item1 > Now) Now = n.Item1;
             n.Item3.Work();
         }
@@ -185,7 +190,16 @@ public sealed class CaptureControllerTests
             Time.Advance(0.6);
         }
 
-        public void Dispose() => Controller.Dispose();
+        // The controller's Dispose waits for its scheduler: run it aside and pump virtual time until it returns.
+        public void Dispose()
+        {
+            var done = Task.Run(Controller.Dispose);
+            while (!done.IsCompleted)
+            {
+                Time.Settle();
+                Thread.Sleep(1);
+            }
+        }
     }
 
     [Fact]

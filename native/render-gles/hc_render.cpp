@@ -39,6 +39,7 @@ struct hc_renderer {
     std::vector<uint8_t> scratchGrid;
 
     hc_renderer() {
+        options.lookInSource = true;  // C ABI hosts (Linux) follow the desktop apps: outputs show the look
         auto wake = [this] {
             hc_frame_callback cb;
             void *user;
@@ -191,7 +192,7 @@ int32_t hc_renderer_render(hc_renderer *r, int32_t width, int32_t height) {
     int64_t arrival = 0;
     if (Frame *frame = active.take()) {
         arrival = frame->timestampNs;
-        r->gl.convert(*frame, options.range, options.matrix);
+        r->gl.convert(*frame, options.range, options.matrix, options.lookInSource ? &r->activeLook : nullptr);
         SignalSample signal;
         bool sampled = r->convertCount % 10 == 0;
         bool scoped = r->scopesEnabled && r->convertCount % 5 == 0;

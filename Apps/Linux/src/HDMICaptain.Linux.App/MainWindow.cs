@@ -31,6 +31,9 @@ public sealed unsafe class MainWindow
     private readonly ControlBar _controls;
     private readonly GlesRenderer _renderer = new();
     private readonly VideoView _video;
+    private readonly GuidesView _guides = new();
+    private TestPatternKind? _pattern;
+    private GuideSettings? _qaGuides;
     private readonly FrameWriter _writer;
     private readonly SynchronizationContext _ui;
     private readonly SignalDebouncer _signal = new();
@@ -68,6 +71,7 @@ public sealed unsafe class MainWindow
 
         _overlay = Gtk.Overlay.New();
         _overlay.SetChild(_video.Widget);
+        _overlay.AddOverlay(_guides.Widget);
 
         // Status page (spinner or icon, title, message, buttons) over the video while there is no picture.
         _status = Adw.StatusPage.New();
@@ -163,8 +167,7 @@ public sealed unsafe class MainWindow
         }
         if (_options.TestPattern is { } pattern)
         {
-            _renderer.StartPattern(pattern);
-            SetPhase(new ViewerPhase.Live());
+            ShowPattern(pattern);
         }
         else
         {
@@ -250,6 +253,8 @@ public sealed unsafe class MainWindow
     private void SetPhase(ViewerPhase phase)
     {
         _phase = phase;
+        // A test pattern covers whatever the card is doing.
+        if (_pattern != null) phase = new ViewerPhase.Live();
         var copy = _video.Error != null && phase is ViewerPhase.Live
             ? new StatusCopy("dialog-warning-symbolic", Strings.StatusNoGl, _video.Error)
             : StatusCopy.For(phase);
@@ -307,7 +312,39 @@ public sealed unsafe class MainWindow
             }
         }
         if (_diagnostics) UpdateStats();
+        var r = _renderer.Stats;
+        _guides.Update(_qaGuides ?? _settings.Prefs.Guides, r.Width, r.Height, _settings.Preset.Scale);
     }
+
+    /// <summary>A generated pattern instead of the card (menu, -testPattern); null returns to the live input.</summary>
+    internal void ShowPattern(TestPatternKind? pattern)
+    {
+        _pattern = pattern;
+        if (pattern is { } p) _renderer.StartPattern(p);
+        else _renderer.StopPattern();
+        _signal.Reset();
+        SetPhase(pattern != null ? new ViewerPhase.Live() : _capture is { } c ? ViewerPhase.From(c.State, c.CurrentDevice?.Name) : new ViewerPhase.Scanning());
+    }
+
+    internal TestPatternKind? Pattern => _pattern;
+
+    internal void EditGuides(Func<GuideSettings, GuideSettings> change)
+    {
+        var next = change(_settings.Prefs.Guides);
+        _settings.EditPrefs(p => p.Guides = next);
+        var r = _renderer.Stats;
+        _guides.Update(next, r.Width, r.Height, _settings.Preset.Scale);
+    }
+
+    /// <summary>QA only: shows guides for this run without saving them (CLAUDE.md QA rule).</summary>
+    internal void PreviewGuides(GuideSettings guides)
+    {
+        _qaGuides = guides;
+        var r = _renderer.Stats;
+        _guides.Update(guides, r.Width, r.Height, _settings.Preset.Scale);
+    }
+
+    internal void ShowScopes() => ScopesWindow.Show(_window, _renderer);
 
     private void UpdateStats()
     {

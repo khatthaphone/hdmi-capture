@@ -39,6 +39,19 @@ public static class Actions
         Add("shortcuts", () => ShortcutsWindow(window).Present(), "<Control>question");
         Add("settings", w.OpenSettings, "<Control>comma");
         Add("keep-on-top", () => w.SetKeepOnTop(!w.Settings.Prefs.FloatOnTop), "<Control>t");
+        Add("scopes", w.ShowScopes, "<Control><Shift>w");
+        Add("pattern-off", () => w.ShowPattern(null));
+        Add("pattern-smpte", () => w.ShowPattern(TestPatternKind.SmpteBars));
+        Add("pattern-full", () => w.ShowPattern(TestPatternKind.FullBars));
+        Add("pattern-grid", () => w.ShowPattern(TestPatternKind.Grid));
+        Add("pattern-ramp", () => w.ShowPattern(TestPatternKind.GrayRamp));
+        Add("guide-thirds", () => w.EditGuides(g => g with { Thirds = !g.Thirds }));
+        Add("guide-center", () => w.EditGuides(g => g with { Center = !g.Center }));
+        Add("guide-safe", () => w.EditGuides(g => g with { SafeAreas = !g.SafeAreas }));
+        Add("guide-none", () => w.EditGuides(_ => new GuideSettings()));
+        foreach (var mask in Enum.GetValues<GuideMask>())
+            Add($"mask-{mask.ToString().ToLowerInvariant()}", () => w.EditGuides(g => g with { Mask = g.Mask == mask ? null : mask }));
+        Add("mask-none", () => w.EditGuides(g => g with { Mask = null }));
     }
 
     public static Gio.Menu ScaleMenu()
@@ -68,6 +81,28 @@ public static class Actions
         size.Append("Double Size (200 %)", "win.size-200");
         menu.AppendSubmenu("Window Size", size);
         menu.AppendSubmenu("Scale", ScaleMenu());
+        var guides = Gio.Menu.New();
+        guides.Append("Rule of Thirds", "win.guide-thirds");
+        guides.Append("Center Cross", "win.guide-center");
+        guides.Append("Safe Areas (90 % / 80 %)", "win.guide-safe");
+        var masks = Gio.Menu.New();
+        foreach (var mask in Enum.GetValues<GuideMask>()) masks.Append($"Mask {GuideSettings.Title(mask)}", $"win.mask-{mask.ToString().ToLowerInvariant()}");
+        masks.Append("No Aspect Mask", "win.mask-none");
+        guides.AppendSection(null, masks);
+        var clear = Gio.Menu.New();
+        clear.Append("No Guides", "win.guide-none");
+        guides.AppendSection(null, clear);
+        menu.AppendSubmenu("Guides", guides);
+        var pattern = Gio.Menu.New();
+        pattern.Append("Off (Live Input)", "win.pattern-off");
+        pattern.Append("SMPTE Bars", "win.pattern-smpte");
+        pattern.Append("Full Bars", "win.pattern-full");
+        pattern.Append("Grid", "win.pattern-grid");
+        pattern.Append("Gray Ramp", "win.pattern-ramp");
+        menu.AppendSubmenu("Test Pattern", pattern);
+        var tools = Gio.Menu.New();
+        tools.Append("Show Scopes", "win.scopes");
+        menu.AppendSection(null, tools);
         var output = Gio.Menu.New();
         output.Append("Save Screenshot", "win.screenshot");
         output.Append("Copy Frame", "win.copy-frame");
@@ -107,7 +142,7 @@ public static class Actions
             ("F11  ·  F  ·  Alt+Enter", "Full screen"), ("Esc", "Leave full screen"), ("Ctrl+M", "Mute"),
             ("Ctrl+1 / 2 / 3 / 4", "Fit / Fill / Stretch / Integer"), ("Ctrl+Shift+S", "Save screenshot"),
             ("Ctrl+Shift+C", "Copy frame"), ("Ctrl+Shift+H", "Clean mode"), ("Ctrl+I", "Diagnostics"),
-            ("Ctrl+− / 0 / +", "Window size 50 / 100 / 200 %"), ("Ctrl+R", "Reconnect"), ("Ctrl+,", "Settings"), ("F1", "Connection help"),
+            ("Ctrl+− / 0 / +", "Window size 50 / 100 / 200 %"), ("Ctrl+Shift+W", "Scopes"), ("Ctrl+R", "Reconnect"), ("Ctrl+,", "Settings"), ("F1", "Connection help"),
         };
         var list = Gtk.ListBox.New();
         list.AddCssClass("boxed-list");
@@ -153,6 +188,8 @@ public static class Actions
             case "clean": w.ToggleClean(); break;
             case "help": ConnectionHelp.Show(w.Window); break;
             case "settings": w.OpenSettings(); break;
+            case "scopes": w.ShowScopes(); break;
+            case "guides": w.PreviewGuides(new GuideSettings { Thirds = true, Center = true, SafeAreas = true, Mask = GuideMask.Scope }); break;
             default: LinuxLog.Write($"qa: unknown action {action}"); break;
         }
     }
