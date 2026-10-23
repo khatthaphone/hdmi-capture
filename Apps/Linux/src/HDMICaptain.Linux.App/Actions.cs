@@ -42,6 +42,9 @@ public static class Actions
         Add("scopes", w.ShowScopes, "<Control><Shift>w");
         Add("open-cards", Viewers.OpenAllCards, "<Control><Shift>n");
         Add("upgrade", () => UpgradeWindow.Show(window, Viewers.Licence));
+        Add("record", w.ToggleRecording, "<Control><Shift>r");
+        Add("keep-recent", w.ToggleKeepRecent);
+        Add("save-recent", () => w.SaveRecent(w.Settings.Prefs.RecentMinutes * 60), "<Control><Shift>p");
         Add("grid", Viewers.ShowGrid, "<Control><Shift>g");
         Add("pattern-off", () => w.ShowPattern(null));
         Add("pattern-smpte", () => w.ShowPattern(TestPatternKind.SmpteBars));
@@ -111,6 +114,9 @@ public static class Actions
         var output = Gio.Menu.New();
         output.Append("Save Screenshot", "win.screenshot");
         output.Append("Copy Frame", "win.copy-frame");
+        output.Append("Start / Stop Recording (Pro)", "win.record");
+        output.Append("Keep Recent Footage (Pro)", "win.keep-recent");
+        output.Append("Save Recent Footage", "win.save-recent");
         menu.AppendSection(null, output);
         var settings = Gio.Menu.New();
         settings.Append("Settings…", "win.settings");
@@ -148,7 +154,7 @@ public static class Actions
             ("F11  ·  F  ·  Alt+Enter", "Full screen"), ("Esc", "Leave full screen"), ("Ctrl+M", "Mute"),
             ("Ctrl+1 / 2 / 3 / 4", "Fit / Fill / Stretch / Integer"), ("Ctrl+Shift+S", "Save screenshot"),
             ("Ctrl+Shift+C", "Copy frame"), ("Ctrl+Shift+H", "Clean mode"), ("Ctrl+I", "Diagnostics"),
-            ("Ctrl+− / 0 / +", "Window size 50 / 100 / 200 %"), ("Ctrl+Shift+W", "Scopes"), ("Ctrl+Shift+N", "Window per card"), ("Ctrl+Shift+G", "Grid"), ("Ctrl+R", "Reconnect"), ("Ctrl+,", "Settings"), ("F1", "Connection help"),
+            ("Ctrl+− / 0 / +", "Window size 50 / 100 / 200 %"), ("Ctrl+Shift+W", "Scopes"), ("Ctrl+Shift+N", "Window per card"), ("Ctrl+Shift+G", "Grid"), ("Ctrl+Shift+R", "Start/stop recording"), ("Ctrl+Shift+P", "Save recent footage"), ("Ctrl+R", "Reconnect"), ("Ctrl+,", "Settings"), ("F1", "Connection help"),
         };
         var list = Gtk.ListBox.New();
         list.AddCssClass("boxed-list");
@@ -198,6 +204,10 @@ public static class Actions
             case "openCards": Viewers.OpenAllCards(); break;
             case "grid": Viewers.ShowGrid(); break;
             case "upgrade": UpgradeWindow.Show(w.Window, Viewers.Licence); break;
+            case "record3s":
+                w.ToggleRecording();
+                GLib.Functions.TimeoutAdd(GLib.Constants.PRIORITY_DEFAULT, 3000, () => { w.ToggleRecording(); return false; });
+                break;
             case "guides": w.PreviewGuides(new GuideSettings { Thirds = true, Center = true, SafeAreas = true, Mask = GuideMask.Scope }); break;
             default: LinuxLog.Write($"qa: unknown action {action}"); break;
         }

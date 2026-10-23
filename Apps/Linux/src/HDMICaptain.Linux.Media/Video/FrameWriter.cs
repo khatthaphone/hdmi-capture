@@ -16,6 +16,21 @@ public sealed unsafe class FrameWriter : IDisposable
 
     public FrameWriter(GlesRenderer renderer) => _renderer = renderer;
 
+    /// <summary>A frame as it went to the renderer (decoded planes), on the capture thread: recorders copy it.</summary>
+    public delegate void WrittenHandler(ReadOnlySpan<byte> frame, RenderPixelFormat format, int width, int height);
+
+    public WrittenHandler? FrameReady;
+
+    /// <summary>The layout of the last frame written (what a recorder will receive).</summary>
+    public (RenderPixelFormat Format, int Width, int Height)? LastLayout { get; private set; }
+
+    private void Publish(Span<byte> slot, RenderPixelFormat format, int width, int height, long ts, bool fullRange, FrameMatrix matrix)
+    {
+        LastLayout = (format, width, height);
+        FrameReady?.Invoke(slot, format, width, height);
+        _renderer.Publish(ts, fullRange, matrix);
+    }
+
     public long Written { get; private set; }
     /// <summary>Buffers that were not JPEGs, failed to decode or had an unusable layout (dropped).</summary>
     public long Rejected { get; private set; }
@@ -54,7 +69,7 @@ public sealed unsafe class FrameWriter : IDisposable
             CopyRows(data, pitch, dst, width, width, height);
             CopyRows(data + pitch * height, pitch, dst + width * height, width, width, height / 2);
         }
-        _renderer.Publish(ts, fullRange: false);
+        Publish(slot, RenderPixelFormat.Nv12, width, height, ts, false, FrameMatrix.Auto);
         return true;
     }
 
@@ -65,7 +80,7 @@ public sealed unsafe class FrameWriter : IDisposable
         var slot = _renderer.Acquire(RenderPixelFormat.Yuy2, width, height);
         if (slot.IsEmpty) return Fail("no slot");
         fixed (byte* dst = slot) CopyRows(data, pitch, dst, width * 2, width * 2, height);
-        _renderer.Publish(ts, fullRange: false);
+        Publish(slot, RenderPixelFormat.Yuy2, width, height, ts, false, FrameMatrix.Auto);
         return true;
     }
 
@@ -119,7 +134,7 @@ public sealed unsafe class FrameWriter : IDisposable
                 JpegWarnings++;
             }
         }
-        _renderer.Publish(ts, fullRange: true, FrameMatrix.Bt601);
+        Publish(slot, format.Value, width, height, ts, true, FrameMatrix.Bt601);
         return true;
     }
 

@@ -35,6 +35,7 @@ public sealed unsafe class MainWindow
     private TestPatternKind? _pattern;
     private GuideSettings? _qaGuides;
     private readonly FrameWriter _writer;
+    private readonly Recording _recording;
     private readonly SynchronizationContext _ui;
     private readonly SignalDebouncer _signal = new();
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
@@ -72,6 +73,7 @@ public sealed unsafe class MainWindow
 
         _video = new VideoView(_renderer);
         _writer = new FrameWriter(_renderer);
+        _recording = new Recording(_writer, () => _audio, () => _capture?.CurrentStream?.FrameRate is > 0 and var f ? f : 60);
 
         _overlay = Gtk.Overlay.New();
         _overlay.SetChild(_video.Widget);
@@ -281,6 +283,7 @@ public sealed unsafe class MainWindow
         _audio.Log += m => LinuxLog.Write($"audio: {m}");
         _audio.Failed += _ => _ui.Post(_ => SetAudioMissing(true), null);
         _audio.Start();
+        _recording.TapAudio();
         SetAudioMissing(false);
     }
 
@@ -363,6 +366,9 @@ public sealed unsafe class MainWindow
         if (_diagnostics) UpdateStats();
         var r = _renderer.Stats;
         _guides.Update(_qaGuides ?? _settings.Prefs.Guides, r.Width, r.Height, _settings.Preset.Scale);
+        _recording.Trim(_settings.Prefs.RecentMinutes);
+        if (_settings.Prefs.RecentEnabled && !_recording.KeepsRecent && _phase is ViewerPhase.Live && _pattern == null && Viewers.Licence.IsPro)
+            _recording.SetKeepRecent(true);
     }
 
     /// <summary>A generated pattern instead of the card (menu, -testPattern); null returns to the live input.</summary>
@@ -394,6 +400,56 @@ public sealed unsafe class MainWindow
     }
 
     internal void ShowScopes() => ScopesWindow.Show(_window, _renderer);
+
+    /// <summary>Pro features run on the live card only, after the gate (one licence check, free features never ask).</summary>
+    private bool CanRecord(ProFeature feature)
+    {
+        if (!Viewers.Licence.IsUnlocked(feature))
+        {
+            UpgradeWindow.Show(_window, Viewers.Licence, feature);
+            return false;
+        }
+        if (_pattern != null || _capture == null)
+        {
+            Toast("Switch to the live input to record");
+            return false;
+        }
+        return true;
+    }
+
+    internal void ToggleRecording()
+    {
+        if (_recording.IsRecording)
+        {
+            var path = _recording.StopFile();
+            Toast(path != null ? "Recording saved to Videos › HDMI Captain" : "Recording failed");
+            _window.SetTitle(_window.GetTitle()?.Replace("● ", "") ?? "HDMI Captain");
+            return;
+        }
+        if (!CanRecord(ProFeature.Recording)) return;
+        if (_recording.StartFile() is { } error) Toast(error);
+        else _window.SetTitle("● " + _window.GetTitle());
+    }
+
+    internal void ToggleKeepRecent()
+    {
+        var on = !_settings.Prefs.RecentEnabled;
+        if (on && !CanRecord(ProFeature.ReplayBuffer)) return;
+        _settings.EditPrefs(p => p.RecentEnabled = on);
+        if (_recording.SetKeepRecent(on) is { } error) Toast(error);
+        else Toast(on ? $"Keeping the last {_settings.Prefs.RecentMinutes} min" : "Stopped keeping recent footage");
+    }
+
+    internal void SaveRecent(double seconds)
+    {
+        if (!_recording.KeepsRecent)
+        {
+            Toast("Turn on Keep Recent Footage first");
+            return;
+        }
+        var path = _recording.SaveRecent(seconds);
+        Toast(path != null ? $"Saved the last {seconds:0} s to Videos › HDMI Captain" : "Couldn't save recent footage");
+    }
 
     private void UpdateStats()
     {
@@ -605,6 +661,7 @@ public sealed unsafe class MainWindow
             if (w > 200 && h > 150) _settings.Store.UpdateState(st => st with { WindowWidth = w, WindowHeight = h });
         }
         _settings.Changed -= ApplySettings;
+        _recording.Dispose();
         if (_tickTimer != 0) GLib.Source.Remove(_tickTimer);
         if (_hideTimer != 0) GLib.Source.Remove(_hideTimer);
         _tickTimer = _hideTimer = 0;
