@@ -13,3 +13,4 @@ AppPackages/
 Apps/Windows/.local/
 .claude/worktrees/
 Apps/Windows/native/VirtualCamera/build/
+native/render-gles/build/

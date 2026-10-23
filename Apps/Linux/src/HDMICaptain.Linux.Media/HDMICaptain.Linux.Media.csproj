@@ -4,8 +4,20 @@
     <TargetFramework>net10.0</TargetFramework>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>HDMICaptain.Linux.Media</RootNamespace>
+    <NativeRenderDir>$(RepoRoot)/native/render-gles</NativeRenderDir>
+    <NativeBuildDir>$(MSBuildProjectExtensionsPath)native/$(Configuration)/</NativeBuildDir>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="$(RepoRoot)/Apps/Windows/src/HDMICaptain.Core/HDMICaptain.Core.csproj" />
+  </ItemGroup>
+
+  <!-- native/render-gles → libhcrender.so (+ the pixel-test context), built by CMake and copied next to every referencing app. -->
+  <Target Name="BuildNativeRenderer" BeforeTargets="BeforeBuild" Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <Exec Command="cmake -S &quot;$(NativeRenderDir)&quot; -B &quot;$(NativeBuildDir)&quot; -G Ninja -DCMAKE_BUILD_TYPE=Release &gt; /dev/null" Condition="!Exists('$(NativeBuildDir)build.ninja')" />
+    <Exec Command="cmake --build &quot;$(NativeBuildDir)&quot;" />
+  </Target>
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <None Include="$(NativeBuildDir)libhcrender.so" Link="libhcrender.so" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(NativeBuildDir)libhcrender_testctx.so" Link="libhcrender_testctx.so" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 </Project>
