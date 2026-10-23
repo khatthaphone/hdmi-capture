@@ -40,6 +40,8 @@ public static class Actions
         Add("settings", w.OpenSettings, "<Control>comma");
         Add("keep-on-top", () => w.SetKeepOnTop(!w.Settings.Prefs.FloatOnTop), "<Control>t");
         Add("scopes", w.ShowScopes, "<Control><Shift>w");
+        Add("open-cards", Viewers.OpenAllCards, "<Control><Shift>n");
+        Add("grid", Viewers.ShowGrid, "<Control><Shift>g");
         Add("pattern-off", () => w.ShowPattern(null));
         Add("pattern-smpte", () => w.ShowPattern(TestPatternKind.SmpteBars));
         Add("pattern-full", () => w.ShowPattern(TestPatternKind.FullBars));
@@ -102,6 +104,8 @@ public static class Actions
         menu.AppendSubmenu("Test Pattern", pattern);
         var tools = Gio.Menu.New();
         tools.Append("Show Scopes", "win.scopes");
+        tools.Append("Open a Window per Card", "win.open-cards");
+        tools.Append("All Cards in a Grid", "win.grid");
         menu.AppendSection(null, tools);
         var output = Gio.Menu.New();
         output.Append("Save Screenshot", "win.screenshot");
@@ -142,7 +146,7 @@ public static class Actions
             ("F11  ·  F  ·  Alt+Enter", "Full screen"), ("Esc", "Leave full screen"), ("Ctrl+M", "Mute"),
             ("Ctrl+1 / 2 / 3 / 4", "Fit / Fill / Stretch / Integer"), ("Ctrl+Shift+S", "Save screenshot"),
             ("Ctrl+Shift+C", "Copy frame"), ("Ctrl+Shift+H", "Clean mode"), ("Ctrl+I", "Diagnostics"),
-            ("Ctrl+− / 0 / +", "Window size 50 / 100 / 200 %"), ("Ctrl+Shift+W", "Scopes"), ("Ctrl+R", "Reconnect"), ("Ctrl+,", "Settings"), ("F1", "Connection help"),
+            ("Ctrl+− / 0 / +", "Window size 50 / 100 / 200 %"), ("Ctrl+Shift+W", "Scopes"), ("Ctrl+Shift+N", "Window per card"), ("Ctrl+Shift+G", "Grid"), ("Ctrl+R", "Reconnect"), ("Ctrl+,", "Settings"), ("F1", "Connection help"),
         };
         var list = Gtk.ListBox.New();
         list.AddCssClass("boxed-list");
@@ -189,6 +193,8 @@ public static class Actions
             case "help": ConnectionHelp.Show(w.Window); break;
             case "settings": w.OpenSettings(); break;
             case "scopes": w.ShowScopes(); break;
+            case "openCards": Viewers.OpenAllCards(); break;
+            case "grid": Viewers.ShowGrid(); break;
             case "guides": w.PreviewGuides(new GuideSettings { Thirds = true, Center = true, SafeAreas = true, Mask = GuideMask.Scope }); break;
             default: LinuxLog.Write($"qa: unknown action {action}"); break;
         }

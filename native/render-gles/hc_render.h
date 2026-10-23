@@ -64,6 +64,9 @@ void hc_renderer_gl_release(hc_renderer *r);
 // GL: converts the newest frame (if any), then draws into the framebuffer bound now, of the given
 // size in pixels. Returns 1 when a picture was drawn, 0 when there is none yet (cleared black).
 int32_t hc_renderer_render(hc_renderer *r, int32_t width, int32_t height);
+// GL: the same into the region (x, y, w, h) of the bound framebuffer, GL coordinates (origin bottom-left).
+// Several renderers can share one context and draw the tiles of a grid.
+int32_t hc_renderer_render_region(hc_renderer *r, int32_t x, int32_t y, int32_t width, int32_t height);
 // GL: the clean pass-1 picture as RGBA, top row first. Returns bytes written (0 = no frame or too small).
 int32_t hc_renderer_read_pass1(hc_renderer *r, uint8_t *rgba, int32_t capacity, int32_t *width, int32_t *height);
 

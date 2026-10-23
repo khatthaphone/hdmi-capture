@@ -170,7 +170,9 @@ void hc_renderer_gl_release(hc_renderer *r) {
     r->glReady = false;
 }
 
-int32_t hc_renderer_render(hc_renderer *r, int32_t width, int32_t height) {
+int32_t hc_renderer_render(hc_renderer *r, int32_t width, int32_t height) { return hc_renderer_render_region(r, 0, 0, width, height); }
+
+int32_t hc_renderer_render_region(hc_renderer *r, int32_t x, int32_t y, int32_t width, int32_t height) {
     if (!r->glReady) return 0;
     GLint target = 0;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &target);
@@ -213,7 +215,7 @@ int32_t hc_renderer_render(hc_renderer *r, int32_t width, int32_t height) {
             }
         }
     }
-    r->gl.drawScaled(GLuint(target), width, height, options, r->activeLook);
+    r->gl.drawScaled(GLuint(target), x, y, width, height, options, r->activeLook);
     std::lock_guard<std::mutex> lock(r->mutex);
     if (r->gl.hasFrame()) r->framesDrawn++;
     r->width = r->gl.width();

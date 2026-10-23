@@ -69,7 +69,9 @@ public:
     // picture that screenshots, recordings and pass 2 read.
     void convert(const Frame &frame, ColorRange range, Matrix matrix = Matrix::Auto, const Look *sourceLook = nullptr);
     // Pass 2 into framebuffer `fbo` of w×h pixels (clears it black around the picture).
-    void drawScaled(GLuint fbo, int w, int h, const RenderOptions &options, const Look &look);
+    void drawScaled(GLuint fbo, int w, int h, const RenderOptions &options, const Look &look) { drawScaled(fbo, 0, 0, w, h, options, look); }
+    // The same into the region (x, y, w, h) of `fbo`, GL coordinates (origin bottom-left): one tile of a grid.
+    void drawScaled(GLuint fbo, int x, int y, int w, int h, const RenderOptions &options, const Look &look);
     // The clean pass-1 picture at source size, no look (recording surfaces).
     void drawClean(GLuint fbo);
     void uploadLook(const Look &look);

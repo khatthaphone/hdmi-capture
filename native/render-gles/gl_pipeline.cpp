@@ -408,15 +408,18 @@ void GlPipeline::uploadLook(const Look &look) {
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 }
 
-void GlPipeline::drawScaled(GLuint fbo, int w, int h, const RenderOptions &options, const Look &l) {
+void GlPipeline::drawScaled(GLuint fbo, int x, int y, int w, int h, const RenderOptions &options, const Look &l) {
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    glViewport(0, 0, w, h);
+    glViewport(x, y, w, h);
+    glEnable(GL_SCISSOR_TEST);  // clear only this region
+    glScissor(x, y, w, h);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT);
+    glDisable(GL_SCISSOR_TEST);
     if (!hasFrame_ || w <= 0 || h <= 0) return;
     RenderGeometry g = RenderGeometry::compute(float(frameWidth_), float(frameHeight_), float(w), float(h), options.scale);
     // GL viewports start bottom-left; the geometry is top-left.
-    glViewport(GLint(g.viewport.x), GLint(float(h) - g.viewport.y - g.viewport.h), GLsizei(g.viewport.w), GLsizei(g.viewport.h));
+    glViewport(x + GLint(g.viewport.x), y + GLint(float(h) - g.viewport.y - g.viewport.h), GLsizei(g.viewport.w), GLsizei(g.viewport.h));
     glUseProgram(scaleProgram_);
     glUniform4f(glGetUniformLocation(scaleProgram_, "uvRect"), g.source.x, g.source.y, g.source.w, g.source.h);
     // A baked source already carries the look: draw it as is.

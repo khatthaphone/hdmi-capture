@@ -49,12 +49,16 @@ public sealed unsafe class MainWindow
     private FormatPreference? _openedWith;
     private uint _hideTimer, _tickTimer;
     private long _lastFramesIn;
+    private bool _silenced;
+    private bool _closed;
 
-    public MainWindow(Adw.Application app, LaunchOptions options, ViewerSettings settings)
+    /// <param name="cardKey">A card window (Multi-View): shows only this card. Null for the main window.</param>
+    public MainWindow(Adw.Application app, LaunchOptions options, ViewerSettings settings, string? cardKey)
     {
         _app = app;
         _options = options;
         _settings = settings;
+        CardKey = cardKey;
         _ui = SynchronizationContext.Current!;
         // -qaShowStats shows diagnostics for this run only; it is never written to prefs (CLAUDE.md QA rule).
         _diagnostics = options.QaShowStats || settings.Prefs.ShowStats;
@@ -133,6 +137,10 @@ public sealed unsafe class MainWindow
             Shutdown();
             return false;
         };
+        _window.OnNotify += (_, args) =>
+        {
+            if (args.Pspec.GetName() == "is-active" && _window.IsActive) Viewers.FocusAudio(this);
+        };
         _window.OnRealize += (_, _) =>
         {
             if (_settings.Prefs.FloatOnTop) GLib.Functions.IdleAdd(GLib.Constants.PRIORITY_DEFAULT_IDLE, () => { X11Window.SetAbove(_window, true); return false; });
@@ -142,6 +150,32 @@ public sealed unsafe class MainWindow
     }
 
     public Gtk.Window Window => _window;
+
+    /// <summary>The card this window is pinned to (card windows), or null (the main window).</summary>
+    public string? CardKey { get; }
+    public bool IsPrimary => CardKey == null;
+
+    /// <summary>The card on screen right now (live), for Multi-View claims and taps.</summary>
+    public string? ShowingCard => _phase is ViewerPhase.Live or ViewerPhase.NoSignal && _pattern == null ? _capture?.CurrentDevice?.Key : null;
+
+    /// <summary>Every captured frame, on the capture thread, before it is released (the grid's tiles tap it).</summary>
+    public event V4l2Source.FrameHandler? FrameTap;
+
+    public event Action? Closed;
+
+    public void Close() => _window.Close();
+
+    public void OnClaimsChanged() => _capture?.ClaimsChanged();
+
+    /// <summary>Another window has the sound (focus follows); doesn't change the card's saved volume.</summary>
+    public void SetSilenced(bool silenced)
+    {
+        if (_silenced == silenced) return;
+        _silenced = silenced;
+        if (_audio != null) _audio.Settings = EffectiveAudio;
+    }
+
+    private AudioSettings EffectiveAudio => _silenced ? _settings.Preset.AudioSettings with { Muted = true } : _settings.Preset.AudioSettings;
     internal ViewerSettings Settings => _settings;
     internal CaptureController? Capture => _capture;
     internal bool IsMuted => _settings.Preset.Muted;
@@ -172,8 +206,15 @@ public sealed unsafe class MainWindow
         else
         {
             _power = new LinuxPower(_app, () => _window);
-            _capture = CaptureController.CreateDefault(_settings.Store.State.PreferredDeviceKey, _power);
-            _capture.Catalog.PreferredChanged += key => _ui.Post(_ => _settings.Store.UpdateState(st => st with { PreferredDeviceKey = key }), null);
+            var options = new CaptureControllerOptions
+            {
+                PinnedToPreferred = CardKey != null,
+                // Viewers is UI-thread state; the controller asks from its own thread, so it reads a snapshot.
+                IsClaimedElsewhere = key => _claims.Contains(key),
+            };
+            _capture = CaptureController.CreateDefault(CardKey ?? _settings.Store.State.PreferredDeviceKey, _power, options);
+            if (CardKey == null)
+                _capture.Catalog.PreferredChanged += key => _ui.Post(_ => _settings.Store.UpdateState(st => st with { PreferredDeviceKey = key }), null);
             _capture.Log += LinuxLog.Write;
             _capture.FrameArrived += OnFrame;
             _capture.StateChanged += state => _ui.Post(_ => OnCaptureState(state), null);
@@ -192,8 +233,16 @@ public sealed unsafe class MainWindow
     }
 
     // Capture thread: copy or decode straight into the renderer's next slot.
-    private void OnFrame(byte* data, int length, V4l2Stream stream, long timestampNs) =>
+    private void OnFrame(byte* data, int length, V4l2Stream stream, long timestampNs)
+    {
         _writer.Write(stream.FourCC, data, length, stream.Width, stream.Height, stream.BytesPerLine, timestampNs);
+        FrameTap?.Invoke(data, length, stream, timestampNs);
+    }
+
+    private volatile IReadOnlySet<string> _claims = new HashSet<string>();
+
+    /// <summary>Refreshes the cards other viewers hold (snapshot read by the control thread).</summary>
+    internal void RefreshClaims(IEnumerable<string> keys) => _claims = keys.ToHashSet();
 
     private void OnCaptureState(CaptureState state)
     {
@@ -227,7 +276,7 @@ public sealed unsafe class MainWindow
             () => AlsaCapture.TryOpen(hw, out var capture) is var r && r == 0 ? capture! : throw new AudioOpenException(r, $"{hw}: {AlsaCapture.Error(r)}"),
             () => PulsePlayback.TryOpen(out var playback) == 0 ? playback! : throw new AudioOpenException(-Errno.EIO, "no sound server"))
         {
-            Settings = _settings.Preset.AudioSettings,
+            Settings = EffectiveAudio,
         };
         _audio.Log += m => LinuxLog.Write($"audio: {m}");
         _audio.Failed += _ => _ui.Post(_ => SetAudioMissing(true), null);
@@ -431,7 +480,7 @@ public sealed unsafe class MainWindow
         var preset = _settings.Preset;
         _renderer.SetOptions(preset.RenderOptions);
         _renderer.SetLook(preset.Adjustments, preset.LutPath != null ? _settings.Lut : null, preset.LutIntensity);
-        if (_audio != null) _audio.Settings = preset.AudioSettings;
+        if (_audio != null) _audio.Settings = EffectiveAudio;
         if (_capture != null && preset.Format != _openedWith)
         {
             var reopen = _openedWith != null;
@@ -547,6 +596,9 @@ public sealed unsafe class MainWindow
 
     private void Shutdown()
     {
+        if (_closed) return;
+        _closed = true;
+        Closed?.Invoke();
         if (!_window.IsFullscreen() && !_window.IsMaximized())
         {
             var (w, h) = (_window.GetWidth(), _window.GetHeight());

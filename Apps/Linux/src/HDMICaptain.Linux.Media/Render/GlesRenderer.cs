@@ -107,6 +107,9 @@ public sealed unsafe partial class GlesRenderer : IDisposable
     /// <summary>Converts the newest frame and draws it into the bound framebuffer (pixels). False: no picture yet.</summary>
     public bool GlRender(int width, int height) => hc_renderer_render(_handle, width, height) != 0;
 
+    /// <summary>Draws into the region (x, y from the bottom-left, w, h) of the bound framebuffer: one grid tile.</summary>
+    public bool GlRender(int x, int y, int width, int height) => hc_renderer_render_region(_handle, x, y, width, height) != 0;
+
     /// <summary>The clean pass-1 picture (RGBA, top row first), or null when there is none.</summary>
     public (byte[] Rgba, int Width, int Height)? GlReadPass1()
     {
@@ -158,5 +161,6 @@ public sealed unsafe partial class GlesRenderer : IDisposable
     [LibraryImport(Lib)] private static partial int hc_renderer_gl_init(nint r);
     [LibraryImport(Lib)] private static partial void hc_renderer_gl_release(nint r);
     [LibraryImport(Lib)] private static partial int hc_renderer_render(nint r, int width, int height);
+    [LibraryImport(Lib)] private static partial int hc_renderer_render_region(nint r, int x, int y, int width, int height);
     [LibraryImport(Lib)] private static partial int hc_renderer_read_pass1(nint r, byte* rgba, int capacity, int* width, int* height);
 }
