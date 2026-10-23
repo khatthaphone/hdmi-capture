@@ -37,6 +37,8 @@ public static class Actions
         Add("reconnect", w.Reconnect, "<Control>r");
         Add("help", () => ConnectionHelp.Show(window), "F1");
         Add("shortcuts", () => ShortcutsWindow(window).Present(), "<Control>question");
+        Add("settings", w.OpenSettings, "<Control>comma");
+        Add("keep-on-top", () => w.SetKeepOnTop(!w.Settings.Prefs.FloatOnTop), "<Control>t");
     }
 
     public static Gio.Menu ScaleMenu()
@@ -70,6 +72,9 @@ public static class Actions
         output.Append("Save Screenshot", "win.screenshot");
         output.Append("Copy Frame", "win.copy-frame");
         menu.AppendSection(null, output);
+        var settings = Gio.Menu.New();
+        settings.Append("Settings…", "win.settings");
+        menu.AppendSection(null, settings);
         var help = Gio.Menu.New();
         help.Append("Reconnect", "win.reconnect");
         help.Append("Connection Help", "win.help");
@@ -102,7 +107,7 @@ public static class Actions
             ("F11  ·  F  ·  Alt+Enter", "Full screen"), ("Esc", "Leave full screen"), ("Ctrl+M", "Mute"),
             ("Ctrl+1 / 2 / 3 / 4", "Fit / Fill / Stretch / Integer"), ("Ctrl+Shift+S", "Save screenshot"),
             ("Ctrl+Shift+C", "Copy frame"), ("Ctrl+Shift+H", "Clean mode"), ("Ctrl+I", "Diagnostics"),
-            ("Ctrl+− / 0 / +", "Window size 50 / 100 / 200 %"), ("Ctrl+R", "Reconnect"), ("F1", "Connection help"),
+            ("Ctrl+− / 0 / +", "Window size 50 / 100 / 200 %"), ("Ctrl+R", "Reconnect"), ("Ctrl+,", "Settings"), ("F1", "Connection help"),
         };
         var list = Gtk.ListBox.New();
         list.AddCssClass("boxed-list");
@@ -147,6 +152,7 @@ public static class Actions
             case "fullScreen": w.ToggleFullScreen(); break;
             case "clean": w.ToggleClean(); break;
             case "help": ConnectionHelp.Show(w.Window); break;
+            case "settings": w.OpenSettings(); break;
             default: LinuxLog.Write($"qa: unknown action {action}"); break;
         }
     }

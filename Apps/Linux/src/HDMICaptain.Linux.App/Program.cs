@@ -27,7 +27,8 @@ public static class Program
                 Gtk.IconTheme.GetForDisplay(display).AddSearchPath(Path.Combine(AppContext.BaseDirectory, "icons"));
             Gtk.Window.SetDefaultIconName(AppId);
         };
-        app.OnActivate += (_, _) => new MainWindow(app, options).Present();
+        var settings = new ViewerSettings(new PrefsStore());
+        app.OnActivate += (_, _) => new MainWindow(app, options, settings).Present();
         // GApplication parses its own options; ours are already read.
         return app.RunWithSynchronizationContext([]);
     }

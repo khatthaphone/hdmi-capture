@@ -41,22 +41,26 @@ public sealed unsafe class MainWindow
     private string? _audioDevice;
     private bool _audioMissing;
     private ViewerPhase _phase = new ViewerPhase.Scanning();
-    private ScaleMode _scale = ScaleMode.Fit;
-    private bool _sharpPixels, _clean, _diagnostics;
-    private AudioSettings _audioSettings = new();
+    private readonly ViewerSettings _settings;
+    private bool _clean, _diagnostics;
+    private FormatPreference? _openedWith;
     private uint _hideTimer, _tickTimer;
     private long _lastFramesIn;
 
-    public MainWindow(Adw.Application app, LaunchOptions options)
+    public MainWindow(Adw.Application app, LaunchOptions options, ViewerSettings settings)
     {
         _app = app;
         _options = options;
+        _settings = settings;
         _ui = SynchronizationContext.Current!;
-        _diagnostics = options.QaShowStats;
+        // -qaShowStats shows diagnostics for this run only; it is never written to prefs (CLAUDE.md QA rule).
+        _diagnostics = options.QaShowStats || settings.Prefs.ShowStats;
+        _clean = settings.Prefs.CleanMode;
 
         _window = Adw.ApplicationWindow.New(app);
         _window.SetTitle("HDMI Captain");
-        _window.SetDefaultSize(960, 600);
+        var state = settings.Store.State;
+        _window.SetDefaultSize(state.WindowWidth ?? 960, state.WindowHeight ?? 600);
         _window.AddCssClass("hc-viewer");
 
         _video = new VideoView(_renderer);
@@ -125,13 +129,19 @@ public sealed unsafe class MainWindow
             Shutdown();
             return false;
         };
+        _window.OnRealize += (_, _) =>
+        {
+            if (_settings.Prefs.FloatOnTop) GLib.Functions.IdleAdd(GLib.Constants.PRIORITY_DEFAULT_IDLE, () => { X11Window.SetAbove(_window, true); return false; });
+        };
 
         Start();
     }
 
     public Gtk.Window Window => _window;
-    internal bool IsMuted => _audioSettings.Muted;
-    internal ScaleMode Scale => _scale;
+    internal ViewerSettings Settings => _settings;
+    internal CaptureController? Capture => _capture;
+    internal bool IsMuted => _settings.Preset.Muted;
+    internal ScaleMode Scale => _settings.Preset.Scale;
     internal bool IsFullScreen => _window.IsFullscreen();
 
     public void Present() => _window.Present();
@@ -140,7 +150,9 @@ public sealed unsafe class MainWindow
 
     private void Start()
     {
-        _renderer.SetOptions(_scale, FilterMode.Linear, ColorRange.Auto);
+        _settings.Changed += ApplySettings;
+        ApplySettings();
+        if (_clean) ApplyClean();
         if (_options.QaPhase is { } qa && QaPhases.Parse(qa) is { } phase)
         {
             // DEBUG: one status screen without a card (screenshots, accessibility checks); capture doesn't start.
@@ -157,7 +169,8 @@ public sealed unsafe class MainWindow
         else
         {
             _power = new LinuxPower(_app, () => _window);
-            _capture = CaptureController.CreateDefault(power: _power);
+            _capture = CaptureController.CreateDefault(_settings.Store.State.PreferredDeviceKey, _power);
+            _capture.Catalog.PreferredChanged += key => _ui.Post(_ => _settings.Store.UpdateState(st => st with { PreferredDeviceKey = key }), null);
             _capture.Log += LinuxLog.Write;
             _capture.FrameArrived += OnFrame;
             _capture.StateChanged += state => _ui.Post(_ => OnCaptureState(state), null);
@@ -182,6 +195,7 @@ public sealed unsafe class MainWindow
     private void OnCaptureState(CaptureState state)
     {
         var phase = ViewerPhase.From(state, _capture?.CurrentDevice?.Name);
+        if (_capture?.CurrentDevice is { } device) _settings.UseDevice(device.Key);
         if (phase is ViewerPhase.Live)
         {
             _signal.Reset();
@@ -210,7 +224,7 @@ public sealed unsafe class MainWindow
             () => AlsaCapture.TryOpen(hw, out var capture) is var r && r == 0 ? capture! : throw new AudioOpenException(r, $"{hw}: {AlsaCapture.Error(r)}"),
             () => PulsePlayback.TryOpen(out var playback) == 0 ? playback! : throw new AudioOpenException(-Errno.EIO, "no sound server"))
         {
-            Settings = _audioSettings,
+            Settings = _settings.Preset.AudioSettings,
         };
         _audio.Log += m => LinuxLog.Write($"audio: {m}");
         _audio.Failed += _ => _ui.Post(_ => SetAudioMissing(true), null);
@@ -362,36 +376,34 @@ public sealed unsafe class MainWindow
         if (_window.IsFullscreen()) ToggleFullScreen();
     }
 
-    internal void ToggleMute()
+    internal void ToggleMute() => _settings.Edit(p => p with { Muted = !p.Muted });
+
+    internal void SetVolume(double volume) => _settings.Edit(p => p with { Volume = (float)Math.Clamp(volume, 0, 1), Muted = false });
+
+    internal double Volume => _settings.Preset.Volume;
+
+    internal void SetScale(ScaleMode scale) => _settings.Edit(p => p with { Scale = scale });
+
+    internal bool SharpPixels => _settings.Preset.Filter == FilterMode.Nearest;
+
+    internal void ToggleSharpPixels() => _settings.Edit(p => p with { Filter = p.Filter == FilterMode.Nearest ? FilterMode.Linear : FilterMode.Nearest });
+
+    /// <summary>The preset or prefs changed (here, in Settings, or a new card): push them to the renderer, audio and capture.</summary>
+    private void ApplySettings()
     {
-        SetAudio(_audioSettings with { Muted = !_audioSettings.Muted });
-        _controls.Sync();
-    }
-
-    internal void SetVolume(double volume) => SetAudio(_audioSettings with { Volume = (float)Math.Clamp(volume, 0, 1), Muted = false });
-
-    internal double Volume => _audioSettings.Volume;
-
-    private void SetAudio(AudioSettings settings)
-    {
-        _audioSettings = settings;
-        if (_audio != null) _audio.Settings = settings;
-    }
-
-    internal void SetScale(ScaleMode scale)
-    {
-        _scale = scale;
-        _renderer.SetOptions(_scale, _sharpPixels ? FilterMode.Nearest : FilterMode.Linear, ColorRange.Auto);
+        var preset = _settings.Preset;
+        _renderer.SetOptions(preset.RenderOptions);
+        _renderer.SetLook(preset.Adjustments, preset.LutPath != null ? _settings.Lut : null, preset.LutIntensity);
+        if (_audio != null) _audio.Settings = preset.AudioSettings;
+        if (_capture != null && preset.Format != _openedWith)
+        {
+            var reopen = _openedWith != null;
+            _openedWith = preset.Format;
+            _capture.Preference = preset.Format;
+            if (reopen) _capture.Retry();
+        }
         _video.Widget.QueueRender();
         _controls.Sync();
-    }
-
-    internal bool SharpPixels => _sharpPixels;
-
-    internal void ToggleSharpPixels()
-    {
-        _sharpPixels = !_sharpPixels;
-        SetScale(_scale);
     }
 
     internal bool Clean => _clean;
@@ -400,6 +412,12 @@ public sealed unsafe class MainWindow
     internal void ToggleClean()
     {
         _clean = !_clean;
+        _settings.EditPrefs(p => p.CleanMode = _clean);
+        ApplyClean();
+    }
+
+    private void ApplyClean()
+    {
         _toolbar.SetRevealTopBars(!_clean && !_window.IsFullscreen());
         _window.SetDecorated(!_clean);
     }
@@ -409,8 +427,18 @@ public sealed unsafe class MainWindow
     internal void ToggleDiagnostics()
     {
         _diagnostics = !_diagnostics;
+        if (!_options.QaShowStats) _settings.EditPrefs(p => p.ShowStats = _diagnostics);
         _stats.SetVisible(_diagnostics);
         if (_diagnostics) UpdateStats();
+    }
+
+    internal void OpenSettings() => SettingsWindow.Show(this);
+
+    /// <summary>X11 only (EWMH); on Wayland the compositor's window menu offers it.</summary>
+    internal void SetKeepOnTop(bool onTop)
+    {
+        _settings.EditPrefs(p => p.FloatOnTop = onTop);
+        if (!X11Window.SetAbove(_window, onTop)) LinuxLog.Write("keep on top: not available on this display (Wayland)");
     }
 
     internal void Reconnect() => _capture?.Retry();
@@ -482,6 +510,12 @@ public sealed unsafe class MainWindow
 
     private void Shutdown()
     {
+        if (!_window.IsFullscreen() && !_window.IsMaximized())
+        {
+            var (w, h) = (_window.GetWidth(), _window.GetHeight());
+            if (w > 200 && h > 150) _settings.Store.UpdateState(st => st with { WindowWidth = w, WindowHeight = h });
+        }
+        _settings.Changed -= ApplySettings;
         if (_tickTimer != 0) GLib.Source.Remove(_tickTimer);
         if (_hideTimer != 0) GLib.Source.Remove(_hideTimer);
         _tickTimer = _hideTimer = 0;

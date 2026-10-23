@@ -18,6 +18,7 @@ struct RenderOptions {
     ScaleMode scale = ScaleMode::Fit;
     FilterMode filter = FilterMode::Linear;
     ColorRange range = ColorRange::Auto;
+    Matrix matrix = Matrix::Auto;  // the user's override; Auto keeps each frame's own
 };
 
 // Picture look, applied when scaling into the window (CaptureCore's ImageAdjustments + LUT).
@@ -58,7 +59,7 @@ public:
     void release();
 
     // Upload + pass 1. Leaves rgbFramebuffer bound.
-    void convert(const Frame &frame, ColorRange range);
+    void convert(const Frame &frame, ColorRange range, Matrix matrix = Matrix::Auto);
     // Pass 2 into framebuffer `fbo` of w×h pixels (clears it black around the picture).
     void drawScaled(GLuint fbo, int w, int h, const RenderOptions &options, const Look &look);
     // The clean pass-1 picture at source size, no look (recording surfaces).

@@ -45,8 +45,9 @@ int64_t hc_renderer_monotonic_ns(void);
 void hc_renderer_start_pattern(hc_renderer *r, int32_t pattern, int32_t width, int32_t height, int32_t fps);
 void hc_renderer_stop_pattern(hc_renderer *r);
 
-// scale: 0 fit, 1 fill, 2 stretch, 3 integer · filter: 0 linear, 1 nearest · range: 0 auto, 1 limited, 2 full
-void hc_renderer_set_options(hc_renderer *r, int32_t scale, int32_t filter, int32_t range);
+// scale: 0 fit, 1 fill, 2 stretch, 3 integer · filter: 0 linear, 1 nearest · range: 0 auto, 1 limited, 2 full ·
+// matrix: 0 auto (the frame's), 1 BT.601, 2 BT.709
+void hc_renderer_set_options(hc_renderer *r, int32_t scale, int32_t filter, int32_t range, int32_t matrix);
 // lut: lut_size³ RGB floats (red fastest), or NULL/0 for none.
 void hc_renderer_set_look(hc_renderer *r, float brightness, float contrast, float saturation, float gamma, float sharpness,
                           float lut_intensity, int32_t lut_size, const float *lut, const float *lut_min, const float *lut_max);

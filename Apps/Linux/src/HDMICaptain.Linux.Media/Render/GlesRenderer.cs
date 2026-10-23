@@ -70,8 +70,20 @@ public sealed unsafe partial class GlesRenderer : IDisposable
 
     public void StopPattern() => hc_renderer_stop_pattern(_handle);
 
-    public void SetOptions(ScaleMode scale, FilterMode filter, ColorRange range) =>
-        hc_renderer_set_options(_handle, (int)scale, (int)filter, (int)range);
+    public void SetOptions(ScaleMode scale, FilterMode filter, ColorRange range, ColorMatrix matrix = ColorMatrix.Auto) =>
+        hc_renderer_set_options(_handle, (int)scale, (int)filter, (int)range, (int)matrix);
+
+    public void SetOptions(RenderOptions options) => SetOptions(options.Scale, options.Filter, options.ColorRange, options.Matrix);
+
+    /// <summary>Picture look in pass 2 (adjustments, then the LUT blended by <paramref name="lutIntensity"/>); never in pass 1.</summary>
+    public void SetLook(ImageAdjustments adjustments, CubeLUT? lut = null, double lutIntensity = 1)
+    {
+        fixed (float* table = lut?.Entries)
+        fixed (float* min = lut?.DomainMin)
+        fixed (float* max = lut?.DomainMax)
+            hc_renderer_set_look(_handle, (float)adjustments.Brightness, (float)adjustments.Contrast, (float)adjustments.Saturation,
+                (float)adjustments.Gamma, (float)adjustments.Sharpness, (float)lutIntensity, lut?.Size ?? 0, table, min, max);
+    }
 
     public RenderStats Stats { get { RenderStats s; hc_renderer_stats(_handle, &s); return s; } }
 
@@ -125,7 +137,9 @@ public sealed unsafe partial class GlesRenderer : IDisposable
     [LibraryImport(Lib)] private static partial long hc_renderer_monotonic_ns();
     [LibraryImport(Lib)] private static partial void hc_renderer_start_pattern(nint r, int pattern, int width, int height, int fps);
     [LibraryImport(Lib)] private static partial void hc_renderer_stop_pattern(nint r);
-    [LibraryImport(Lib)] private static partial void hc_renderer_set_options(nint r, int scale, int filter, int range);
+    [LibraryImport(Lib)] private static partial void hc_renderer_set_options(nint r, int scale, int filter, int range, int matrix);
+    [LibraryImport(Lib)] private static partial void hc_renderer_set_look(nint r, float brightness, float contrast, float saturation, float gamma, float sharpness,
+        float lutIntensity, int lutSize, float* lut, float* lutMin, float* lutMax);
     [LibraryImport(Lib)] private static partial void hc_renderer_stats(nint r, RenderStats* stats);
     [LibraryImport(Lib)] private static partial void hc_renderer_signal(nint r, RenderSignal* signal);
     [LibraryImport(Lib)] private static partial int hc_renderer_gl_init(nint r);

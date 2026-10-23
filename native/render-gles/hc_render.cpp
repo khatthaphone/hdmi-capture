@@ -103,11 +103,12 @@ void hc_renderer_stop_pattern(hc_renderer *r) {
     r->showingPattern = false;
 }
 
-void hc_renderer_set_options(hc_renderer *r, int32_t scale, int32_t filter, int32_t range) {
+void hc_renderer_set_options(hc_renderer *r, int32_t scale, int32_t filter, int32_t range, int32_t matrix) {
     std::lock_guard<std::mutex> lock(r->mutex);
     r->options.scale = ScaleMode(std::clamp(scale, 0, 3));
     r->options.filter = FilterMode(std::clamp(filter, 0, 1));
     r->options.range = ColorRange(std::clamp(range, 0, 2));
+    r->options.matrix = Matrix(std::clamp(matrix, 0, 2));
 }
 
 void hc_renderer_set_look(hc_renderer *r, float brightness, float contrast, float saturation, float gamma, float sharpness,
@@ -190,7 +191,7 @@ int32_t hc_renderer_render(hc_renderer *r, int32_t width, int32_t height) {
     int64_t arrival = 0;
     if (Frame *frame = active.take()) {
         arrival = frame->timestampNs;
-        r->gl.convert(*frame, options.range);
+        r->gl.convert(*frame, options.range, options.matrix);
         SignalSample signal;
         bool sampled = r->convertCount % 10 == 0;
         bool scoped = r->scopesEnabled && r->convertCount % 5 == 0;
