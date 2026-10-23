@@ -33,9 +33,11 @@ void hc_renderer_destroy(hc_renderer *r);  // after hc_renderer_gl_release
 // Called (on the producer's thread) whenever a frame is published, so the host can schedule a draw.
 void hc_renderer_set_frame_callback(hc_renderer *r, hc_frame_callback callback, void *user);
 
-// Capture frames. format: 0 NV12, 1 YUY2, 2 I420, 3 I422. Returns a buffer of frame size to fill.
+// Capture frames. format: 0 NV12, 1 YUY2, 2 I420, 3 I422. Returns a buffer of frame size to fill
+// (planes back to back, each row exactly as wide as the plane). One producer thread at a time.
 uint8_t *hc_renderer_acquire(hc_renderer *r, int32_t format, int32_t width, int32_t height);
-void hc_renderer_publish(hc_renderer *r, int64_t timestamp_ns, int32_t full_range);
+// matrix: 0 auto (BT.709 from 720 lines up), 1 BT.601, 2 BT.709.
+void hc_renderer_publish(hc_renderer *r, int64_t timestamp_ns, int32_t full_range, int32_t matrix);
 int64_t hc_renderer_monotonic_ns(void);
 
 // Test patterns (0 smpteBars, 1 fullBars, 2 grid, 3 grayRamp) on their own ring; while one runs,

@@ -25,11 +25,16 @@ inline size_t frameBytes(PixelFormat format, int width, int height) {
     return 0;
 }
 
+// YCbCr matrix of a frame. Auto: BT.709 at HD sizes (height ≥ 720), BT.601 below, as in CaptureCore.
+// MJPEG frames are JFIF, so they say Bt601.
+enum class Matrix : int { Auto = 0, Bt601 = 1, Bt709 = 2 };
+
 struct Frame {
     PixelFormat format = PixelFormat::NV12;
     int width = 0;
     int height = 0;
     bool fullRange = false;
+    Matrix matrix = Matrix::Auto;
     int64_t timestampNs = 0;  // CLOCK_MONOTONIC when the frame arrived
     std::vector<uint8_t> data;
 

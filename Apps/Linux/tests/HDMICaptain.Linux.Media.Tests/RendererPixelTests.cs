@@ -102,7 +102,7 @@ public unsafe partial class RendererPixelTests
         r.Publish(GlesRenderer.MonotonicNs, fullRange);
     }
 
-    private static void AssertPixel(byte[] rgba, int width, int x, int y, int r, int g, int b)
+    internal static void AssertPixel(byte[] rgba, int width, int x, int y, int r, int g, int b)
     {
         var i = (y * width + x) * 4;
         var actual = (rgba[i], rgba[i + 1], rgba[i + 2]);
@@ -111,7 +111,7 @@ public unsafe partial class RendererPixelTests
     }
 
     /// <summary>libhcrender_testctx: an EGL surfaceless GLES 3 context with a w×h framebuffer, current on this thread.</summary>
-    private sealed partial class HeadlessGl : IDisposable
+    internal sealed partial class HeadlessGl : IDisposable
     {
         private readonly int _w, _h;
 

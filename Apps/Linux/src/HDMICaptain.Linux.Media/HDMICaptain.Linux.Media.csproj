@@ -4,20 +4,28 @@
     <TargetFramework>net10.0</TargetFramework>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>HDMICaptain.Linux.Media</RootNamespace>
-    <NativeRenderDir>$(RepoRoot)/native/render-gles</NativeRenderDir>
     <NativeBuildDir>$(MSBuildProjectExtensionsPath)native/$(Configuration)/</NativeBuildDir>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="$(RepoRoot)/Apps/Windows/src/HDMICaptain.Core/HDMICaptain.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="HDMICaptain.Linux.Media.Tests" />
+  </ItemGroup>
 
-  <!-- native/render-gles → libhcrender.so (+ the pixel-test context), built by CMake and copied next to every referencing app. -->
-  <Target Name="BuildNativeRenderer" BeforeTargets="BeforeBuild" Condition="$([MSBuild]::IsOSPlatform('Linux'))">
-    <Exec Command="cmake -S &quot;$(NativeRenderDir)&quot; -B &quot;$(NativeBuildDir)&quot; -G Ninja -DCMAKE_BUILD_TYPE=Release &gt; /dev/null" Condition="!Exists('$(NativeBuildDir)build.ninja')" />
-    <Exec Command="cmake --build &quot;$(NativeBuildDir)&quot;" />
+  <!-- native/render-gles → libhcrender.so (+ libhcrender_testctx.so for pixel tests) and native/linux-media → libhcmedia.so,
+       built by CMake (Ninja, Release) and copied next to every referencing app. -->
+  <ItemGroup>
+    <NativeProject Include="render-gles" Source="$(RepoRoot)/native/render-gles" />
+    <NativeProject Include="linux-media" Source="$(RepoRoot)/native/linux-media" />
+  </ItemGroup>
+  <Target Name="BuildNativeLibraries" BeforeTargets="BeforeBuild" Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <Exec Command="cmake -S &quot;%(NativeProject.Source)&quot; -B &quot;$(NativeBuildDir)%(NativeProject.Identity)&quot; -G Ninja -DCMAKE_BUILD_TYPE=Release &gt; /dev/null" Condition="!Exists('$(NativeBuildDir)%(NativeProject.Identity)/build.ninja')" />
+    <Exec Command="cmake --build &quot;$(NativeBuildDir)%(NativeProject.Identity)&quot;" />
   </Target>
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
-    <None Include="$(NativeBuildDir)libhcrender.so" Link="libhcrender.so" CopyToOutputDirectory="PreserveNewest" Visible="false" />
-    <None Include="$(NativeBuildDir)libhcrender_testctx.so" Link="libhcrender_testctx.so" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(NativeBuildDir)render-gles/libhcrender.so" Link="libhcrender.so" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(NativeBuildDir)render-gles/libhcrender_testctx.so" Link="libhcrender_testctx.so" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(NativeBuildDir)linux-media/libhcmedia.so" Link="libhcmedia.so" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 </Project>

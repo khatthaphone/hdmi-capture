@@ -28,6 +28,7 @@ public static class MediaSubtypes
         ["dmb1"] = "MJPG",
         ["mjpg"] = "MJPG",
         ["jpeg"] = "MJPG",
+        ["YUYV"] = "YUY2", // V4L2's name (Linux)
     };
 
     /// <summary>Builds the Media Foundation subtype GUID for a four-character code.</summary>
@@ -59,7 +60,7 @@ public static class MediaSubtypes
     /// </summary>
     public static string? ToSelectorName(Guid subtype) => ToFourCC(subtype) is { } cc ? Canonicalize(cc) : null;
 
-    /// <summary>Maps Apple names to the UVC names (420v to NV12, yuvs to YUY2, dmb1 to MJPG); other codes are returned as given.</summary>
+    /// <summary>Maps Apple and V4L2 names to the UVC names (420v to NV12, yuvs/YUYV to YUY2, dmb1 to MJPG); other codes are returned as given.</summary>
     public static string Canonicalize(string fourCC) => AppleToUvc.TryGetValue(fourCC, out var uvc) ? uvc : fourCC;
 
     /// <summary>The MF subtype GUID for a fixture or Apple fourCC, or null when we don't know the code.</summary>

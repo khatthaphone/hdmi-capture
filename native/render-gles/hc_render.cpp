@@ -80,11 +80,12 @@ uint8_t *hc_renderer_acquire(hc_renderer *r, int32_t format, int32_t width, int3
     return frame.data.data();
 }
 
-void hc_renderer_publish(hc_renderer *r, int64_t timestamp_ns, int32_t full_range) {
+void hc_renderer_publish(hc_renderer *r, int64_t timestamp_ns, int32_t full_range, int32_t matrix) {
     if (!r->writing) return;
     // Stamp the slot acquire() handed out before it becomes visible.
     r->writing->timestampNs = timestamp_ns > 0 ? timestamp_ns : nowNs();
     r->writing->fullRange = full_range != 0;
+    r->writing->matrix = Matrix(std::clamp(matrix, 0, 2));
     r->writing = nullptr;
     r->ring.publish();
 }

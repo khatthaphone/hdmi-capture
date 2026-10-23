@@ -1,7 +1,7 @@
 DERIVED := .build/xcode
 APP := $(DERIVED)/Build/Products/Debug/HDMI Captain.app
 
-.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad run-ipad-profile install-mac ipad-snapshot ipad-soak android-build android-test android-run android-check16k android-soak win-deps win-build win-test win-run win-package win-cert win-vcam linux-setup linux-build linux-test linux-run linux-logs inventory logs clean
+.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad run-ipad-profile install-mac ipad-snapshot ipad-soak android-build android-test android-run android-check16k android-soak win-deps win-build win-test win-run win-package win-cert win-vcam linux-setup linux-build linux-test linux-run linux-logs linux-card-status linux-card-attach linux-card-detach linux-inventory inventory logs clean
 
 IOS_SIM ?= iPad Pro 11-inch (M5)
 IPAD_APP_SIM := $(DERIVED)/Build/Products/Debug-iphonesimulator/HDMI Captain.app
@@ -194,6 +194,16 @@ linux-run: linux-build
 
 linux-logs:
 	$(LINUX_SH) "tail -n 50 -f \$${XDG_STATE_HOME:-\$$HOME/.local/state}/hdmicaptain/logs/capture.log"
+
+# Capture card to/from WSL (usbipd-win, task 109). Attaching takes the card away from Windows until detach.
+LINUX_CARD ?= 1de1:f105
+linux-card-status linux-card-attach linux-card-detach:
+	pwsh -NoProfile -File tools/linux/wsl-card.ps1 $(subst linux-card-,,$@) -HardwareId $(LINUX_CARD) -Distro $(LINUX_DISTRO)
+
+# V4L2/ALSA inventory JSON (task 108); INVENTORY_ARGS e.g. "--probe 60" or "--out docs/research/devices/x-linux.json".
+INVENTORY_ARGS ?=
+linux-inventory: linux-build
+	$(LINUX_SH) "dotnet $(LINUX_OUT)/bin/HDMICaptain.Linux.Inventory/debug/hdmi-captain-inventory.dll $(INVENTORY_ARGS)"
 
 inventory:
 	cd tools/device-inventory && swift run -q device-inventory

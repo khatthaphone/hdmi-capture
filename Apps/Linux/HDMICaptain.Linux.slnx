@@ -4,6 +4,9 @@
     <Project Path="src/HDMICaptain.Linux.Media/HDMICaptain.Linux.Media.csproj" />
     <Project Path="src/HDMICaptain.Linux.App/HDMICaptain.Linux.App.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/HDMICaptain.Linux.Inventory/HDMICaptain.Linux.Inventory.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="../Windows/tests/HDMICaptain.Core.Tests/HDMICaptain.Core.Tests.csproj" />
     <Project Path="tests/HDMICaptain.Linux.Media.Tests/HDMICaptain.Linux.Media.Tests.csproj" />

@@ -7,6 +7,9 @@ namespace HDMICaptain.Linux.Media.Render;
 /// <summary>Pixel layouts the shared renderer takes (values match native/render-gles frame.h).</summary>
 public enum RenderPixelFormat { Nv12 = 0, Yuy2 = 1, I420 = 2, I422 = 3 }
 
+/// <summary>A frame's YCbCr matrix. Auto: BT.709 from 720 lines up. MJPEG (JFIF) frames are BT.601.</summary>
+public enum FrameMatrix { Auto = 0, Bt601 = 1, Bt709 = 2 }
+
 [StructLayout(LayoutKind.Sequential)]
 public struct RenderStats
 {
@@ -59,7 +62,8 @@ public sealed unsafe partial class GlesRenderer : IDisposable
         return data == null ? default : new Span<byte>(data, FrameBytes(format, width, height));
     }
 
-    public void Publish(long timestampNs, bool fullRange) => hc_renderer_publish(_handle, timestampNs, fullRange ? 1 : 0);
+    public void Publish(long timestampNs, bool fullRange, FrameMatrix matrix = FrameMatrix.Auto) =>
+        hc_renderer_publish(_handle, timestampNs, fullRange ? 1 : 0, (int)matrix);
 
     public void StartPattern(TestPatternKind pattern, int width = 1920, int height = 1080, int fps = 60) =>
         hc_renderer_start_pattern(_handle, (int)pattern, width, height, fps);
@@ -117,7 +121,7 @@ public sealed unsafe partial class GlesRenderer : IDisposable
     [LibraryImport(Lib)] private static partial void hc_renderer_destroy(nint r);
     [LibraryImport(Lib)] private static partial void hc_renderer_set_frame_callback(nint r, delegate* unmanaged[Cdecl]<nint, void> callback, nint user);
     [LibraryImport(Lib)] private static partial byte* hc_renderer_acquire(nint r, int format, int width, int height);
-    [LibraryImport(Lib)] private static partial void hc_renderer_publish(nint r, long timestampNs, int fullRange);
+    [LibraryImport(Lib)] private static partial void hc_renderer_publish(nint r, long timestampNs, int fullRange, int matrix);
     [LibraryImport(Lib)] private static partial long hc_renderer_monotonic_ns();
     [LibraryImport(Lib)] private static partial void hc_renderer_start_pattern(nint r, int pattern, int width, int height, int fps);
     [LibraryImport(Lib)] private static partial void hc_renderer_stop_pattern(nint r);

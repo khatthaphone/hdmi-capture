@@ -321,7 +321,7 @@ void GlPipeline::convert(const Frame &f, ColorRange range) {
     HC_TRACE_BEGIN("convert");
     upload(f);
     bool full = range == ColorRange::Full || (range == ColorRange::Auto && f.fullRange);
-    bool bt709 = f.height >= 720;  // SD sources are BT.601, as in CaptureCore
+    bool bt709 = f.matrix == Matrix::Bt709 || (f.matrix == Matrix::Auto && f.height >= 720);  // SD sources are BT.601, as in CaptureCore
     // Columns are the Y, Cb, Cr contributions to (R, G, B).
     const float m709[9] = {1, 1, 1, 0, -0.1873f, 1.8556f, 1.5748f, -0.4681f, 0};
     const float m601[9] = {1, 1, 1, 0, -0.344136f, 1.772f, 1.402f, -0.714136f, 0};
