@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- GTK 4 + libadwaita shell (Gir.Core), spec §14.7. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>HDMICaptain.Linux.App</RootNamespace>
+    <AssemblyName>hdmi-captain</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="GirCore.Gtk-4.0" />
+    <PackageReference Include="GirCore.Adw-1" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- App icon in a hicolor tree next to the binary; Program adds it to the icon theme for dev runs. -->
+    <Content Include="../../packaging/icons/**/*.png" LinkBase="icons" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../HDMICaptain.Linux.Media/HDMICaptain.Linux.Media.csproj" />
+  </ItemGroup>
+</Project>

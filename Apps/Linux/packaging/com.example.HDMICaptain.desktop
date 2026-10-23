@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=HDMI Captain
+GenericName=HDMI Capture Viewer
+Comment=Watch an HDMI capture card with low latency
+Exec=hdmi-captain %U
+Icon=com.example.HDMICaptain
+Terminal=false
+Categories=AudioVideo;Video;Player;
+Keywords=hdmi;capture;uvc;camera;console;
+StartupNotify=true
+StartupWMClass=com.example.HDMICaptain

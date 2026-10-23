@@ -1,0 +1,8 @@
+<Project>
+  <ItemGroup>
+    <!-- Gir.Core 0.8.x: GTK 4 + libadwaita bindings; runs on Ubuntu 24.04's GTK 4.14 / Adw 1.5 (newer API is only called when present). -->
+    <PackageVersion Include="GirCore.Gtk-4.0" Version="0.8.1" />
+    <PackageVersion Include="GirCore.Adw-1" Version="0.8.1" />
+    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+  </ItemGroup>
+</Project>

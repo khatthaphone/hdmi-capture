@@ -1,7 +1,7 @@
 DERIVED := .build/xcode
 APP := $(DERIVED)/Build/Products/Debug/HDMI Captain.app
 
-.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad run-ipad-profile install-mac ipad-snapshot ipad-soak android-build android-test android-run android-check16k android-soak win-deps win-build win-test win-run win-package win-cert win-vcam inventory logs clean
+.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad run-ipad-profile install-mac ipad-snapshot ipad-soak android-build android-test android-run android-check16k android-soak win-deps win-build win-test win-run win-package win-cert win-vcam linux-setup linux-build linux-test linux-run linux-logs inventory logs clean
 
 IOS_SIM ?= iPad Pro 11-inch (M5)
 IPAD_APP_SIM := $(DERIVED)/Build/Products/Debug-iphonesimulator/HDMI Captain.app
@@ -161,6 +161,39 @@ win-vcam:
 	mkdir -p $(VCAM_BIN)
 	cp $(VCAM_DIR)/build/$(WIN_PLATFORM)/out/Release/HDMICaptainVCam.dll $(VCAM_DIR)/build/$(WIN_PLATFORM)/out/Release/vcam.exe $(VCAM_BIN)/
 	@echo "built $(VCAM_BIN)/HDMICaptainVCam.dll and vcam.exe; run '$(VCAM_BIN)/vcam.exe status'"
+
+# Linux (Apps/Linux, spec §14). On the Windows dev PC these run inside WSL ($(LINUX_DISTRO)) on the repo as seen under
+# /mnt, with build outputs on the distro's ext4 ($(LINUX_OUT)); on a Linux box they run directly. LINUX_ARGS are the
+# shared launch arguments, e.g. LINUX_ARGS="-testPattern smpteBars". linux-setup installs packages + .NET (root).
+LINUX_DISTRO ?= Ubuntu-24.04
+LINUX_DIR := Apps/Linux
+LINUX_OUT ?= \$$HOME/.cache/hdmicaptain
+LINUX_ARGS ?=
+LINUX_APP := $(LINUX_OUT)/bin/HDMICaptain.Linux.App/debug/hdmi-captain.dll
+ifeq ($(OS),Windows_NT)
+LINUX_SH = MSYS_NO_PATHCONV=1 wsl -d $(LINUX_DISTRO) --cd "$(CURDIR)" -- bash -lc
+LINUX_ROOT_SH = MSYS_NO_PATHCONV=1 wsl -d $(LINUX_DISTRO) -u root --cd "$(CURDIR)" -- bash -lc
+LINUX_USER = $$(MSYS_NO_PATHCONV=1 wsl -d $(LINUX_DISTRO) -- whoami | tr -d '\r')
+else
+LINUX_SH = bash -lc
+LINUX_ROOT_SH = sudo bash -lc
+LINUX_USER = $$USER
+endif
+
+linux-setup:
+	$(LINUX_ROOT_SH) "bash tools/linux/setup-wsl.sh $(LINUX_USER)"
+
+linux-build:
+	$(LINUX_SH) "cd $(LINUX_DIR) && dotnet build HDMICaptain.Linux.slnx -c Debug --artifacts-path $(LINUX_OUT) -nologo"
+
+linux-test:
+	$(LINUX_SH) "cd $(LINUX_DIR) && dotnet test --solution HDMICaptain.Linux.slnx --artifacts-path $(LINUX_OUT)"
+
+linux-run: linux-build
+	$(LINUX_SH) "setsid -f tools/linux/run-dev.sh $(LINUX_APP) $(LINUX_ARGS) > /dev/null 2>&1 < /dev/null"
+
+linux-logs:
+	$(LINUX_SH) "tail -n 50 -f \$${XDG_STATE_HOME:-\$$HOME/.local/state}/hdmicaptain/logs/capture.log"
 
 inventory:
 	cd tools/device-inventory && swift run -q device-inventory

@@ -1,0 +1,8 @@
+# HDMI Captain: capture cards stay powered (uvcvideo enables USB autosuspend, which makes some cards
+# drop out) and their video nodes are readable by the video group. Task 109 / spec §14.5.
+# UGREEN-25854 (Actions Micro), MS2109, MS2130, MS2131.
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="1de1", ATTR{idProduct}=="f105", TEST=="power/control", ATTR{power/control}="on"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="534d", ATTR{idProduct}=="2109", TEST=="power/control", ATTR{power/control}="on"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="345f", ATTR{idProduct}=="2130", TEST=="power/control", ATTR{power/control}="on"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="345f", ATTR{idProduct}=="2131", TEST=="power/control", ATTR{power/control}="on"
+SUBSYSTEM=="video4linux", ATTRS{idVendor}=="1de1|534d|345f", GROUP="video", MODE="0660"

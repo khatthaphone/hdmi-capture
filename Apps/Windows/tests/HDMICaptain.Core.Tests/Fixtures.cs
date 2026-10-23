@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 namespace HDMICaptain.Core.Tests;
@@ -9,13 +10,15 @@ public static class Fixtures
 
     public static JsonDocument Load(string name) => JsonDocument.Parse(File.ReadAllText(Path.Combine(Directory, name)));
 
-    private static string Find()
+    // Walks up from the output folder, then from this source file: Linux builds put the output outside the repo (--artifacts-path).
+    private static string Find([CallerFilePath] string source = "")
     {
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
-        {
-            var candidate = Path.Combine(dir.FullName, "docs", "fixtures");
-            if (System.IO.Directory.Exists(candidate)) return candidate;
-        }
+        foreach (var start in new[] { AppContext.BaseDirectory, Path.GetDirectoryName(source) ?? "" })
+            for (var dir = new DirectoryInfo(start); dir != null; dir = dir.Parent)
+            {
+                var candidate = Path.Combine(dir.FullName, "docs", "fixtures");
+                if (System.IO.Directory.Exists(candidate)) return candidate;
+            }
         throw new DirectoryNotFoundException("docs/fixtures not found above " + AppContext.BaseDirectory);
     }
 }

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Linux engine: V4L2 capture, decode, audio, the shared GLES renderer's C ABI (spec §14.9). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>HDMICaptain.Linux.Media</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(RepoRoot)/Apps/Windows/src/HDMICaptain.Core/HDMICaptain.Core.csproj" />
+  </ItemGroup>
+</Project>

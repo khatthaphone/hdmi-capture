@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="../Windows/src/HDMICaptain.Core/HDMICaptain.Core.csproj" />
+    <Project Path="src/HDMICaptain.Linux.Media/HDMICaptain.Linux.Media.csproj" />
+    <Project Path="src/HDMICaptain.Linux.App/HDMICaptain.Linux.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="../Windows/tests/HDMICaptain.Core.Tests/HDMICaptain.Core.Tests.csproj" />
+    <Project Path="tests/HDMICaptain.Linux.Media.Tests/HDMICaptain.Linux.Media.Tests.csproj" />
+  </Folder>
+</Solution>
