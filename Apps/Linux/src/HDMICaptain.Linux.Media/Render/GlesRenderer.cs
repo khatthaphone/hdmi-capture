@@ -38,6 +38,8 @@ public sealed unsafe partial class GlesRenderer : IDisposable
 
     public GlesRenderer() => _handle = hc_renderer_create();
 
+    internal nint Handle => _handle;
+
     /// <summary>Raised on the producer's thread for every published frame (schedule a draw from it).</summary>
     public event Action? FramePublished
     {

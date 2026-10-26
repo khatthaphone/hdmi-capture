@@ -69,6 +69,17 @@ int32_t hc_renderer_render(hc_renderer *r, int32_t width, int32_t height);
 int32_t hc_renderer_render_region(hc_renderer *r, int32_t x, int32_t y, int32_t width, int32_t height);
 // GL: the clean pass-1 picture as RGBA, top row first. Returns bytes written (0 = no frame or too small).
 int32_t hc_renderer_read_pass1(hc_renderer *r, uint8_t *rgba, int32_t capacity, int32_t *width, int32_t *height);
+// GL: for recordings, without a window. Converts the newest unseen frame with the look and returns it as limited-range
+// NV12 (BT.709 from 720 lines up, else BT.601) in out. Returns bytes written: 0 when there is no new frame, -1 when
+// the frame can't be packed (width not a multiple of 4, odd height, out too small; the frame is consumed).
+int32_t hc_renderer_convert_nv12(hc_renderer *r, uint8_t *out, int32_t capacity, int32_t *width, int32_t *height, int64_t *timestamp_ns);
+
+// A headless GLES 3 context (EGL surfaceless) made current on the calling thread, for a renderer that draws for an
+// encoder rather than a window. NULL when EGL can't make one. Destroy on the same thread.
+typedef struct hc_offscreen hc_offscreen;
+hc_offscreen *hc_offscreen_create(void);
+const char *hc_offscreen_renderer_name(hc_offscreen *o);
+void hc_offscreen_destroy(hc_offscreen *o);
 
 #ifdef __cplusplus
 }

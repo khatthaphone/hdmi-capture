@@ -17,7 +17,8 @@ public sealed unsafe class FrameWriter : IDisposable
     public FrameWriter(GlesRenderer renderer) => _renderer = renderer;
 
     /// <summary>A frame as it went to the renderer (decoded planes), on the capture thread: recorders copy it.</summary>
-    public delegate void WrittenHandler(ReadOnlySpan<byte> frame, RenderPixelFormat format, int width, int height);
+    public delegate void WrittenHandler(ReadOnlySpan<byte> frame, RenderPixelFormat format, int width, int height, long timestampNs,
+        bool fullRange, FrameMatrix matrix);
 
     public WrittenHandler? FrameReady;
 
@@ -27,7 +28,7 @@ public sealed unsafe class FrameWriter : IDisposable
     private void Publish(Span<byte> slot, RenderPixelFormat format, int width, int height, long ts, bool fullRange, FrameMatrix matrix)
     {
         LastLayout = (format, width, height);
-        FrameReady?.Invoke(slot, format, width, height);
+        FrameReady?.Invoke(slot, format, width, height, ts, fullRange, matrix);
         _renderer.Publish(ts, fullRange, matrix);
     }
 

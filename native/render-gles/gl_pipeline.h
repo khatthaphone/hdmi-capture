@@ -76,6 +76,11 @@ public:
     void drawClean(GLuint fbo);
     void uploadLook(const Look &look);
     bool readPass1(Screenshot &out);
+    // The source picture (with a baked look) as limited-range NV12 for an encoder: BT.709 from 720 lines up, else
+    // BT.601, chroma averaged over 2×2. Packed on the GPU into an RGBA target of width/4 × height·3/2, so one standard
+    // RGBA read returns the NV12 bytes. Returns the bytes written; 0 when there is no frame, the width isn't a
+    // multiple of 4 (or the height odd), or out is smaller than width × height × 3/2.
+    size_t packNV12(uint8_t *out, size_t capacity);
 
     bool hasFrame() const { return hasFrame_; }
     int width() const { return frameWidth_; }
@@ -95,6 +100,8 @@ private:
     GLuint vao_ = 0;
     GLuint lutTexture_ = 0;
     GLuint lookTexture_ = 0, lookFramebuffer_ = 0;
+    GLuint packProgram_ = 0, packTexture_ = 0, packFramebuffer_ = 0;
+    int packWidth_ = 0, packHeight_ = 0;
     int lookWidth_ = 0, lookHeight_ = 0;
     bool lookBaked_ = false;
     int frameWidth_ = 0, frameHeight_ = 0;

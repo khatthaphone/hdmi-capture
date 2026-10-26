@@ -204,6 +204,10 @@ public static class Actions
             case "openCards": Viewers.OpenAllCards(); break;
             case "grid": Viewers.ShowGrid(); break;
             case "upgrade": UpgradeWindow.Show(w.Window, Viewers.Licence); break;
+            case "record3sMono":
+                // A look that is easy to check in the file (grey), set for this run only; prefs are never written.
+                w.PreviewLook(new ImageAdjustments { Saturation = 0 });
+                goto case "record3s";
             case "record3s":
                 w.ToggleRecording();
                 GLib.Functions.TimeoutAdd(GLib.Constants.PRIORITY_DEFAULT, 3000, () => { w.ToggleRecording(); return false; });

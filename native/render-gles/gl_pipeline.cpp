@@ -97,6 +97,37 @@ void main() {
 }
 )";
 
+// Encoder pack (recordings): RGB → limited-range NV12 bytes in an RGBA target of width/4 × height·3/2. Rows below
+// `height` hold four luma samples per texel; the rows after them hold two Cb,Cr pairs (each the mean of a 2×2 block),
+// so the target's bytes are exactly an NV12 frame. Row 0 is the picture's top row, as in pass 1.
+const char *kPack = R"(#version 300 es
+precision highp float;
+precision highp int;
+uniform sampler2D picture;
+uniform vec3 kr;      // Kr, Kg, Kb
+uniform vec2 chroma;  // 1 / (2 (1 - Kb)), 1 / (2 (1 - Kr))
+uniform int height;
+out vec4 color;
+vec3 at(int x, int y) { return texelFetch(picture, ivec2(x, y), 0).rgb; }
+float y8(vec3 c) { return (16.0 + 219.0 * dot(c, kr)) / 255.0; }
+vec2 cbcr(vec3 c) {
+    float y = dot(c, kr);
+    return (128.0 + 224.0 * vec2((c.b - y) * chroma.x, (c.r - y) * chroma.y)) / 255.0;
+}
+void main() {
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    int x = p.x * 4;
+    if (p.y < height) {
+        color = vec4(y8(at(x, p.y)), y8(at(x + 1, p.y)), y8(at(x + 2, p.y)), y8(at(x + 3, p.y)));
+    } else {
+        int y = (p.y - height) * 2;
+        vec3 a = (at(x, y) + at(x + 1, y) + at(x, y + 1) + at(x + 1, y + 1)) * 0.25;
+        vec3 b = (at(x + 2, y) + at(x + 3, y) + at(x + 2, y + 1) + at(x + 3, y + 1)) * 0.25;
+        color = vec4(cbcr(a), cbcr(b));
+    }
+}
+)";
+
 GLuint compile(GLenum type, const char *source) {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, nullptr);
@@ -236,6 +267,10 @@ bool GlPipeline::init() {
     glUseProgram(scaleProgram_);
     glUniform1i(glGetUniformLocation(scaleProgram_, "picture"), 0);
     glUniform1i(glGetUniformLocation(scaleProgram_, "table"), 1);
+    packProgram_ = link(kPack);
+    if (!packProgram_) return false;
+    glUseProgram(packProgram_);
+    glUniform1i(glGetUniformLocation(packProgram_, "picture"), 0);
     glGenTextures(3, planes_);
     glGenTextures(1, &rgbTexture_);
     glGenFramebuffers(1, &rgbFramebuffer_);
@@ -255,7 +290,12 @@ void GlPipeline::release() {
         p = 0;
     }
     if (scaleProgram_) glDeleteProgram(scaleProgram_);
-    scaleProgram_ = 0;
+    if (packProgram_) glDeleteProgram(packProgram_);
+    scaleProgram_ = packProgram_ = 0;
+    if (packTexture_) glDeleteTextures(1, &packTexture_);
+    if (packFramebuffer_) glDeleteFramebuffers(1, &packFramebuffer_);
+    packTexture_ = packFramebuffer_ = 0;
+    packWidth_ = packHeight_ = 0;
     glDeleteTextures(3, planes_);
     glDeleteTextures(1, &rgbTexture_);
     glDeleteTextures(1, &lutTexture_);
@@ -467,6 +507,46 @@ bool GlPipeline::readPass1(Screenshot &out) {
     glReadPixels(0, 0, frameWidth_, frameHeight_, GL_RGBA, GL_UNSIGNED_BYTE, out.rgba.data());
     glBindFramebuffer(GL_FRAMEBUFFER, GLuint(previous));
     return true;
+}
+
+size_t GlPipeline::packNV12(uint8_t *out, size_t capacity) {
+    const int w = frameWidth_, h = frameHeight_;
+    const size_t bytes = size_t(w) * h * 3 / 2;
+    if (!hasFrame_ || w < 4 || h < 2 || w % 4 != 0 || h % 2 != 0 || capacity < bytes) return 0;
+    const int tw = w / 4, th = h * 3 / 2;
+    if (!packTexture_ || packWidth_ != tw || packHeight_ != th) {
+        if (!packTexture_) glGenTextures(1, &packTexture_);
+        if (!packFramebuffer_) glGenFramebuffers(1, &packFramebuffer_);
+        setTexture(packTexture_, GL_RGBA8, tw, th, GL_RGBA);
+        glBindFramebuffer(GL_FRAMEBUFFER, packFramebuffer_);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, packTexture_, 0);
+        packWidth_ = tw;
+        packHeight_ = th;
+    }
+    const bool bt709 = h >= 720;
+    const float kr = bt709 ? 0.2126f : 0.299f, kb = bt709 ? 0.0722f : 0.114f;
+    GLint previous = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous);
+    glBindFramebuffer(GL_FRAMEBUFFER, packFramebuffer_);
+    glViewport(0, 0, tw, th);
+    glUseProgram(packProgram_);
+    glUniform3f(glGetUniformLocation(packProgram_, "kr"), kr, 1.f - kr - kb, kb);
+    glUniform2f(glGetUniformLocation(packProgram_, "chroma"), 0.5f / (1.f - kb), 0.5f / (1.f - kr));
+    glUniform1i(glGetUniformLocation(packProgram_, "height"), h);
+    glUniform4f(glGetUniformLocation(packProgram_, "uvRect"), 0, 0, 1, 1);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, sourceTexture());
+    // The source textures have no mipmaps: without a non-mipmap filter they are incomplete and read as black
+    // (pass 2 sets its own filter, but this path never runs it).
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindVertexArray(vao_);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(0);
+    glUseProgram(0);
+    glReadPixels(0, 0, tw, th, GL_RGBA, GL_UNSIGNED_BYTE, out);
+    glBindFramebuffer(GL_FRAMEBUFFER, GLuint(previous));
+    return bytes;
 }
 
 }  // namespace hdmi

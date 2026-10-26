@@ -42,7 +42,9 @@ public sealed partial class FfmpegRecorder : IDisposable
     /// Starts ffmpeg. <paramref name="output"/> is an .mp4 path, or a directory for Save Recent segments
     /// (<paramref name="segments"/>). Throws <see cref="InvalidOperationException"/> when ffmpeg can't start.
     /// </summary>
-    public static FfmpegRecorder Start(string output, RenderPixelFormat format, int width, int height, double fps, bool audio, bool segments = false)
+    /// <paramref name="colorspace"/> tags the stream (bt709 or smpte170m, limited range) when the frames' colours are known.
+    public static FfmpegRecorder Start(string output, RenderPixelFormat format, int width, int height, double fps, bool audio, bool segments = false,
+        string? colorspace = null)
     {
         var encoder = Encoders.Best ?? throw new InvalidOperationException("No H.264 encoder in ffmpeg");
         string? fifo = null;
@@ -65,6 +67,8 @@ public sealed partial class FfmpegRecorder : IDisposable
         if (fifo != null)
             args.AddRange(["-thread_queue_size", "64", "-use_wallclock_as_timestamps", "1", "-f", "f32le", "-ar", "48000", "-ac", "2", "-i", fifo]);
         args.AddRange(encoder.Video);
+        if (colorspace != null)
+            args.AddRange(["-colorspace", colorspace, "-color_primaries", colorspace == "bt709" ? "bt709" : "smpte170m", "-color_trc", colorspace, "-color_range", "tv"]);
         args.AddRange(["-g", ((int)Math.Round(fps * 2)).ToString(System.Globalization.CultureInfo.InvariantCulture), "-fps_mode", "passthrough"]);
         if (fifo != null) args.AddRange(["-c:a", "aac", "-b:a", "192k"]);
         if (segments)

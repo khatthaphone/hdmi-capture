@@ -172,21 +172,23 @@ void hc_renderer_gl_release(hc_renderer *r) {
 
 int32_t hc_renderer_render(hc_renderer *r, int32_t width, int32_t height) { return hc_renderer_render_region(r, 0, 0, width, height); }
 
+// GL: the options to draw with, taking a new look (and uploading a changed LUT) first.
+static RenderOptions syncOptions(hc_renderer *r) {
+    std::lock_guard<std::mutex> lock(r->mutex);
+    if (r->lookChanged) {
+        bool lutChanged = r->look.lutSize != r->activeLook.lutSize || r->look.lut != r->activeLook.lut;
+        r->activeLook = r->look;
+        r->lookChanged = false;
+        if (lutChanged) r->gl.uploadLook(r->activeLook);
+    }
+    return r->options;
+}
+
 int32_t hc_renderer_render_region(hc_renderer *r, int32_t x, int32_t y, int32_t width, int32_t height) {
     if (!r->glReady) return 0;
     GLint target = 0;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &target);
-    RenderOptions options;
-    {
-        std::lock_guard<std::mutex> lock(r->mutex);
-        options = r->options;
-        if (r->lookChanged) {
-            bool lutChanged = r->look.lutSize != r->activeLook.lutSize || r->look.lut != r->activeLook.lut;
-            r->activeLook = r->look;
-            r->lookChanged = false;
-            if (lutChanged) r->gl.uploadLook(r->activeLook);
-        }
-    }
+    RenderOptions options = syncOptions(r);
     // Draw from the pattern ring while a test pattern shows; drop the other ring's frames.
     FrameRing &active = r->showingPattern ? r->patternRing : r->ring;
     FrameRing &idle = r->showingPattern ? r->ring : r->patternRing;
@@ -222,6 +224,28 @@ int32_t hc_renderer_render_region(hc_renderer *r, int32_t x, int32_t y, int32_t 
     r->height = r->gl.height();
     if (arrival > 0) r->lastLatencyNs = nowNs() - arrival;
     return r->gl.hasFrame() ? 1 : 0;
+}
+
+int32_t hc_renderer_convert_nv12(hc_renderer *r, uint8_t *out, int32_t capacity, int32_t *width, int32_t *height, int64_t *timestamp_ns) {
+    if (!r->glReady) return 0;
+    RenderOptions options = syncOptions(r);
+    Frame *frame = r->ring.take();
+    if (!frame) return 0;
+    const int64_t stamp = frame->timestampNs;
+    r->gl.convert(*frame, options.range, options.matrix, &r->activeLook);
+    r->ring.release();
+    const size_t bytes = r->gl.packNV12(out, capacity > 0 ? size_t(capacity) : 0);
+    {
+        std::lock_guard<std::mutex> lock(r->mutex);
+        r->width = r->gl.width();
+        r->height = r->gl.height();
+        if (bytes) r->framesDrawn++;
+    }
+    if (!bytes) return -1;
+    *width = r->gl.width();
+    *height = r->gl.height();
+    *timestamp_ns = stamp;
+    return int32_t(bytes);
 }
 
 int32_t hc_renderer_read_pass1(hc_renderer *r, uint8_t *rgba, int32_t capacity, int32_t *width, int32_t *height) {

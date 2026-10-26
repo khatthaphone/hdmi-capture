@@ -392,6 +392,13 @@ public sealed unsafe class MainWindow
     }
 
     /// <summary>QA only: shows guides for this run without saving them (CLAUDE.md QA rule).</summary>
+    /// <summary>QA: a look for this run only (window and recordings), not saved to the preset.</summary>
+    internal void PreviewLook(ImageAdjustments adjustments)
+    {
+        _renderer.SetLook(adjustments);
+        _recording.SetLook(_settings.Preset.RenderOptions, adjustments, null, 0);
+    }
+
     internal void PreviewGuides(GuideSettings guides)
     {
         _qaGuides = guides;
@@ -536,6 +543,7 @@ public sealed unsafe class MainWindow
         var preset = _settings.Preset;
         _renderer.SetOptions(preset.RenderOptions);
         _renderer.SetLook(preset.Adjustments, preset.LutPath != null ? _settings.Lut : null, preset.LutIntensity);
+        _recording.SetLook(preset.RenderOptions, preset.Adjustments, preset.LutPath != null ? _settings.Lut : null, preset.LutIntensity);
         if (_audio != null) _audio.Settings = EffectiveAudio;
         if (_capture != null && preset.Format != _openedWith)
         {

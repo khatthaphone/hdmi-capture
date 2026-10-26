@@ -110,6 +110,64 @@ public unsafe partial class RendererPixelTests
         r.GlRelease();
     }
 
+    // The recording path (task 120) runs on its own thread and headless context. It lives in this class so it never
+    // overlaps the other pixel tests' context (which terminates the shared EGL display when it's destroyed).
+    [Fact]
+    public void RecordingsGetLimitedNv12BackFromTheGpu()
+    {
+        var nv12 = PackOnce(1280, 720, RedY, RedCb, RedCr, null);
+        AssertNv12(nv12, 1280, 720, 640, 360, RedY, RedCb, RedCr);
+    }
+
+    [Fact]
+    public void RecordingsCarryTheLook()
+    {
+        // Saturation 0: 75 % red becomes grey 41/255, i.e. Y 51 with neutral chroma, in the encoder's frames too.
+        var nv12 = PackOnce(1280, 720, RedY, RedCb, RedCr, new ImageAdjustments { Saturation = 0 });
+        AssertNv12(nv12, 1280, 720, 100, 100, 51, 128, 128);
+    }
+
+    [Fact]
+    public void RecordingsSkipWidthsTheGpuPackCannotHold()
+    {
+        Assert.True(RecordingRenderer.Supports(1920, 1080));
+        Assert.False(RecordingRenderer.Supports(1366, 768));
+        Assert.False(RecordingRenderer.Supports(720, 481));
+    }
+
+    private static byte[] PackOnce(int w, int h, byte y, byte cb, byte cr, ImageAdjustments? look)
+    {
+        using var gpu = new RecordingRenderer();
+        Assert.True(gpu.WaitReady());
+        if (look != null) gpu.Renderer.SetLook(look);
+        byte[]? result = null;
+        using var done = new ManualResetEventSlim();
+        gpu.Packed = (frame, fw, fh, _) =>
+        {
+            Assert.Equal((w, h), (fw, fh));
+            result ??= frame.ToArray();
+            done.Set();
+        };
+        var source = new byte[w * h * 3 / 2];
+        source.AsSpan(0, w * h).Fill(y);
+        for (var i = w * h; i < source.Length; i += 2)
+        {
+            source[i] = cb;
+            source[i + 1] = cr;
+        }
+        gpu.Push(source, RenderPixelFormat.Nv12, w, h, GlesRenderer.MonotonicNs, false, FrameMatrix.Auto);
+        Assert.True(done.Wait(5000), "no packed frame");
+        return result!;
+    }
+
+    private static void AssertNv12(byte[] nv12, int w, int h, int x, int y, int expectY, int expectCb, int expectCr)
+    {
+        var luma = nv12[y * w + x];
+        var c = w * h + y / 2 * w + x / 2 * 2;
+        Assert.True(Math.Abs(luma - expectY) <= 1 && Math.Abs(nv12[c] - expectCb) <= 1 && Math.Abs(nv12[c + 1] - expectCr) <= 1,
+            $"({x},{y}) = Y{luma} Cb{nv12[c]} Cr{nv12[c + 1]}, expected Y{expectY} Cb{expectCb} Cr{expectCr}");
+    }
+
     private static void FillNv12(GlesRenderer r, int w, int h, byte y, byte cb, byte cr, bool fullRange)
     {
         var span = r.Acquire(RenderPixelFormat.Nv12, w, h);
