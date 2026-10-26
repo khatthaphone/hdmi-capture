@@ -4,7 +4,7 @@
 # The app id becomes the real reverse-DNS id before Flathub (task 125).
 app-id: com.example.HDMICaptain
 runtime: org.gnome.Platform
-runtime-version: '48'
+runtime-version: '51'
 sdk: org.gnome.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.dotnet10
@@ -31,8 +31,9 @@ build-options:
     DOTNET_NOLOGO: 'true'
     DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
 modules:
-  # The runtime already has everything else the app loads: GTK 4.18 / libadwaita, libturbojpeg, ALSA, PulseAudio,
-  # EGL/GLES (GL extension), and an ffmpeg with VA-API and OpenH264 H.264 encoders (no NVENC) plus AAC.
+  # The runtime (GNOME 51, freedesktop 26.08) already has everything else the app loads: GTK 4.24 / libadwaita 1.10,
+  # libturbojpeg, ALSA, PulseAudio, EGL/GLES (GL extension), and an ffmpeg with NVENC, VA-API, AMF and x264 H.264
+  # encoders plus AAC (the app probes them in that order).
   - name: hdmi-captain
     buildsystem: simple
     sources:

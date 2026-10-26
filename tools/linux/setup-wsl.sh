@@ -14,7 +14,7 @@ apt-get install -y -q --no-install-recommends \
   libturbojpeg0-dev libpulse-dev libasound2-dev libudev-dev \
   v4l-utils mesa-utils pulseaudio-utils alsa-utils usbutils \
   libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
-  ffmpeg gtk-4-examples
+  ffmpeg gtk-4-examples flatpak flatpak-builder
 
 # .NET 10 SDK, same feature band as Apps/Windows/global.json.
 if ! /usr/share/dotnet/dotnet --list-sdks 2>/dev/null | grep -q '^10\.'; then
