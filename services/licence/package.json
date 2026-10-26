@@ -1,0 +1,9 @@
+{
+  "name": "hdmicaptain-licence",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "dev": "node dev/server.mjs"
+  }
+}

@@ -1,0 +1,15 @@
+# Cloudflare Worker for HDMI Captain Pro licences (task 119). Setup and secrets: README.md.
+name = "hdmicaptain-licence"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+MAX_ACTIVATIONS = "3"
+# The Stripe Price of "HDMI Captain Pro" (one-time). Test-mode and live-mode prices have different ids.
+STRIPE_PRICE_ID = "price_REPLACE_ME"
+
+[[kv_namespaces]]
+binding = "LICENCES"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Secrets (wrangler secret put …): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, LICENCE_SIGNING_KEY.

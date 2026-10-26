@@ -1,7 +1,7 @@
 DERIVED := .build/xcode
 APP := $(DERIVED)/Build/Products/Debug/HDMI Captain.app
 
-.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad run-ipad-profile install-mac ipad-snapshot ipad-soak android-build android-test android-run android-check16k android-soak win-deps win-build win-test win-run win-package win-cert win-vcam linux-setup linux-build linux-test linux-run linux-logs linux-card-status linux-card-attach linux-card-detach linux-inventory linux-package inventory logs clean
+.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad run-ipad-profile install-mac ipad-snapshot ipad-soak android-build android-test android-run android-check16k android-soak win-deps win-build win-test win-run win-package win-cert win-vcam linux-setup linux-build linux-test linux-run linux-logs linux-card-status linux-card-attach linux-card-detach linux-inventory linux-package licence-test licence-dev inventory logs clean
 
 IOS_SIM ?= iPad Pro 11-inch (M5)
 IPAD_APP_SIM := $(DERIVED)/Build/Products/Debug-iphonesimulator/HDMI Captain.app
@@ -188,6 +188,13 @@ linux-build:
 
 linux-test:
 	$(LINUX_SH) "cd $(LINUX_DIR) && dotnet test --solution HDMICaptain.Linux.slnx --artifacts-path $(LINUX_OUT)"
+
+# Licence service (task 119, services/licence): Worker tests, and the local service + fake Stripe for the app.
+licence-test:
+	cd services/licence && node --test test/*.test.mjs
+
+licence-dev:
+	cd services/licence && node dev/server.mjs --key .local/signing-key.jwk
 
 linux-run: linux-build
 	$(LINUX_SH) "setsid -f tools/linux/run-dev.sh $(LINUX_APP) $(LINUX_ARGS) > /dev/null 2>&1 < /dev/null"

@@ -11,6 +11,9 @@ obj/
 vcpkg_installed/
 AppPackages/
 Apps/Windows/.local/
+services/licence/.local/
+services/licence/.wrangler/
+services/licence/node_modules/
 .claude/worktrees/
 Apps/Windows/native/VirtualCamera/build/
 native/render-gles/build/

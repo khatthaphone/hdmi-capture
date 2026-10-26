@@ -36,7 +36,7 @@ public sealed class LicenceTests : IDisposable
         Assert.True(new LicenceStore(new FakeLicenceService(), folder: _folder).IsUnlocked(ProFeature.ReplayBuffer));
         var mode = File.GetUnixFileMode(Path.Combine(_folder, "licence.json"));
         Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, mode);
-        store.Deactivate();
+        await store.DeactivateAsync();
         Assert.False(new LicenceStore(new FakeLicenceService(), folder: _folder).IsPro);
     }
 }

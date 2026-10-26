@@ -16,6 +16,26 @@
 5. **Distribution:** StoreKit IAP requires the **Mac App Store** (task 045). Developer ID builds can sell Pro later through a license-key provider (Paddle, Lemon Squeezy and similar) implementing the same resolver inputs. That's not in scope now.
 6. **Local development** uses `Apps/macOS/HDMICaptain.storekit` (Xcode StoreKit testing), so no App Store Connect account is needed until submission. DEBUG builds also have a "Developer: unlock Pro" toggle.
 
+## Linux: Stripe with signed licence keys (2026-10-26)
+
+The Linux app has no store with in-app purchases, so Pro is sold directly. The user chose **Stripe** (task 119).
+Stripe has no licence keys, so a small service of our own sits between them (`services/licence`, a Cloudflare Worker):
+
+- **Buy:** the app opens `<service>/buy`. The service creates a Stripe Checkout Session for the one-time Pro Price,
+  so the price lives in Stripe (USD 9.99 placeholder, as on the App Store).
+- **Key:** the webhook (or the success page, whichever arrives first) issues `HC1-…`, an ECDSA P-256-signed key. The
+  licence id comes from the Checkout session, so each payment gives one licence. The app checks the signature offline
+  with the embedded public key. The private key exists only as a Worker secret and in the owner's password manager.
+- **Activate / validate:** 3 computers per key, each identified by a salted hash of `/etc/machine-id`. The app
+  validates at launch and every 3 days, and keeps Pro for 30 days offline after the last good check. A full refund or
+  a dispute (Stripe webhooks) revokes the key at the next validation.
+- **Gate:** `LicenceStore.IsUnlocked(ProFeature)` is the only gate on Linux. Free features never ask it.
+- **Data:** the service stores licence records only (session, payment intent, activations), no customer data.
+  Support finds buyers in the Stripe dashboard.
+- **Why not Lemon Squeezy / Paddle + Keygen:** the user preferred Stripe. The cost is owning the service (about 300
+  lines, tested in `services/licence/test` and end to end from the app's tests). The Windows Store and App Store keep
+  their own purchases. A later direct-sale Windows or Mac build can reuse this service as is.
+
 ## Consequences
 
 - The product ID is `<bundle id>.pro`. The bundle ID is still the placeholder `com.example.hdmicaptain`, so the product ID will change at submission.

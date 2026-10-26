@@ -3,13 +3,11 @@ using HDMICaptain.Core;
 namespace HDMICaptain.Linux.App;
 
 /// <summary>
-/// Upgrade to Pro (task 119): what Pro adds, a buy link (the browser), and the key field. The copy follows the
-/// other platforms' upgrade sheet; the price and store link are placeholders until the vendor is chosen.
+/// Upgrade to Pro (task 119): what Pro adds, a buy link (the browser: our licence service → Stripe Checkout, whose page
+/// shows the price), and the key field. The copy follows the other platforms' upgrade sheet.
 /// </summary>
 public static class UpgradeWindow
 {
-    public const string BuyUrl = "https://example.com/hdmi-captain/pro";
-
     public static void Show(Gtk.Window parent, LicenceStore licence, ProFeature? reason = null)
     {
         var page = Adw.StatusPage.New();
@@ -25,13 +23,17 @@ public static class UpgradeWindow
         var window = Adw.Window.New();
         if (!licence.IsPro)
         {
-            var buy = Gtk.Button.NewWithLabel("Buy Pro…");
-            buy.AddCssClass("pill");
-            buy.AddCssClass("suggested-action");
-            buy.OnClicked += (_, _) => Gtk.Functions.ShowUri(window, BuyUrl, 0);
-            box.Append(buy);
+            if (licence.BuyUrl is { } buyUrl)
+            {
+                var buy = Gtk.Button.NewWithLabel("Buy Pro…");
+                buy.AddCssClass("pill");
+                buy.AddCssClass("suggested-action");
+                buy.SetTooltipText("Opens the secure Stripe checkout in your browser; your key appears after payment");
+                buy.OnClicked += (_, _) => Gtk.Functions.ShowUri(window, buyUrl, 0);
+                box.Append(buy);
+            }
             var entry = Gtk.Entry.New();
-            entry.SetPlaceholderText("Licence key");
+            entry.SetPlaceholderText("Licence key (HC1-…)");
             entry.SetWidthChars(36);
             var activate = Gtk.Button.NewWithLabel("Activate");
             var error = Gtk.Label.New("");
@@ -55,9 +57,10 @@ public static class UpgradeWindow
         {
             var deactivate = Gtk.Button.NewWithLabel("Deactivate on This Computer");
             deactivate.AddCssClass("pill");
-            deactivate.OnClicked += (_, _) =>
+            deactivate.OnClicked += async (_, _) =>
             {
-                licence.Deactivate();
+                deactivate.SetSensitive(false);
+                await licence.DeactivateAsync();
                 window.Close();
             };
             box.Append(deactivate);

@@ -27,7 +27,7 @@ public static class Viewers
     public static void OpenPrimary(Adw.Application app, LaunchOptions options, PrefsStore store)
     {
         (_app, _options, _store) = (app, options, store);
-        Licence = new LicenceStore(new FakeLicenceService(), options.DebugUnlockPro);
+        Licence = new LicenceStore(new FakeLicenceService(StripeLicenceService.FromEnvironment()), options.DebugUnlockPro);
         _ = Licence.RevalidateAsync();
         Show(new MainWindow(app, options, new ViewerSettings(store), cardKey: null));
     }

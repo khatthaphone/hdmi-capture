@@ -12,14 +12,18 @@ public sealed record LicenceRecord(string Key, string InstanceId, DateTimeOffset
 public sealed record ActivationResult(LicenceRecord? Record, string? Error);
 
 /// <summary>
-/// The licence vendor (task 119; Lemon Squeezy License API or Paddle + Keygen — the user's decision, ADR 0004).
-/// Activate binds a key to this machine once (online); Validate re-checks it.
+/// The licence vendor (task 119: Stripe through our licence service, <see cref="StripeLicenceService"/>; ADR 0004).
+/// Activate binds a key to this machine once (online); Validate re-checks it; Deactivate frees the seat.
 /// </summary>
 public interface ILicenceService
 {
+    /// <summary>Where Buy Pro… opens (null: buying isn't possible in this build).</summary>
+    string? BuyUrl { get; }
     Task<ActivationResult> ActivateAsync(string key, string machineName, CancellationToken cancel = default);
     /// <summary>Owned, NotOwned (revoked/refunded), or Unavailable (offline, vendor down).</summary>
     Task<LicenseCheck> ValidateAsync(LicenceRecord record, CancellationToken cancel = default);
+    /// <summary>Best effort: frees this computer's seat (offline, the seat stays taken).</summary>
+    Task DeactivateAsync(LicenceRecord record, CancellationToken cancel = default);
 }
 
 /// <summary>
@@ -71,6 +75,8 @@ public sealed class LicenceStore
 
     public string? Key => _record?.Key;
 
+    public string? BuyUrl => _service.BuyUrl;
+
     public async Task<string?> ActivateAsync(string key)
     {
         var result = await _service.ActivateAsync(key.Trim(), Environment.MachineName);
@@ -95,7 +101,13 @@ public sealed class LicenceStore
         Save(LicencePolicy.Apply(record, check, DateTimeOffset.UtcNow));
     }
 
-    public void Deactivate() => Save(null);
+    /// <summary>Forgets the licence here at once and frees the seat on the server when it can.</summary>
+    public async Task DeactivateAsync()
+    {
+        var record = _record;
+        Save(null);
+        if (record != null) await _service.DeactivateAsync(record);
+    }
 
     private void Save(LicenceRecord? record)
     {
@@ -136,21 +148,40 @@ public sealed class LicenceStore
 }
 
 /// <summary>
-/// Until the vendor is chosen: accepts DEBUG test keys (HC-TEST-…) and nothing else, so release builds stay free-only.
+/// DEBUG test keys (HC-TEST-…) without a server, in front of the real service (<paramref name="inner"/>) for every
+/// other key. Release builds never accept test keys; with no inner service nothing else is accepted (tests).
 /// </summary>
-public sealed class FakeLicenceService : ILicenceService
+public sealed class FakeLicenceService(ILicenceService? inner = null) : ILicenceService
 {
-    public Task<ActivationResult> ActivateAsync(string key, string machineName, CancellationToken cancel = default) =>
-        Task.FromResult(
-#if DEBUG
-            key.StartsWith("HC-TEST-", StringComparison.Ordinal)
-                ? new ActivationResult(new LicenceRecord(key, $"fake-{machineName}", DateTimeOffset.UtcNow), null)
-                :
-#endif
-                new ActivationResult(null, "Licence keys can't be checked yet in this build."));
+    private const string TestPrefix = "HC-TEST-";
 
-    public Task<LicenseCheck> ValidateAsync(LicenceRecord record, CancellationToken cancel = default) =>
-        Task.FromResult(record.Key.StartsWith("HC-TEST-", StringComparison.Ordinal) ? LicenseCheck.Owned : LicenseCheck.Unavailable);
+    public string? BuyUrl => inner?.BuyUrl;
+
+    public Task<ActivationResult> ActivateAsync(string key, string machineName, CancellationToken cancel = default)
+    {
+#if DEBUG
+        if (key.StartsWith(TestPrefix, StringComparison.Ordinal))
+            return Task.FromResult(new ActivationResult(new LicenceRecord(key, $"fake-{machineName}", DateTimeOffset.UtcNow), null));
+#endif
+        return inner?.ActivateAsync(key, machineName, cancel)
+            ?? Task.FromResult(new ActivationResult(null, "Licence keys can't be checked in this build."));
+    }
+
+    public Task<LicenseCheck> ValidateAsync(LicenceRecord record, CancellationToken cancel = default)
+    {
+        if (record.Key.StartsWith(TestPrefix, StringComparison.Ordinal))
+        {
+#if DEBUG
+            return Task.FromResult(LicenseCheck.Owned);
+#else
+            return Task.FromResult(LicenseCheck.NotOwned);
+#endif
+        }
+        return inner?.ValidateAsync(record, cancel) ?? Task.FromResult(LicenseCheck.Unavailable);
+    }
+
+    public Task DeactivateAsync(LicenceRecord record, CancellationToken cancel = default) =>
+        record.Key.StartsWith(TestPrefix, StringComparison.Ordinal) || inner == null ? Task.CompletedTask : inner.DeactivateAsync(record, cancel);
 }
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
