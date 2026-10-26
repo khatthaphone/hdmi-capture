@@ -7,7 +7,7 @@ set -euo pipefail
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
 out="$HOME/.cache/hdmicaptain"
 manifest="$repo/Apps/Linux/packaging/com.example.HDMICaptain.yml"
-runtime="$(sed -n "s/^runtime-version: '\(.*\)'/\1/p" "$manifest")"
+runtime="$(sed -n "s/^runtime-version: '\([^']*\)'.*/\1/p" "$manifest" | tr -d '\r')"
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak install --user -y --noninteractive --or-update flathub "org.gnome.Platform//$runtime" "org.gnome.Sdk//$runtime" > /dev/null
 # The .NET extension's branch is the freedesktop SDK the GNOME SDK is built on (51 → 26.08).

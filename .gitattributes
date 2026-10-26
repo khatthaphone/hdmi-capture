@@ -2,3 +2,6 @@
 *.sh text eol=lf
 *.rules text eol=lf
 *.desktop text eol=lf
+Apps/Linux/packaging/*.yml text eol=lf
+Apps/Linux/packaging/*.xml text eol=lf
+Apps/Linux/packaging/*.json text eol=lf
