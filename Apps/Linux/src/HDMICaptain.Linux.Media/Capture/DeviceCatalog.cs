@@ -160,14 +160,15 @@ public sealed class DeviceCatalog : IDisposable
         var seen = new Dictionary<string, int>();
         var usbSeen = new HashSet<string>();
         var result = new List<CaptureDevice>();
-        foreach (var node in nodes.Where(n => n.Formats.Count > 0).OrderBy(n => n.Usb?.SysPath ?? n.Path, StringComparer.Ordinal))
+        foreach (var node in nodes.Where(n => n.Formats.Count > 0 || n.Denied).OrderBy(n => n.Usb?.SysPath ?? n.Path, StringComparer.Ordinal))
         {
             if (node.Usb is { } usb && !usbSeen.Add(usb.SysPath)) continue;
             var key = node.Usb?.Key ?? $"v4l2:{node.BusInfo}";
             seen[key] = seen.GetValueOrDefault(key) + 1;
             if (seen[key] > 1) key += $"#{seen[key]}";
             var audio = node.Usb is { } u ? AlsaCards.PairedWith(u, cards) : null;
-            result.Add(new CaptureDevice(key, node.Usb?.Product ?? node.Name, node.Path, node.Usb, audio, node));
+            // A denied node has no formats yet: the controller probes it at open and reports NoAccess.
+            result.Add(new CaptureDevice(key, node.Usb?.Product ?? node.Name, node.Path, node.Usb, audio, node.Denied ? null : node));
         }
         return result;
     }

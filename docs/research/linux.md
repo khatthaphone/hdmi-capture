@@ -62,15 +62,23 @@ _2026-10-23. Two research passes (the WSL2/WSLg dev loop; the Linux capture/UI/a
   - Identify the device by VID:PID + serial (or name), with the USB path as the tiebreaker. Never use `/dev/videoN`: the number changes on replug and resume.
 - **In use:** a second opener gets `EBUSY` on `VIDIOC_S_FMT`/`STREAMON`. Map it to the existing "in use" pause with retry, as on Windows.
 
-### 2c. Error table (fill in during 108/113)
+### 2c. Error table (108/113)
 
-| Event | What V4L2 reports | State |
+Measured 2026-10-26 with the UGREEN-25854 over usbip in WSL (kernel 6.6, uvcvideo), Jetson Nano as the source:
+
+| Event | What V4L2 / ALSA report | State |
 |---|---|---|
-| Card unplugged while streaming | *pending* (expect `POLLERR` then `ENODEV` on `DQBUF`) | recovering → disconnected |
+| usbipd detach while streaming (WSL; the same path as a cable pull) | `DQBUF` → `ENODEV` within 0.2 s; ALSA `readi` → `EIO` first | recovering → waiting for a card; back to live 2.9 s after the next attach |
+| Another app streams the card | `VIDIOC_STREAMON`/open → `EBUSY` | paused: in use, retried every 3 s; live again as soon as it is released |
+| No permission on `/dev/videoN` (not in the `video` group) | open → `EACCES`, also when enumerating | can't open (`usermod` hint); live within 3 s once access is granted. Was "no card" until the catalog listed denied nodes (fixed) |
+| Start of a stream | first `DQBUF` after `STREAMON` can take ~1 s; sometimes one non-JPEG buffer | counted as rejected; no state change |
+| Card unplugged on a real install | *pending (124)*; expected the same `ENODEV` path | recovering → waiting |
 | HDMI source unplugged (card stays) | *pending* (card dependent: frozen, black or no buffers) | no signal |
-| Another app streams the card | *pending* (expect `EBUSY`) | paused: in use |
-| Suspend/resume | *pending* (expect re-enumeration, new `/dev/videoN`) | recovering |
-| usbipd detach while streaming (WSL) | *pending* | recovering → disconnected |
+| Suspend/resume | *pending (124)* (expect re-enumeration, new `/dev/videoN`) | recovering |
+
+The Windows app on the same PC sees the card leave on attach (`MF_E_VIDEO_RECORDING_DEVICE_INVALIDATED`, then
+"unplugged, waiting"). On detach it reopened the card at +0.7 s, got no frames for 6 s (the card restarting after
+re-enumeration), and its no-frames watchdog reopened it: live at +7.2 s.
 
 ## 3. Render
 

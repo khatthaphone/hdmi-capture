@@ -405,4 +405,17 @@ public sealed class CaptureControllerTests
         Assert.Equal("/dev/video0", d.Path);
         Assert.Equal("hw:1,0", d.Audio?.HwName);
     }
+
+    [Fact]
+    public void ACardWeMayNotOpenIsStillListed()
+    {
+        // No permission (not in the video group): the card shows up without formats, so opening it reports NoAccess
+        // instead of the viewer saying no card is connected.
+        var usb = new UsbIdentity(0x1DE1, 0xF105, null, null, "UGREEN-25854", 480, "/sys/devices/x/1-1");
+        var denied = new V4l2Device("/dev/video0", "UGREEN-25854: UGREEN-25854", "", "", usb, [], Denied: true);
+        var d = Assert.Single(DeviceCatalog.Build([denied], []));
+        Assert.Equal("UGREEN-25854", d.Name);
+        Assert.Null(d.Node);
+        Assert.Empty(DeviceCatalog.Build([denied with { Denied = false }], []));
+    }
 }

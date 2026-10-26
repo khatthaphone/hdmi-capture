@@ -14,7 +14,12 @@ public sealed record UsbIdentity(int VendorId, int ProductId, string? Serial, st
 }
 
 /// <summary>A V4L2 capture node with its native formats.</summary>
-public sealed record V4l2Device(string Path, string Name, string Driver, string BusInfo, UsbIdentity? Usb, IReadOnlyList<V4l2Format> Formats)
+/// <summary>
+/// One capture node. <paramref name="Denied"/>: the kernel refused to open it (no permission), so only its sysfs name
+/// and USB identity are known; the card still shows up, so the viewer can say why it can't be opened.
+/// </summary>
+public sealed record V4l2Device(string Path, string Name, string Driver, string BusInfo, UsbIdentity? Usb, IReadOnlyList<V4l2Format> Formats,
+    bool Denied = false)
 {
     public IReadOnlyList<FormatDescriptor> Descriptors => Formats.Select(f => f.Descriptor).ToList();
 }
@@ -30,7 +35,10 @@ public static unsafe partial class V4l2Devices
 {
     public const string SysClass = "/sys/class/video4linux";
 
-    /// <summary>Every capture node (metadata nodes skipped), in /dev order. Nodes we can't open are left out.</summary>
+    /// <summary>
+    /// Every capture node (metadata nodes skipped), in /dev order. A node we may not open is listed as
+    /// <see cref="V4l2Device.Denied"/> when sysfs says it is a device's first node (UVC: capture is index 0, metadata 1).
+    /// </summary>
     public static IReadOnlyList<V4l2Device> List(Action<string>? log = null)
     {
         var devices = new List<V4l2Device>();
@@ -43,6 +51,8 @@ public static unsafe partial class V4l2Devices
             var device = Probe(path, out var error);
             if (device != null) devices.Add(device);
             else if (error != 0) log?.Invoke($"v4l2: {path}: {Errno.Name(error)}");
+            if (device == null && error is -Errno.EACCES or -Errno.EPERM && ReadSys(node, "index") is null or "0")
+                devices.Add(new V4l2Device(path, ReadSys(node, "name") ?? node, "", "", ReadUsb(node), [], Denied: true));
         }
         return devices;
     }
@@ -116,6 +126,8 @@ public static unsafe partial class V4l2Devices
             free(resolved);
         }
     }
+
+    private static string? ReadSys(string node, string name) => ReadAttr(System.IO.Path.Combine(SysClass, node), name);
 
     private static string? ReadAttr(string dir, string name)
     {
