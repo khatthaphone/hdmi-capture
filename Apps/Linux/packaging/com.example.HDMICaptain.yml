@@ -1,6 +1,7 @@
-# Flatpak manifest (task 122). Build: flatpak-builder --user --install build-dir Apps/Linux/packaging/com.example.HDMICaptain.yml
-# NuGet sources for the offline Flathub build come from flatpak-dotnet-generator (nuget-sources.json, generated before
-# submission). The app id becomes the real reverse-DNS id before Flathub (task 125).
+# Flatpak manifest (task 122). Build with `make linux-flatpak` (tools/linux/flatpak.sh), which also refreshes
+# nuget-sources.json (tools/linux/flatpak-nuget-sources.py) so the build runs offline, as Flathub requires.
+# The source is the committed git tree (not the working copy), so local build outputs never reach the package.
+# The app id becomes the real reverse-DNS id before Flathub (task 125).
 app-id: com.example.HDMICaptain
 runtime: org.gnome.Platform
 runtime-version: '48'
@@ -15,6 +16,8 @@ finish-args:
   - --socket=fallback-x11
   - --share=ipc
   - --socket=pulseaudio
+  # Pro licence activation and validation (services/licence).
+  - --share=network
   # logind PrepareForSleep, so capture closes cleanly on suspend.
   - --system-talk-name=org.freedesktop.login1
   - --filesystem=xdg-pictures/HDMI Captain:create
@@ -25,18 +28,22 @@ build-options:
   env:
     PKG_CONFIG_PATH: /app/lib/pkgconfig:/app/share/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig
     DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+    DOTNET_NOLOGO: 'true'
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
 modules:
-  # libturbojpeg comes from the freedesktop runtime (check with `flatpak run --command=ls org.gnome.Platform//48 /usr/lib/x86_64-linux-gnu`).
+  # The runtime already has everything else the app loads: GTK 4.18 / libadwaita, libturbojpeg, ALSA, PulseAudio,
+  # EGL/GLES (GL extension), and an ffmpeg with VA-API and OpenH264 H.264 encoders (no NVENC) plus AAC.
   - name: hdmi-captain
     buildsystem: simple
     sources:
-      - type: dir
+      - type: git
         path: ../../..
+        branch: HEAD
       - nuget-sources.json
     build-commands:
       - dotnet publish Apps/Linux/src/HDMICaptain.Linux.App/HDMICaptain.Linux.App.csproj -c Release -r linux-x64 --self-contained
         --source ./nuget-sources -p:PublishReadyToRun=true -o /app/lib/hdmi-captain
-      - install -D -m 0755 /dev/stdin /app/bin/hdmi-captain <<< 'exec /app/lib/hdmi-captain/hdmi-captain "$@"'
+      - install -D -m 0755 Apps/Linux/packaging/hdmi-captain-flatpak.sh /app/bin/hdmi-captain
       - install -D -m 0644 Apps/Linux/packaging/com.example.HDMICaptain.desktop /app/share/applications/com.example.HDMICaptain.desktop
       - install -D -m 0644 Apps/Linux/packaging/com.example.HDMICaptain.metainfo.xml /app/share/metainfo/com.example.HDMICaptain.metainfo.xml
       - cd Apps/Linux/packaging/icons && find . -name '*.png' -exec install -D -m 0644 {} /app/share/icons/{} \;

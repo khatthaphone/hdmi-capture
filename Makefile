@@ -1,7 +1,7 @@
 DERIVED := .build/xcode
 APP := $(DERIVED)/Build/Products/Debug/HDMI Captain.app
 
-.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad run-ipad-profile install-mac ipad-snapshot ipad-soak android-build android-test android-run android-check16k android-soak win-deps win-build win-test win-run win-package win-cert win-vcam linux-setup linux-build linux-test linux-run linux-logs linux-card-status linux-card-attach linux-card-detach linux-inventory linux-package licence-test licence-dev inventory logs clean
+.PHONY: gen build run test test-app build-ios-core test-ios-core build-ipad run-ipad-sim run-ipad run-ipad-profile install-mac ipad-snapshot ipad-soak android-build android-test android-run android-check16k android-soak win-deps win-build win-test win-run win-package win-cert win-vcam linux-setup linux-build linux-test linux-run linux-logs linux-card-status linux-card-attach linux-card-detach linux-inventory linux-package linux-flatpak licence-test licence-dev inventory logs clean
 
 IOS_SIM ?= iPad Pro 11-inch (M5)
 IPAD_APP_SIM := $(DERIVED)/Build/Products/Debug-iphonesimulator/HDMI Captain.app
@@ -205,6 +205,10 @@ linux-logs:
 # Release packages (task 122): self-contained .tar.gz, .deb (+ .rpm with rpmbuild) in ~/.cache/hdmicaptain/packages.
 linux-package:
 	$(LINUX_SH) "bash tools/linux/package.sh"
+
+# Flatpak bundle from the committed tree (task 122): ~/.cache/hdmicaptain/packages/hdmi-captain.flatpak. FLATPAK_ARGS=--install installs it.
+linux-flatpak:
+	$(LINUX_SH) "bash tools/linux/flatpak.sh $(FLATPAK_ARGS)"
 
 # Capture card to/from WSL (usbipd-win, task 109). Attaching takes the card away from Windows until detach.
 LINUX_CARD ?= 1de1:f105
